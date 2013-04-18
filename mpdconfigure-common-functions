@@ -1,0 +1,80 @@
+#
+#  Copyleft (l) 2012 Ronald van Engelen
+#
+#  Author: Ronald van Engelen <ronalde@launchpad.net>
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; either version 2 of the
+#  License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, you can find it on the World Wide
+#  Web at http://www.gnu.org/copyleft/gpl.html, or write to the Free
+#  Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
+# common functions used by mpdconfigure script
+# this files is sourced by mpd-configure 
+
+if [ ! -z "${DEBUG}" ]; then
+    echo -e "\nDEBUG: common functions initialized" 
+fi
+
+# empty or create the conf file 
+if [ -z "$DRYRUN" ]; then
+    echo "" > ${MPD_CONFFILE}
+else
+    echo -e "\nDRYRUN: not creating ${MPD_CONFFILE}"
+fi
+
+
+function die() {
+    # exit with error 
+    # pass error message
+    echo "ERROR: $@" >&2
+    exit 1
+}
+
+
+
+function write_conf() {
+    # write to the conf file
+    # pass a mpd conf section as the single argument
+
+    test $# -eq 1 || die "Function write_conf() expects a single argument containing a CONF SECTION"
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo -e "\nDEBUG: Writing section to ${MPD_CONFFILE}"
+    fi
+    if [ -z "$DRYRUN" ]; then
+	echo "$1" | tee -a ${MPD_CONFFILE}
+    else
+	echo -e "\nDRYRUN: Not writing section to ${MPD_CONFFILE}:"
+	echo -e "$1"	
+    fi
+}
+
+
+function conf_handler() {
+    # pass $SECTION and $CONF to this function to write 
+    # it to the mpd conf file
+    
+    test $# -eq 2 || die "Function conf_handler() expects two arguments: SECTION and CONF"
+    
+    if [ ! -z "${DEBUG}" ]; then
+	echo -e "\nDEBUG: section start: $1"
+	echo -e "$2"
+	echo -e "DEBUG: Section end: $1\n"
+    fi
+
+    CONF=$(echo -e "\n### $1 section start" \
+	"$2" \
+	"\n### $1 section end")
+	write_conf "$CONF"
+}

@@ -1,0 +1,174 @@
+#!/bin/bash
+#
+#  Copyleft (l) 2012 Ronald van Engelen
+#
+#  Author: Ronald van Engelen <ronalde@launchpad.net>
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License as
+#  published by the Free Software Foundation; either version 2 of the
+#  License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, you can find it on the World Wide
+#  Web at http://www.gnu.org/copyleft/gpl.html, or write to the Free
+#  Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
+#
+# See README for documentation
+
+set -e
+
+echo "Starting ..."
+DIRNAME=$(dirname $0)
+
+## source config file
+. ${DIRNAME}/mpdconfigure.conf
+
+## default settings
+# if not set, default to 0.0.0.0
+MPD_HOST="${MPD_HOST:-0.0.0.0}"
+# default to $HOME of current user
+MPD_USERHOMEDIR="${MPD_USERHOMEDIR:-${HOME}}"
+# default to $HOME/.mpdconf
+MPD_CONFFILE="${MPD_CONFFILE:-${MPD_USERHOMEDIR}/.mpdconf}"
+
+## default paths and files
+MPD_CONFDIR="${MPD_USERHOMEDIR}/.mpd"
+MPD_PLAYLISTDIR="${MPD_CONFDIR}/playlists"
+MPD_DBFILE="${MPD_CONFDIR}/tag_cache"
+MPD_LOGFILE="${MPD_CONFDIR}/mpd.log"
+MPD_PIDFILE="${MPD_CONFDIR}/pid"
+MPD_STATEFILE="${MPD_CONFDIR}/state"
+
+if [ ! -z "${DEBUG}" ]; then
+    echo "DEBUG: MPD_HOST = ${MPD_HOST}"
+fi
+
+XDG_USERDIRS=/etc/xdg/user-dirs.defaults
+if [ -f ${XDG_USERDIRS} ]; then
+    XDG_MUSICSETTING=$(grep -m 1 MUSIC ${XDG_USERDIRS})
+    XDG_MUSICDIR=${XDG_MUSICSETTING/MUSIC=/}
+else
+    XDG_MUSICDIR=${HOME}
+fi
+
+# default to $HOME/$XDG_MUSICDIR
+MPD_MUSICDIR="${MPD_MUSICDIR:-${HOME}/${XDG_MUSICDIR}}"
+
+## source common-functions
+. ${DIRNAME}/mpdconfigure-common-functions
+## source alsa-functions
+. ${DIRNAME}/mpdconfigure-alsa-functions
+
+#MPD_STICKERFILE="${MPD_CONFDIR}/sticker.sqlite"
+#MPD_USER="xbmc"
+
+function network_conf() {
+    # configure the network section
+    SECTION="NETWORK"
+    CONF=$(echo -e \
+	"\nbind_to_address       \"${MPD_HOST}\"")
+    conf_handler "${SECTION}" "${CONF}"
+
+}
+
+
+function audio_conf() {
+    # return the configured audio section for mpd.conf
+
+    # try to get the right alsa device
+    get_alsa
+
+    SECTION="AUDIO"
+    CONF=$(echo -e \
+	"\naudio_output {" \
+	"\n\ttype          \"alsa\"" \
+	"\n\tname          \"${ALSADEVICELABEL}\"" \
+	"\n\tdevice        \"${ALSADEVICESTRING}\"" \
+	"\n\tmixer_type    \"hardware\"" \
+	"\n\tmixer_device  \"hw:${ALSACARDNR}\"" \
+	"\n\tmixer_control \"${ALSAMASTER}\"" \
+	"\n}\n")
+    conf_handler "${SECTION}" "${CONF}"
+}
+
+function paths_conf() {
+    # construct path and file entries for mpd.conf
+    SECTION="PATHS"
+    CONF=$(echo -e \
+	"\nmusic_directory       \"${MPD_MUSICDIR}\"" \
+	"\nplaylist_directory    \"${MPD_PLAYLISTDIR}\"" \
+	"\ndb_file               \"${MPD_DBFILE}\"" \
+	"\nlog_file              \"${MPD_LOGFILE}\"" \
+	"\npid_file              \"${MPD_PIDFILE}\"" \
+	"\nstate_file            \"${MPD_STATEFILE}\"\n") 
+    conf_handler "${SECTION}" "${CONF}"
+}
+
+function misc_conf() {
+    # construct other entries for mpd.conf 
+    SECTION="MISC"
+    CONF=$(echo -e \
+	"\nfilesystem_charset    \"UTF-8\"" \
+	"\nid3v1_encoding        \"UTF-8\"" \
+	"\nauto_update           \"yes\"" )
+    conf_handler "${SECTION}" "${CONF}"
+}
+
+function zeroconf_conf() {
+    # return the network
+    if [ -n "${ENABLE_ZEROCONF}" ]; then
+	SECTION="ZEROCONF"
+	CONF=$(echo -e \
+	    "\nzeroconf_enabled      \"yes\"" \
+	    "\nzeroconf_name         \"${ALSADEVICELABEL} through MPD\"")
+	conf_handler "${SECTION}" "${CONF}"
+    fi
+}
+
+function lastfm_conf() {
+    # construct lastfm section for mpd.conf
+    SECTION="LASTFM"
+    if [ -n "${ENABLE_LASTFM}" ]; then
+	if [ -n "${LASTFM_USERNAME}" ] && [ -n "${LASTFM_PASSWORD}" ]; then
+	    CONF=$(echo -e \
+		"\nplaylist_plugin {" \
+		"\n\tname          \"lastfm\"" \
+		"\n\tuser          \"${LASTFM_USERNAME}\"" \
+		"\n\tpassword      \"${LASTFM_PASSWORD}\"" \
+		"\n}\n")
+	    conf_handler "${SECTION}" "${CONF}"
+	else
+	    error="ENABLE_LASTFM set but either LASTFM_USERNAME or LASTFM_PASSWORD empty."
+	    die "$error"
+	fi
+    fi
+}
+
+
+function main {
+
+    # construct and write the different portions for the mpd conf file
+    network_conf
+    paths_conf
+    audio_conf
+    misc_conf
+    lastfm_conf
+    zeroconf_conf
+
+    echo ""
+    echo "Done!"
+
+}
+
+# do it
+main
+
+exit
