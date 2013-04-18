@@ -110,15 +110,18 @@ See `man mpd.conf` for explanation.
 		 card 1: SB [HDA ATI SB], device 0: ALC662 rev1 Analog [ALC662 rev1 Analog]
 		 card 1: SB [HDA ATI SB], device 1: ALC662 rev1 Digital [ALC662 rev1 Digital]
 
-		You could use one of the following values to match
-		the second line (`hw:1,1`):
-		 `'ALC662 rev1 Digital'`
-		 `'Digital'`
+You could use one of the following values to match the second line (`hw:1,1`):
 
-		When you have one USB Audio device attached to your computer 
-		`"USB Audio"` will do fine.
+    'ALC662 rev1 Digital'
+    'Digital'
 
-		Default: commented (use the first available alsa device)
+When you have one USB Audio device attached to your computer the following string will do fine:
+
+ 
+    'USB Audio'
+
+Default: commented (use the first available alsa device)
+
 
 `RESETVOLUME`	Set to `1` to set the volume to `MASTERVOLUME`.
 		Default: commented (do not set the volume)
@@ -126,25 +129,24 @@ See `man mpd.conf` for explanation.
 `MASTERVOLUME`	Specify the level in dB or % to set the volume of
 		the `ALSADEVICE` when `RESETVOLUME` is enabled.
 
-		In dB: ranging from `-110` (silent) to `0` (fully open); 
-		ie. `'0db'` or `'-10dB'`.
+In dB: ranging from `-110` (silent) to `0` (fully open); ie: 
 
-		In %:  ranging from `0` (silent) to `100` (fully open); 
-		ie. `'100%'` or `'90%'`
+    '0db'
+    '-10dB'
 
-		Default: commented (do not set volume)
+In %: ranging from `0` (silent) to `100` (fully open); ie:
+
+    '100%'
+    '90%'
+
+Default: commented (do not set volume)
 
 
 Reference
 ---------
 
-- The "Music Player Daemon" (MPD) project: _mpd
-- The "Linux Terminal Server Project" LTSP: _ltsp
-- The article: _article  
+- [Music Player Daemon (MPD)](http://mpd.wikia.com/)
+- [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
+- [How to setup a bit-perfect digital audio streaming client
+  with free software (with LTSP and MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
 
-
-.. _article: http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd
-
-.. _mpd: http://mpd.wikia.com/
-
-.. _ltsp: http://www.ltsp.org/
