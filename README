@@ -73,19 +73,6 @@ Configuration
 		  Default: commented (do write to conffile and set
 		  volume controls).
 
-`MPD_HOST`	  Set the hostname or ip-address you want mpd to bind to.
-		  Default: `0.0.0.0` (bind to any address)
-
-
-`ENABLE_LASTFM`   Set to `1` to create a playlist plugin section for
-	 	  LastFM using `LASTFM_USERNAME` and `LAST_PASSWORD`.
-		  Default: commented (do not create a playlist
-		  section for LastFM)
-
-`ENABLE_ZEROCONF` Set to `1` to enable zeroconf.
-		  Default: commented (do not create a zeroconf section)
-
-
 ### Paths
 
 
@@ -95,7 +82,7 @@ See `man mpd.conf` for explanation.
 		  Default: `$HOME/$XDG_MUSICDIR`
 
 `MPD_USERHOMEDIR` Set to a valid directory path.
-		  Default: `$HOME`
+		  Default: `$HOME/.mpd`
 
 `MPD_CONFFILE`	  Set to a valid file path.
 		  Default: `$MPD_USERHOMEDIR/.mpdconf`
@@ -120,11 +107,11 @@ When you have one USB Audio device attached to your computer the following strin
  
     'USB Audio'
 
-Default: commented (use the first available alsa device)
+Default: `USB Audio`: use the first available USB DAC
 
 
 `RESETVOLUME`	Set to `1` to set the volume to `MASTERVOLUME`.
-		Default: commented (do not set the volume)
+		Default: `1` set the volume
 
 `MASTERVOLUME`	Specify the level in dB or % to set the volume of
 		the `ALSADEVICE` when `RESETVOLUME` is enabled.
@@ -139,7 +126,24 @@ In %: ranging from `0` (silent) to `100` (fully open); ie:
     '100%'
     '90%'
 
-Default: commented (do not set volume)
+Default: `0dB` set the volume to 0dB -- fully open
+
+
+### Network parameters
+
+`MPD_HOST`	  Set the hostname or ip-address you want mpd to bind to.
+		  Default: `0.0.0.0` (bind to any address)
+
+
+`ENABLE_LASTFM`   Set to `1` to create a playlist plugin section for
+	 	  LastFM using `LASTFM_USERNAME` and `LAST_PASSWORD`.
+		  Default: commented (do not create a playlist
+		  section for LastFM)
+
+`ENABLE_ZEROCONF` Set to `1` to enable zeroconf.
+		  Default: commented (do not create a zeroconf section)
+
+
 
 
 Reference
