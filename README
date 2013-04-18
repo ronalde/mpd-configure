@@ -5,144 +5,137 @@ Background
 ----------
 
 I created this script in an attempt to create a audiophile streaming
-audio player using ``Music Player Daemon'' (MPD) running as a ``Linux
-Terminal Server Project'' (LTSP) client, but it can be used on any
-computer running mpd daemon.
+audio player using [Music Player Daemon (MPD)](http://mpd.wikia.com/) running as a [Linux
+Terminal Server Project (LTSP)](http://www.ltsp.org/) client, but it can be used on any
+computer running the mpd daemon.
 
 The scripts creates a valid mpd configuration file based on the
 settings in `mpdconfigure.conf`.
 
-See the article_ `"How to setup a bit-perfect digital audio streaming client
-  with free software (with LTSP and MPD)"`__.
+See the article [How to setup a bit-perfect digital audio streaming client
+  with free software (with LTSP and MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd).
 
 
 Usage with a fixed installation
 -------------------------------
 
 For systems with fixed configuration (eg a PC with a locally installed
-mpd, connected to a DAC) the script may be invoked manually::
+mpd, connected to a DAC) the script may be invoked manually:
 
-./mpd-configure
+  ./mpd-configure
 
 
-This will create the file `.mpdconf' in the current directory. mpd can
+This will create the file `.mpdconf` in the current directory. mpd can
 than be started and told to use this configuration file:
-{{{
-mpd .mpdconf
-}}}
+
+  mpd .mpdconf
+
 
 Alternatively, the resulting configuration file can be copied to the
 system wide mpd configuration file:
-{{{
-sudo cp .mpdconf /etc/mpd.conf
-}}}
+
+  sudo cp .mpdconf /etc/mpd.conf
 
 
 More dynamic environments
 -------------------------
 
 In dynamic environments, for example a network booted ltsp client,
-which may be altered each boot, connected to whatever DAC, the script
-should be put in a logon script or an init script.
+which hardware may be altered each boot, connected to whatever DAC,
+the script should be put in a logon script or an init script.
 
-LTSP-specific
-~~~~~~~~~~~~~
+### LTSP-specific
 
 For my LTPS-environment I therefore copy the script directory to the
 home directory of the auto logon user specified in
-`/var/lib/tftpboot/ltsp/i386/lts.conf` and edited it's `~/.profile' to
+`/var/lib/tftpboot/ltsp/i386/lts.conf` and edit it's `~/.profile` to
 run the script and start `mpd` using the script generated
 `~/.mpdconf`, ie:
 
-{{{
-~/mpd-configure/mpd-configure && mpd ~/.mpdconf
-}}}
+  ~/mpd-configure/mpd-configure && mpd ~/.mpdconf
+
 
 
 Configuration
 -------------
 
-`mpd-configure' tries to create a valid and working configuration file
-for "Music Playing Daemon (MPD)" based on relative simple settings
-defined in `./mpdconfigure.conf`.
+
+### General parameters
 
 
-General parameters
-------------------
+`DEBUG`           Set to 1 to output values of variables in
+                  terminal.
+		  Default: commented (do not show DEBUG information)
 
-DEBUG           Set to 1 to output values of variables in
-                terminal.
-		Default: commented (do not show DEBUG information)
+`DRYRUN`	  Set to 1 to not write to conffile or set
+		  volume controls.
+		  Default: commented (do write to conffile and set
+		  volume controls).
 
-DRYRUN		Set to 1 to not write to conffile or set
-		volume controls.
-		Default: commented (do write to conffile and set
-		volume controls).
-
-MPD_HOST	Set the hostname or ip-address you want mpd to bind to.
-		Default: 0.0.0.0 (bind to any address)
+`MPD_HOST`	  Set the hostname or ip-address you want mpd to bind to.
+		  Default: `0.0.0.0` (bind to any address)
 
 
-ENABLE_LASTFM   Set tot 1 to create a playlist plugin section for
-	 	LastFM using `LASTFM_USERNAME' and `LAST_PASSWORD'.
-		Default: commented (do not create a playlist
-		section for LastFM)
+`ENABLE_LASTFM`   Set to `1` to create a playlist plugin section for
+	 	  LastFM using `LASTFM_USERNAME` and `LAST_PASSWORD`.
+		  Default: commented (do not create a playlist
+		  section for LastFM)
 
-ENABLE_ZEROCONF Set to 1 to enable zeroconf.
-		Default: commented (do not create a zeroconf section)
+`ENABLE_ZEROCONF` Set to `1` to enable zeroconf.
+		  Default: commented (do not create a zeroconf section)
 
 
-Paths
------
+### Paths
 
-See `man mpd.conf' for explanation.
 
-MPD_MUSICDIR    Set to a valid directory path. 
-		Default: $HOME/$XDG_MUSICDIR
+See `man mpd.conf` for explanation.
 
-MPD_USERHOMEDIR Set to a valid directory path.
-		Default: $HOME
+`MPD_MUSICDIR`    Set to a valid directory path. 
+		  Default: `$HOME/$XDG_MUSICDIR`
 
-MPD_CONFFILE	Set to a valid file path.
-		Default: $MPD_USERHOMEDIR/.mpdconf
+`MPD_USERHOMEDIR` Set to a valid directory path.
+		  Default: `$HOME`
 
-Alsa and sound
---------------
+`MPD_CONFFILE`	  Set to a valid file path.
+		  Default: `$MPD_USERHOMEDIR/.mpdconf`
 
-PREFERREDALSADEVICE This should contain a unique portion of the string
+
+### Alsa and sound
+
+`PREFERREDALSADEVICE` This should contain a unique portion of the string
  		returned by `LANG=C aplay -l | grep ^card`. If for
  		example the output is like this:
+
 		 card 1: SB [HDA ATI SB], device 0: ALC662 rev1 Analog [ALC662 rev1 Analog]
 		 card 1: SB [HDA ATI SB], device 1: ALC662 rev1 Digital [ALC662 rev1 Digital]
 
 		You could use one of the following values to match
-		the second line (hw:1,1):
-		 'ALC662 rev1 Digital'
-		 'Digital'
+		the second line (`hw:1,1`):
+		 `'ALC662 rev1 Digital'`
+		 `'Digital'`
 
 		When you have one USB Audio device attached to your computer 
-		"USB Audio" will do fine.
+		`"USB Audio"` will do fine.
 
 		Default: commented (use the first available alsa device)
 
-RESETVOLUME	Set to 1 to set the volume to MASTERVOLUME.
+`RESETVOLUME`	Set to `1` to set the volume to `MASTERVOLUME`.
 		Default: commented (do not set the volume)
 
-MASTERVOLUME	Specify the level in dB or % to set the volume of
-		the ALSADEVICE when RESETVOLUME is enabled.
+`MASTERVOLUME`	Specify the level in dB or % to set the volume of
+		the `ALSADEVICE` when `RESETVOLUME` is enabled.
 
-		In dB: ranging from -110 (silent) to 0 (fully open); 
-		ie. '0db' or '-10dB'.
+		In dB: ranging from `-110` (silent) to `0` (fully open); 
+		ie. `'0db'` or `'-10dB'`.
 
-		In %:  ranging from 0 (silent) to 100 (fully open); 
-		ie. '100%' or '90%'
+		In %:  ranging from `0` (silent) to `100` (fully open); 
+		ie. `'100%'` or `'90%'`
 
 		Default: commented (do not set volume)
 
 
 Reference
 ---------
-
 
 - The "Music Player Daemon" (MPD) project: _mpd
 - The "Linux Terminal Server Project" LTSP: _ltsp
