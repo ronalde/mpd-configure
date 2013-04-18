@@ -5,25 +5,25 @@ Background
 ----------
 
 I created this script in an attempt to create a audiophile streaming
-audio player using "Music Player Daemon" (MPD) running as a "Linux
-Terminal Server Project" (LTSP) client, but it can be used on any
+audio player using ``Music Player Daemon'' (MPD) running as a ``Linux
+Terminal Server Project'' (LTSP) client, but it can be used on any
 computer running mpd daemon.
 
 The scripts creates a valid mpd configuration file based on the
-settings in `mpdconfigure.conf'.
+settings in `mpdconfigure.conf`.
 
-See: 
-http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd
+See the article_ `"How to setup a bit-perfect digital audio streaming client
+  with free software (with LTSP and MPD)"`__.
 
 
 Usage with a fixed installation
 -------------------------------
 
 For systems with fixed configuration (eg a PC with a locally installed
-mpd, connected to a DAC) the script may be invoked manually:
-{{{
+mpd, connected to a DAC) the script may be invoked manually::
+
 ./mpd-configure
-}}}
+
 
 This will create the file `.mpdconf' in the current directory. mpd can
 than be started and told to use this configuration file:
@@ -46,7 +46,7 @@ which may be altered each boot, connected to whatever DAC, the script
 should be put in a logon script or an init script.
 
 LTSP-specific
--------------
+~~~~~~~~~~~~~
 
 For my LTPS-environment I therefore copy the script directory to the
 home directory of the auto logon user specified in
@@ -143,12 +143,14 @@ MASTERVOLUME	Specify the level in dB or % to set the volume of
 Reference
 ---------
 
-- Article: "How to setup a bit-perfect digital audio streaming client
-  with free software (with LTSP and MPD)"
-  http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd
 
-- The "Music Player Daemon" (MPD) project:
-  http://mpd.wikia.com/
+- The "Music Player Daemon" (MPD) project: _mpd
+- The "Linux Terminal Server Project" LTSP: _ltsp
+- The article: _article  
 
-- The "Linux Terminal Server Project" LTSP:
-  http://www.ltsp.org/
+
+.. _article: http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd
+
+.. _mpd: http://mpd.wikia.com/
+
+.. _ltsp: http://www.ltsp.org/
