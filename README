@@ -5,9 +5,10 @@ Background
 ----------
 
 I created this script in an attempt to create a audiophile streaming
-audio player using [Music Player Daemon (MPD)](http://mpd.wikia.com/) running as a [Linux
-Terminal Server Project (LTSP)](http://www.ltsp.org/) client, but it can be used on any
-computer running the mpd daemon.
+audio player using [Music Player Daemon
+(MPD)](http://www.musicpd.org/) running as a [Linux Terminal Server
+Project (LTSP)](http://www.ltsp.org/) client, but it can be used on
+any computer running the mpd daemon.
 
 The scripts creates a valid mpd configuration file based on the
 settings in `mpdconfigure.conf`.
