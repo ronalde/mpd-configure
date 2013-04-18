@@ -16,35 +16,36 @@ See the article [How to setup a bit-perfect digital audio streaming client
   with free software (with LTSP and MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd).
 
 
-Usage with a fixed installation
--------------------------------
+Manual usage with a fixed installation
+--------------------------------------
 
-For systems with fixed configuration (eg a PC with a locally installed
-mpd, connected to a DAC) the script may be invoked manually:
+For systems with a fixed configuration --eg a PC with a locally
+installed mpd, connected to a DAC-- the script may be invoked
+manually:
 
-  ./mpd-configure
+    ./mpd-configure
 
 
-This will create the file `.mpdconf` in the current directory. mpd can
+This will create the file `.mpdconf` in the current directory. `mpd` can
 than be started and told to use this configuration file:
 
-  mpd .mpdconf
+    mpd .mpdconf
 
 
 Alternatively, the resulting configuration file can be copied to the
 system wide mpd configuration file:
 
-  sudo cp .mpdconf /etc/mpd.conf
+    sudo cp .mpdconf /etc/mpd.conf
 
 
 More dynamic environments
 -------------------------
 
-In dynamic environments, for example a network booted ltsp client,
-which hardware may be altered each boot, connected to whatever DAC,
+In dynamic environments --for example a network booted ltsp client,
+which hardware may be altered each boot, connected to whatever DAC--
 the script should be put in a logon script or an init script.
 
-### LTSP-specific
+### LTSP-specific auto logon sample
 
 For my LTPS-environment I therefore copy the script directory to the
 home directory of the auto logon user specified in
@@ -52,7 +53,7 @@ home directory of the auto logon user specified in
 run the script and start `mpd` using the script generated
 `~/.mpdconf`, ie:
 
-  ~/mpd-configure/mpd-configure && mpd ~/.mpdconf
+    ~/mpd-configure/mpd-configure && mpd ~/.mpdconf
 
 
 
