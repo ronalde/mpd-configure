@@ -1,20 +1,26 @@
 README for mpd-configure
 ========================
 
+The `mpd-configure` script creates a valid mpd configuration file
+optimised for bit perfect playback of high resolution digital audio
+files.
+
+
 Background
 ----------
 
-I created this script in an attempt to create a audiophile streaming
-audio player using [Music Player Daemon
-(MPD)](http://www.musicpd.org/) running as a [Linux Terminal Server
-Project (LTSP)](http://www.ltsp.org/) client, but it can be used on
-any computer running the mpd daemon.
+I created this script in an attempt to create a network booted,
+hardware independent audiophile streaming audio player using [Music
+Player Daemon (MPD)](http://www.musicpd.org/) running as a [Linux
+Terminal Server Project (LTSP)](http://www.ltsp.org/) client, see the
+article [How to setup a bit-perfect digital audio streaming client
+with free software (with LTSP and
+MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd).
 
-The scripts creates a valid mpd configuration file based on the
-settings in `mpdconfigure.conf`.
-
-See the article [How to setup a bit-perfect digital audio streaming client
-  with free software (with LTSP and MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd).
+However, the script can be used on any computer running the mpd
+daemon. See the article [How to turn Music Player Daemon (mpd) into an
+audiophile music
+player](http://www.lacocina.nl/artikelen/mpd-configure-audiophile).
 
 
 Manual usage with a fixed installation
@@ -27,16 +33,17 @@ manually:
     ./mpd-configure
 
 
-This will create the file `.mpdconf` in the current directory. `mpd` can
-than be started and told to use this configuration file:
+This will create the file `.mpdconf` in the current users home directory. `mpd` can than be started and told to use this configuration file:
 
-    mpd .mpdconf
+    mpd ~/.mpdconf
 
 
 Alternatively, the resulting configuration file can be copied to the
-system wide mpd configuration file:
+system wide mpd configuration file when you want to run mpd as a
+system daemon:
 
-    sudo cp .mpdconf /etc/mpd.conf
+    sudo cp ~/.mpdconf /etc/mpd.conf
+    sudo service mpd restart
 
 
 More dynamic environments
@@ -57,7 +64,6 @@ run the script and start `mpd` using the script generated
     ~/mpd-configure/mpd-configure && mpd ~/.mpdconf
 
 
-
 Configuration
 -------------
 
@@ -65,57 +71,88 @@ Configuration
 ### General parameters
 
 
-`DEBUG`           Set to 1 to output values of variables in
-                  terminal.
-		  Default: commented (do not show DEBUG information)
+`DEBUG`
+Output values of variables to stdout.
 
-`DRYRUN`	  Set to 1 to not write to conffile or set
-		  volume controls.
-		  Default: commented (do write to conffile and set
-		  volume controls).
+- commented out: disabled (Default).
+- `1`: enabled.
+
+
+`DRYRUN`
+Do not actually modify anything, eg. write to configuration file and
+set volume controls.
+
+- commentend out: disabled (Default).
+- `1`: enabled
+
 
 ### Paths
 
-
 See `man mpd.conf` for explanation.
 
-`MPD_MUSICDIR`    Set to a valid directory path. 
-		  Default: `$HOME/$XDG_MUSICDIR`
+`MPD_MUSICDIR`
+The path to the directory where the music is stored. 
 
-`MPD_USERHOMEDIR` Set to a valid directory path.
-		  Default: `$HOME/.mpd`
+- commented out: use `$HOME/$XDG_MUSIC_DIR` if exists and specified in
+  `~/.config/user-dirs.conf`, otherwise use `$HOME` (Default).
+- `/some/path`: use the path specified.
 
-`MPD_CONFFILE`	  Set to a valid file path.
-		  Default: `$MPD_USERHOMEDIR/.mpdconf`
+`MPD_USERHOMEDIR`
+The path to the directory which holds the mpd configuration and run
+time files.
+
+- commented out: use `$HOME/.mpd` if it exists (Default).
+- `/some/path`: use the path specified.
+
+
+`MPD_CONFFILE`
+Path to where the generated mpd configuration file will be written.
+
+
+- commented out: Use `$MPD_USERHOMEDIR/.mpdconf` as the path (Default).
+- `/some/path/mpd.conf`: use the path specified.
 
 
 ### Alsa and sound
 
-`PREFERREDALSADEVICE` This should contain a unique portion of the string
- 		returned by `LANG=C aplay -l | grep ^card`. If for
- 		example the output is like this:
+`PREFERREDALSADEVICE`
+This should contain a unique portion of the string returned by
 
-		 card 1: SB [HDA ATI SB], device 0: ALC662 rev1 Analog [ALC662 rev1 Analog]
-		 card 1: SB [HDA ATI SB], device 1: ALC662 rev1 Digital [ALC662 rev1 Digital]
+    LANG=C aplay -l | grep ^card
 
-You could use one of the following values to match the second line (`hw:1,1`):
+If for example the output is like this:
 
-    'ALC662 rev1 Digital'
-    'Digital'
 
-When you have one USB Audio device attached to your computer the following string will do fine:
+    card 1: SB [HDA ATI SB], device 0: ALC662 rev1 Analog [ALC662 rev1 Analog]
+    card 1: SB [HDA ATI SB], device 1: ALC662 rev1 Digital [ALC662 rev1 Digital]
+
+... you could use one of the following values to match the second line
+(which in this example matches the alsa `hw:1,1` interface, eg. the
+second interface of the second sound card):
+
+    ALC662 rev1 Digital
+    Digital
+
+When you have one USB Audio device attached to your computer the
+following string will do fine:
 
  
     'USB Audio'
 
-Default: `USB Audio`: use the first available USB DAC
+- `USB Audio`: use the first available USB DAC (Default).
+- `Some string`: use the (first) interface which matches the specified string.
 
 
-`RESETVOLUME`	Set to `1` to set the volume to `MASTERVOLUME`.
-		Default: `1` set the volume
+`RESETVOLUME`
+Enable setting the volume control of the sound card to the value of
+`MASTERVOLUME`.
 
-`MASTERVOLUME`	Specify the level in dB or % to set the volume of
-		the `ALSADEVICE` when `RESETVOLUME` is enabled.
+- `1`: enabled (Default).
+- `0`: disabled.
+
+`MASTERVOLUME`	
+The level in dB or % of the volume of the `ALSADEVICE` to be set when
+`RESETVOLUME` is enabled.
 
 In dB: ranging from `-110` (silent) to `0` (fully open); ie: 
 
@@ -127,23 +164,31 @@ In %: ranging from `0` (silent) to `100` (fully open); ie:
     '100%'
     '90%'
 
-Default: `0dB` set the volume to 0dB -- fully open
+- `0dB` or commented out: Set the volume to 0dB, eg. fully open (Default).
+- other value: Use the value specified.
 
 
 ### Network parameters
 
-`MPD_HOST`	  Set the hostname or ip-address you want mpd to bind to.
-		  Default: `0.0.0.0` (bind to any address)
+`MPD_HOST`
+The hostname or ip-address you want mpd to bind to.
 
+- `0.0.0.0` or commented out: Bind to any address currently used by the computer (Default).
+- other ip address or hostname: use the value specified.
 
-`ENABLE_LASTFM`   Set to `1` to create a playlist plugin section for
-	 	  LastFM using `LASTFM_USERNAME` and `LAST_PASSWORD`.
-		  Default: commented (do not create a playlist
-		  section for LastFM)
+`ENABLE_LASTFM`
+Create a playlist plugin section for LastFM using `LASTFM_USERNAME`
+and `LAST_PASSWORD`.
 
-`ENABLE_ZEROCONF` Set to `1` to enable zeroconf.
-		  Default: commented (do not create a zeroconf section)
+- commented out: disabled (Default).
+- `1`: enabled.
 
+`ENABLE_ZEROCONF`
+Enable zeroconf configuration using the script generated name
+`$ALSADEVICELABEL through MPD` name for upnp discovery.
+
+commented out: disabled (Default)
+`1`: enabled. 
 
 
 
