@@ -1,9 +1,9 @@
 README for mpd-configure
 ========================
 
-The `mpd-configure` script creates a valid mpd configuration file
-optimised for bit perfect playback of high resolution digital audio
-files.
+The `mpd-configure` script creates a valid
+[mpd](http://www.musicpd.org/) configuration file, optimised for bit
+perfect playback of high resolution digital audio files.
 
 
 Background
@@ -138,7 +138,7 @@ second interface of the second sound card):
 
 Possible values:
 - commented out or `USB Audio`: use the first available USB Audio
-  Class 1 DAC (Default).
+  Class 1 or 2 DAC (Default).
 - `Some string`: use the (first) interface which matches the specified string.
 
 
@@ -166,7 +166,7 @@ open). Possible values:
 ### Network parameters
 
 `MPD_HOST`
-The hostname or ip-address you want mpd to bind to. Modifies the
+The hostname or IP address you want mpd to bind to. Modifies the
 `mpd.conf` parameter `bind_to_address`. Possible values:
 - commented out or `0.0.0.0`: Bind to any IP address currently used by
   the computer (Default).
@@ -191,8 +191,9 @@ values:
 Reference
 ---------
 
-- [Music Player Daemon (MPD)](http://mpd.wikia.com/)
+- [Music Player Daemon (MPD)](http://www.musicpd.org/)
 - [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
 - [How to setup a bit-perfect digital audio streaming client
   with free software (with LTSP and MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
-
+- [How to turn Music Player Daemon (mpd) into an audiophile music
+player](http://www.lacocina.nl/artikelen/mpd-configure-audiophile).
