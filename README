@@ -70,9 +70,10 @@ Configuration
 
 ### General parameters
 
-
 `DEBUG`
-Output values of variables to stdout.
+Output values of variables to stdout for easier debugging.
+
+Possible values:
 
 - commented out: disabled (Default).
 - `1`: enabled.
@@ -80,7 +81,9 @@ Output values of variables to stdout.
 
 `DRYRUN`
 Do not actually modify anything, eg. write to configuration file and
-set volume controls.
+try to set volume controls.
+
+Possible values:
 
 - commentend out: disabled (Default).
 - `1`: enabled
@@ -93,13 +96,22 @@ See `man mpd.conf` for explanation.
 `MPD_MUSICDIR`
 The path to the directory where the music is stored. 
 
+Modifies the `mpd.conf` parameter `music_directory`.
+
+Possible values:
+
 - commented out: use `$HOME/$XDG_MUSIC_DIR` if exists and specified in
   `~/.config/user-dirs.conf`, otherwise use `$HOME` (Default).
 - `/some/path`: use the path specified.
 
 `MPD_USERHOMEDIR`
 The path to the directory which holds the mpd configuration and run
-time files.
+time files. 
+
+Modifies the `mpd.conf` parameters `playlist_directory`, `db_file`,
+`log_file`, `pid_file` and `state_file`.
+
+Possible values:
 
 - commented out: use `$HOME/.mpd` if it exists (Default).
 - `/some/path`: use the path specified.
@@ -108,20 +120,26 @@ time files.
 `MPD_CONFFILE`
 Path to where the generated mpd configuration file will be written.
 
+Possible values:
 
-- commented out: Use `$MPD_USERHOMEDIR/.mpdconf` as the path (Default).
+- commented out: Use `~/.mpdconf` (Default).
 - `/some/path/mpd.conf`: use the path specified.
 
 
 ### Alsa and sound
 
 `PREFERREDALSADEVICE`
-This should contain a unique portion of the string returned by
+Specifiy the alsa hardware interface to be used. 
+
+Modifies the `mpd.conf` parameters `type`, `name`, `device`,
+`mixer_type`, `mixer_device` and `mixer_control` in the section
+`audio_output`.
+
+device This should contain a unique portion of the string returned by
 
     LANG=C aplay -l | grep ^card
 
 If for example the output is like this:
-
 
     card 1: SB [HDA ATI SB], device 0: ALC662 rev1 Analog [ALC662 rev1 Analog]
     card 1: SB [HDA ATI SB], device 1: ALC662 rev1 Digital [ALC662 rev1 Digital]
@@ -135,24 +153,31 @@ second interface of the second sound card):
 
 When you have one USB Audio device attached to your computer the
 following string will do fine:
-
  
     'USB Audio'
 
-- `USB Audio`: use the first available USB DAC (Default).
+Possible values:
+
+- commented out or `USB Audio`: use the first available USB DAC (Default).
 - `Some string`: use the (first) interface which matches the specified string.
 
 
-`RESETVOLUME`
+`SETVOLUME`
 Enable setting the volume control of the sound card to the value of
 `MASTERVOLUME`.
+
+ *NOTE*: This only works when the script is used on a live system. As
+  mpd currently does not have a function to set the volume, the script
+  uses `amixer` to achieve this.
+
+Possible values:
 
 - `1`: enabled (Default).
 - `0`: disabled.
 
 `MASTERVOLUME`	
 The level in dB or % of the volume of the `ALSADEVICE` to be set when
-`RESETVOLUME` is enabled.
+`SETVOLUME` is enabled.
 
 In dB: ranging from `-110` (silent) to `0` (fully open); ie: 
 
@@ -164,6 +189,8 @@ In %: ranging from `0` (silent) to `100` (fully open); ie:
     '100%'
     '90%'
 
+Possible values:
+
 - `0dB` or commented out: Set the volume to 0dB, eg. fully open (Default).
 - other value: Use the value specified.
 
@@ -173,12 +200,20 @@ In %: ranging from `0` (silent) to `100` (fully open); ie:
 `MPD_HOST`
 The hostname or ip-address you want mpd to bind to.
 
-- `0.0.0.0` or commented out: Bind to any address currently used by the computer (Default).
-- other ip address or hostname: use the value specified.
+Modifies the `mpd.conf` parameter `bind_to_address`.
+
+Possible values:
+
+- commented out or `0.0.0.0`: Bind to any IP address currently used by
+  the computer (Default).
+- `192.168.1.5` or `myaudiophilestreamer`: use the value specified.
 
 `ENABLE_LASTFM`
-Create a playlist plugin section for LastFM using `LASTFM_USERNAME`
-and `LAST_PASSWORD`.
+Use the LASTFM playlist plugin using `LASTFM_USERNAME` and
+`LAST_PASSWORD`.
+
+Creates the section `playlist_plugin` and modifies the `mpd.conf`
+parameter `name` in that section.
 
 - commented out: disabled (Default).
 - `1`: enabled.
@@ -187,9 +222,12 @@ and `LAST_PASSWORD`.
 Enable zeroconf configuration using the script generated name
 `$ALSADEVICELABEL through MPD` name for upnp discovery.
 
-commented out: disabled (Default)
-`1`: enabled. 
+Modifies the `mpd.conf` parameters `zeroconf_enabled` and `zeroconf_name`.
 
+Possible values:
+
+- commented out: disabled (Default)
+- `1`: enabled. 
 
 
 Reference

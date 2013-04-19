@@ -29,6 +29,9 @@ fi
 
 function get_alsa() {
 
+    if [ -z "${PREFERREDALSADEVICE}" ]; then
+	PREFERREDALSADEVICE="USB Audio"
+    fi
     # store the output of the first alsa device
     ALSACARDDEVLINE="$(LANG=C aplay -l | egrep -m 1 ^"card.*${PREFERREDALSADEVICE}")"
 
@@ -116,7 +119,7 @@ function get_alsadevice() {
 
 function set_audiovolume() {
     if [ -z "$DRYRUN" ]; then
-	if [ ! -z "${RESETVOLUME}" ]; then
+	if [ ! -z "${SETVOLUME}" ]; then
             # set PCM mixer playback control to 100%
 	    amixer -c "${ALSACARDNR}" -- sset "${ALSAMASTER}" playback "${MASTERVOLUME}" unmute
 	fi
