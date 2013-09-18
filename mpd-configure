@@ -105,6 +105,8 @@ function audio_conf() {
 	"\n\ttype          \"alsa\"" \
 	"\n\tname          \"${ALSADEVICELABEL}\"" \
 	"\n\tdevice        \"${ALSADEVICESTRING}\"" \
+	"\n\tauto_resample \"${ALSAAUTORESAMPLE}\"" \
+	"\n\tauto_format   \"${ALSAAUTOFORMAT}\"" \
 	"\n\tmixer_type    \"hardware\"" \
 	"\n\tmixer_device  \"hw:${ALSACARDNR}\"" \
 	"\n\tmixer_control \"${ALSAMASTER}\"" \

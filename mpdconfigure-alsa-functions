@@ -42,6 +42,14 @@ function check_alsa_sanity() {
 
 }
 
+function set_alsa_defaults() {
+    # disable software resampling (auto_resample)
+    ALSAAUTORESAMPLE="no"
+    # disable sample format conversion (auto_format)
+    ALSAAUTOFORMAT="no"
+} 
+
+
 function get_alsa() {
 
     if [ ! -z "${DEBUG}" ]; then
@@ -96,6 +104,9 @@ function get_alsa() {
     # try to set the volume to 100%
     set_audiovolume
 
+    # set other alsa parameters
+    set_alsa_defaults
+
 }
 
 function get_alsadevice() {
@@ -149,6 +160,7 @@ function get_alsadevice() {
 }
 
 function set_audiovolume() {
+    # set the volume of the selected volume control
 
     if [ ! -z "${DEBUG}" ]; then
 	echo_debug "set_audiovolume initialized" 
@@ -169,7 +181,7 @@ playback ${MASTERVOLUME} unmute"
 }
 
 function get_volumecontrol() {
-
+    # get the master volume control for the selected card
     if [ ! -z "${DEBUG}" ]; then
 	echo_debug "get_volumecontrol initialized" 
     fi
