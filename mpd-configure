@@ -49,6 +49,20 @@ else
 fi
 
 if [ ! -z "${DEBUG}" ]; then
+    echo_debug "Starting automatic mpd configuration ..."
+    echo_debug "resulting mpd.conf file will be placed in \`${MPD_CONFFILE}'"
+fi
+
+# empty or create the conf file 
+if [ ! -f "${MPD_CONFFILE}" ]; then
+    touch "${MPD_CONFFILE}"
+    write_conf "# Created by mpd auto configuration script"
+    write_conf "# See: https://github.com/ronalde/mpd-configure/"
+else
+    die "\`${MPD_CONFFILE}' already exist"
+fi
+
+if [ ! -z "${DEBUG}" ]; then
     echo_debug "MPD_HOST = ${MPD_HOST}"
 fi
 
@@ -155,7 +169,8 @@ function lastfm_conf() {
 		"\n}\n")
 	    conf_handler "${SECTION}" "${CONF}"
 	else
-	    error="ENABLE_LASTFM set but either LASTFM_USERNAME or LASTFM_PASSWORD empty."
+	    error="ENABLE_LASTFM set but either LASTFM_USERNAME \
+ or LASTFM_PASSWORD empty."
 	    die "$error"
 	fi
     fi
@@ -211,6 +226,7 @@ function main {
 
 main
 
-echo_stderr "Done! Resulting mpd configuration file is placed in \`${MPD_CONFFILE}"
+echo_stderr "Done! Resulting mpd configuration file is placed \
+ in \`${MPD_CONFFILE}"
 
 exit 0

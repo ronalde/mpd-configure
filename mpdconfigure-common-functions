@@ -39,20 +39,32 @@ MPD_LOGFILE="${MPD_CONFDIR}/mpd.log"
 MPD_PIDFILE="${MPD_CONFDIR}/pid"
 MPD_STATEFILE="${MPD_CONFDIR}/state"
 
+<<<<<<< HEAD
 function echo_stderr() { 
+=======
+function echostderr() { 
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
     echo -e "$@" 1>&2; 
 }
 
 function die() {
     # exit with error 
     # pass error message
+<<<<<<< HEAD
     echo_stderr "ERROR: $@"
+=======
+    echostderr "ERROR: $@"
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
     exit 1
 }
 
 
 function echo_debug() {
+<<<<<<< HEAD
     echo_stderr "DEBUG: ${1}"    
+=======
+    echostderr "DEBUG: ${1}"    
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
 }
 
 function write_conf() {
@@ -63,12 +75,21 @@ function write_conf() {
 	echo_debug "Writing line to ${MPD_CONFFILE}"
     fi
 
+<<<<<<< HEAD
     if [ ! -z "$DRYRUN" ]; then
 	echo_stderr "\nDRYRUN: Not writing line to ${MPD_CONFFILE}:"
 	echo_stderr "${1}"	
     else
 	# write to the conf file
 	echo "${1}" | tee -a ${MPD_CONFFILE}
+=======
+    if [ -z "$DRYRUN" ]; then
+	# write to the conf file
+	echo "${1}" | tee -a ${MPD_CONFFILE}
+    else
+	echostderr "\nDRYRUN: Not writing line to ${MPD_CONFFILE}:"
+	echostderr "${1}"	
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
     fi
 }
 

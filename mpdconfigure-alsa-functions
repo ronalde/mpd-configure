@@ -37,6 +37,10 @@ function get_alsa() {
 # check alsa
     ALSACOMMANDS="amixer aplay"
     for ac in ${ALSACOMMANDS}; do
+<<<<<<< HEAD
+=======
+	echo_debug "trying alsa command \`${ac}'"
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
 	if hash ${ac} 2>/dev/null; then
 	    if [ ! -z "${DEBUG}" ]; then
 		echo_debug "alsa command ${ac} found" 
@@ -62,17 +66,67 @@ function get_alsa() {
 	echo_debug "${APLAYL}"
     fi
 
+<<<<<<< HEAD
     # check to see if preferred card is available
     if [[ "${APLAYL}" = *card*${PREFERREDALSADEVICE}* ]]; then
 	ALSACARDDEVLINE=$(echo -e "${APLAYL}" | egrep -m 1 ^"card.*${PREFERREDALSADEVICE}")
 	if [ ! -z "${DEBUG}" ]; then
 	    echo_debug "preferred alsa card found"
 	fi
+=======
+    if [[ "${APLAYL}" = *card.*${PREFERREDALSADEVICE}* ]]; then
+	ALSACARDDEVLINE=$(echo -e "${APLAYL}" | egrep -m 1
+	^"card.*${PREFERREDALSADEVICE}")
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "ALSACARDDEVLINE = ${ALSACARDDEVLINE}"
+	fi
+    else
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "no ALSACARDDEVLINE"
+	fi
+    fi
+
+    if [ -z "${ALSACARDDEVLINE}" ]; then
+    	 # no preferred alsa device found
+	 if [ -z "${PREFERREDALSADEVICE}" ]; then
+	     error="No alsa device found\n"
+	     error="$error       Examine the output of \`aplay -l\`" 
+	 else
+	     error="No alsa devices found containing
+	     \"${PREFERREDALSADEVICE}\"\n"
+	     error="$error Examine the output of \`aplay -l\` and
+	     correct the \"PREFERREDALSADEVICE\" parameter"
+	     error="$error\n Will use the first available card to get
+	     a working config"
+	 fi	 
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "${error}"
+	fi
+	PREFERREDALSADEVICE=$(echo -e "${APLAYL}" | egrep -m 1 ^"card.*" )
+
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "PREFERREDALSADEVICE = ${PREFERREDALSADEVICE}"
+	fi
+	 
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
     else
 	ALSACARDDEVLINE=$(echo -e "${APLAYL}" | egrep -m 1 ^"card.*")
 	if [ ! -z "${DEBUG}" ]; then
+<<<<<<< HEAD
 	    echo_debug "preferred alsa card not found"
 	    echo_debug "using the first available card to get a working config"
+=======
+	    if [ -z "${PREFERREDALSADEVICE}" ]; then
+		echo_debug "Alsa: No preferred device"
+		echo_debug "             Output of \"aplay -l\""
+	    else
+		echo_debug "Alsa: Preferred device"
+		echo_debug " Output of \"aplay -l\" filtered by
+		\"${PREFERREDALSADEVICE}\":"
+	    fi
+	    echo_debug "             ${ALSACARDDEVLINE}"
+	    echo_debug "Alsa: Getting devices for alsa card ${ALSACARDNR}"
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
 	fi
     fi
 
@@ -147,7 +201,11 @@ function set_audiovolume() {
 	echo_debug "set_audiovolume initialized" 
     fi
 
+<<<<<<< HEAD
     if [ ! -z "$DRYRUN" ]; then
+=======
+    if [ -z "$DRYRUN" ]; then
+>>>>>>> 3bcb00f362948125764efccce564f59e2212990e
 	if [ ! -z "${SETVOLUME}" ]; then
             # set PCM mixer playback control to 100%
 	    amixer -c "${ALSACARDNR}" -- sset "${ALSAMASTER}" playback "${MASTERVOLUME}" unmute
