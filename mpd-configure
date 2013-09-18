@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Copyleft (l) 2012 Ronald van Engelen
+#  Copyleft (l) 2012, 2013 Ronald van Engelen
 #
 #  Author: Ronald van Engelen <ronalde@launchpad.net>
 #
@@ -25,47 +25,53 @@
 
 set -e
 
-echo "Starting ..."
-DIRNAME=$(dirname $0)
-
 ## source config file
+DIRNAME=$(dirname $0)
 . ${DIRNAME}/mpdconfigure.conf
+## source common-functions
+. ${DIRNAME}/mpdconfigure-common-functions
+## source alsa-functions
+. ${DIRNAME}/mpdconfigure-alsa-functions
 
-## default settings
-# if not set, default to 0.0.0.0
-MPD_HOST="${MPD_HOST:-0.0.0.0}"
-# default to $HOME of current user
-MPD_USERHOMEDIR="${MPD_USERHOMEDIR:-${HOME}}"
-# default to $HOME/.mpdconf
-MPD_CONFFILE="${MPD_CONFFILE:-${MPD_USERHOMEDIR}/.mpdconf}"
-
-## default paths and files
-MPD_CONFDIR="${MPD_USERHOMEDIR}/.mpd"
-MPD_PLAYLISTDIR="${MPD_CONFDIR}/playlists"
-MPD_DBFILE="${MPD_CONFDIR}/tag_cache"
-MPD_LOGFILE="${MPD_CONFDIR}/mpd.log"
-MPD_PIDFILE="${MPD_CONFDIR}/pid"
-MPD_STATEFILE="${MPD_CONFDIR}/state"
 
 if [ ! -z "${DEBUG}" ]; then
-    echo "DEBUG: MPD_HOST = ${MPD_HOST}"
+    echo_debug "Starting automatic mpd configuration ..."
+    echo_debug "resulting mpd.conf file will be placed in \`${MPD_CONFFILE}'"
+fi
+
+# empty or create the conf file 
+if [ ! -f "${MPD_CONFFILE}" ]; then
+    touch "${MPD_CONFFILE}"
+    write_conf "# Created by mpd auto configuration script"
+    write_conf "# See: https://github.com/ronalde/mpd-configure/"
+else
+    die "\`${MPD_CONFFILE}' already exist"
+fi
+
+if [ ! -z "${DEBUG}" ]; then
+    echo_debug "MPD_HOST = ${MPD_HOST}"
 fi
 
 XDG_USERDIRS=/etc/xdg/user-dirs.defaults
 if [ -f ${XDG_USERDIRS} ]; then
     XDG_MUSICSETTING=$(grep -m 1 MUSIC ${XDG_USERDIRS})
     XDG_MUSICDIR=${XDG_MUSICSETTING/MUSIC=/}
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "XDG_USERDIRS = ${XDG_USERDIRS}"
+    fi
+
 else
     XDG_MUSICDIR=${HOME}
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "XDG_USERDIRS not present, using HOME"
+    fi
 fi
 
 # default to $HOME/$XDG_MUSICDIR
 MPD_MUSICDIR="${MPD_MUSICDIR:-${HOME}/${XDG_MUSICDIR}}"
-
-## source common-functions
-. ${DIRNAME}/mpdconfigure-common-functions
-## source alsa-functions
-. ${DIRNAME}/mpdconfigure-alsa-functions
+if [ ! -z "${DEBUG}" ]; then
+    echo_debug "XDG_MUSICDIR = ${XDG_MUSICDIR}"
+fi
 
 #MPD_STICKERFILE="${MPD_CONFDIR}/sticker.sqlite"
 #MPD_USER="xbmc"
@@ -76,12 +82,15 @@ function network_conf() {
     CONF=$(echo -e \
 	"\nbind_to_address       \"${MPD_HOST}\"")
     conf_handler "${SECTION}" "${CONF}"
-
 }
 
 
 function audio_conf() {
     # return the configured audio section for mpd.conf
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "audio_conf initialized" 
+    fi
 
     # try to get the right alsa device
     get_alsa
@@ -156,19 +165,55 @@ function lastfm_conf() {
 function main {
 
     # construct and write the different portions for the mpd conf file
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "starting network_conf"
+    fi
     network_conf
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "done with network_conf"
+    fi
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "starting paths_conf"
+    fi
     paths_conf
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "done with paths_conf"
+    fi
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "starting audio_conf"
+    fi
     audio_conf
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "done with audio_conf"
+    fi
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "starting misc_conf"
+    fi
     misc_conf
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "done with misc_conf"
+    fi
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "starting lastfm_conf"
+    fi
     lastfm_conf
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "done with lastfm_conf"
+    fi
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "starting zeroconf_conf"
+    fi
     zeroconf_conf
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "done with zeroconf_conf"
+    fi
 
-    echo ""
-    echo "Done!"
 
+if [ ! -z "${DEBUG}" ]; then
+    echo_debug "Done! Resulting mpd configuration file is placed in \`${MPD_CONFFILE}"
+fi
 }
 
-# do it
 main
 
-exit
+exit 0

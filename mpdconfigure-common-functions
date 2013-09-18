@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Copyleft (l) 2012 Ronald van Engelen
+#  Copyleft (l) 2012, 2013 Ronald van Engelen
 #
 #  Author: Ronald van Engelen <ronalde@launchpad.net>
 #
@@ -23,42 +23,62 @@
 # common functions used by mpdconfigure script
 # this files is sourced by mpd-configure 
 
-if [ ! -z "${DEBUG}" ]; then
-    echo -e "\nDEBUG: common functions initialized" 
-fi
+## default settings
+# if not set, default to 0.0.0.0
+MPD_HOST="${MPD_HOST:-0.0.0.0}"
+# default to $HOME of current user
+MPD_USERHOMEDIR="${MPD_USERHOMEDIR:-${HOME}/.mpd}"
+# default to $HOME/.mpdconf
+MPD_CONFFILE="${MPD_CONFFILE:-${MPD_USERHOMEDIR}/mpd.conf}"
 
-# empty or create the conf file 
-if [ -z "$DRYRUN" ]; then
-    echo "" > ${MPD_CONFFILE}
-else
-    echo -e "\nDRYRUN: not creating ${MPD_CONFFILE}"
-fi
+## default paths and files
+MPD_CONFDIR="${MPD_USERHOMEDIR}"
+MPD_PLAYLISTDIR="${MPD_CONFDIR}/playlists"
+MPD_DBFILE="${MPD_CONFDIR}/tag_cache"
+MPD_LOGFILE="${MPD_CONFDIR}/mpd.log"
+MPD_PIDFILE="${MPD_CONFDIR}/pid"
+MPD_STATEFILE="${MPD_CONFDIR}/state"
 
+function echostderr() { 
+    echo -e "$@" 1>&2; 
+}
 
 function die() {
     # exit with error 
     # pass error message
-    echo "ERROR: $@" >&2
+    echostderr "ERROR: $@"
     exit 1
 }
 
 
+function echo_debug() {
+    echostderr "DEBUG: ${1}"    
+}
 
 function write_conf() {
-    # write to the conf file
-    # pass a mpd conf section as the single argument
-
-    test $# -eq 1 || die "Function write_conf() expects a single argument containing a CONF SECTION"
+    # write a line to the conf file
+    # pass a mpd conf line as the single argument
 
     if [ ! -z "${DEBUG}" ]; then
-	echo -e "\nDEBUG: Writing section to ${MPD_CONFFILE}"
+	echo_debug "Writing line to ${MPD_CONFFILE}"
     fi
+
     if [ -z "$DRYRUN" ]; then
-	echo "$1" | tee -a ${MPD_CONFFILE}
+	# write to the conf file
+	echo "${1}" | tee -a ${MPD_CONFFILE}
     else
-	echo -e "\nDRYRUN: Not writing section to ${MPD_CONFFILE}:"
-	echo -e "$1"	
+	echostderr "\nDRYRUN: Not writing line to ${MPD_CONFFILE}:"
+	echostderr "${1}"	
     fi
+}
+
+function write_section() {
+    # write a section to the conf file
+    # pass a complete mpd conf section as the single argument
+
+    test $# -eq 1 || die "Function write_section() expects a single argument containing a CONF SECTION"
+
+    write_conf "${1}"
 }
 
 
@@ -69,13 +89,18 @@ function conf_handler() {
     test $# -eq 2 || die "Function conf_handler() expects two arguments: SECTION and CONF"
     
     if [ ! -z "${DEBUG}" ]; then
-	echo -e "\nDEBUG: section start: $1"
-	echo -e "$2"
-	echo -e "DEBUG: Section end: $1\n"
+	echo_debug "Start section: $1"
+	echo_debug "\t$2"
+	echo_debug "End Section: $1"
     fi
 
-    CONF=$(echo -e "\n### $1 section start" \
+    CONF=$(echo -e "\n### $1 start section" \
 	"$2" \
-	"\n### $1 section end")
-	write_conf "$CONF"
+	"\n### $1 end section")
+	write_section "$CONF"
 }
+
+
+if [ ! -z "${DEBUG}" ]; then
+    echo_debug "common functions initialized" 
+fi
