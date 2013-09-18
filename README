@@ -45,6 +45,12 @@ system daemon:
     sudo cp ~/.mpd/mpd.conf /etc/mpd.conf
     sudo service mpd restart
 
+For debugging or testing purposes one may set the DRYRUN and/or DEBUG
+parameters through the `./mpdconfigure.conf' file or on the command
+line, eg:
+
+    DEBUG=True ./mpd-configure
+    DRYRUN=True ./mpd-configure
 
 More dynamic environments
 -------------------------
