@@ -33,16 +33,16 @@ manually:
     ./mpd-configure
 
 
-This will create the file `.mpdconf` in the current users home directory. `mpd` can than be started and told to use this configuration file:
+This will create the file `~/.mpd/mpd.conf`. `mpd` can than be started and told to use this configuration file:
 
-    mpd ~/.mpdconf
+    mpd ~/.mpd/mpd.conf
 
 
 Alternatively, the resulting configuration file can be copied to the
 system wide mpd configuration file when you want to run mpd as a
 system daemon:
 
-    sudo cp ~/.mpdconf /etc/mpd.conf
+    sudo cp ~/.mpd/mpd.conf /etc/mpd.conf
     sudo service mpd restart
 
 
@@ -59,9 +59,9 @@ For my LTPS-environment I therefore copy the script directory to the
 home directory of the auto logon user specified in
 `/var/lib/tftpboot/ltsp/i386/lts.conf` and edit it's `~/.profile` to
 run the script and start `mpd` using the script generated
-`~/.mpdconf`, ie:
+`~/.mpd/mpd.conf`, ie:
 
-    ~/mpd-configure/mpd-configure && mpd ~/.mpdconf
+    ~/mpd-configure/mpd-configure && mpd ~/.mpd/mpd.conf
 
 
 Preferences
@@ -77,14 +77,14 @@ preferences are commented out.
 Output values of variables to stdout for easier debugging. Possible
 values:
 - commented out: disabled (Default).
-- `1`: enabled.
+- `1` (or non-empty): enabled.
 
 
 `DRYRUN`
 Do not actually modify anything, eg. write to configuration file and
 try to set volume controls. Possible values:
 - commentend out: disabled (Default).
-- `1`: enabled
+- `1` (or non-empty): enabled
 
 
 ### Paths
@@ -109,7 +109,7 @@ time files. Modifies the `mpd.conf` parameters `playlist_directory`,
 `MPD_CONFFILE`
 Path to where the generated mpd configuration file will be
 written. Possible values:
-- commented out: Use `~/.mpdconf` (Default).
+- commented out: Use `~/.mpd/mpd.conf` (Default).
 - `/some/path/mpd.conf`: use the path specified.
 
 
@@ -137,8 +137,9 @@ second interface of the second sound card):
     Digital
 
 Possible values:
-- commented out or `USB Audio`: use the first available USB Audio
-  Class 1 or 2 DAC (Default).
+- commented out or `USB Audio`: use the first available UAC 1 or 2 DAC
+  (Default). When no UAC device is available; use the first available
+  sound card.
 - `Some string`: use the (first) interface which matches the specified string.
 
 

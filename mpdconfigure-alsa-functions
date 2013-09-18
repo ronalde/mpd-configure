@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#  Copyleft (l) 2012 Ronald van Engelen
+#  Copyleft (l) 2012, 2013 Ronald van Engelen
 #
 #  Author: Ronald van Engelen <ronalde@launchpad.net>
 #
@@ -24,51 +24,72 @@
 # this files is sourced by mpd-configure 
 
 if [ ! -z "${DEBUG}" ]; then
-    echo "DEBUG: alsa functions initialized" 
+    echo_debug "alsa common functions initialized" 
 fi
 
 function get_alsa() {
 
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "get_alsa initialized" 
+    fi
+
+
+    # check sanity of alsa
+    ALSACOMMANDS="amixer aplay"
+    for ac in ${ALSACOMMANDS}; do
+	if hash ${ac} 2>/dev/null; then
+	    if [ ! -z "${DEBUG}" ]; then
+		echo_debug "alsa command ${ac} found" 
+	    fi
+	else
+	    die "alsa command \`${ac}' not found in path"
+    	fi
+    done
+
     if [ -z "${PREFERREDALSADEVICE}" ]; then
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "PREFERREDALSADEVICE not set in configuration" 
+	fi
 	PREFERREDALSADEVICE="USB Audio"
     fi
-    # store the output of the first alsa device
-    ALSACARDDEVLINE="$(LANG=C aplay -l | egrep -m 1 ^"card.*${PREFERREDALSADEVICE}")"
-
-    if [ -z "${ALSACARDDEVLINE}" ]; then
-    	 # no alsa device found
-	 if [ -z "${PREFERREDALSADEVICE}" ]; then
-	     error="No alsa device found"
-	     error1="       Examine the output of \`aplay -l\`" 
-	 else
-	     error="No alsa devices found containing \"${PREFERREDALSADEVICE}\""
-	     error1="       Examine the output of \`aplay -l\` and correct the \"PREFERREDALSADEVICE\" parameter" 
-	 fi	 
-	 msg=$(echo "$error" && echo "$error1" )
-	 die "$msg"
-    else
-	if [ ! -z "${DEBUG}" ]; then
-	    if [ -z "${PREFERREDALSADEVICE}" ]; then
-		echo "DEBUG: Alsa: No preferred device"
-		echo "             Output of \"aplay -l\""
-	    else
-		echo "DEBUG: Alsa: Preferred device"
-		echo "             Output of \"aplay -l\" filtered by \"${PREFERREDALSADEVICE}\":"
-	    fi
-	    echo "             ${ALSACARDDEVLINE}"
-	    echo "DEBUG: Alsa: Getting devices for alsa card ${ALSACARDNR}"
-	fi
-	
-	# get all alsa device parameters
-	get_alsadevice
-
-	# try to get the right master playback volume control
-	get_volumecontrol
-	
-        # try to set the volume to 100%
-	set_audiovolume
-
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "PREFERREDALSADEVICE = ${PREFERREDALSADEVICE}" 
     fi
+
+    # store the output of the first alsa device
+    APLAYL=$(LANG=C aplay -l)
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "${APLAYL}"
+    fi
+
+    # check to see if preferred card is available
+    if [[ "${APLAYL}" = *card*${PREFERREDALSADEVICE}* ]]; then
+	ALSACARDDEVLINE=$(echo -e "${APLAYL}" | egrep -m 1 \
+	    ^"card.*${PREFERREDALSADEVICE}")
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "preferred alsa card found"
+	fi
+    else
+	ALSACARDDEVLINE=$(echo -e "${APLAYL}" | egrep -m 1 ^"card.*")
+	if [ ! -z "${DEBUG}" ]; then
+	    echo_debug "preferred alsa card not found"
+	    echo_debug "using the first available card to get a working config"
+	fi
+    fi
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "ALSACARDDEVLINE = ${ALSACARDDEVLINE}"	
+    fi
+	
+    # get all alsa device parameters
+    get_alsadevice
+    
+    # try to get the right master playback volume control
+    get_volumecontrol
+	
+    # try to set the volume to 100%
+    set_audiovolume
+
 }
 
 function get_alsadevice() {
@@ -87,6 +108,10 @@ function get_alsadevice() {
 
     # ALSADEVICESTRING = "hw:0,0"
     # ALSADEVICELABEL = "Intel ALC888 Analog"
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "get_alsadevice initialized" 
+    fi
 
     # match comma in ALSACARDDEVSTR
     COMMASEP=$(expr match "${ALSACARDDEVLINE}" "[a-z]* [0-9]: .*,")
@@ -109,34 +134,46 @@ function get_alsadevice() {
     ALSADEVICELABEL="${ALSACARDNAME} ${ALSADEVICENAME}"
 
     if [ ! -z "${DEBUG}" ]; then
-	echo "\nDEBUG: ALSACARDNR:       \"${ALSACARDNR}\""
-	echo "DEBUG: ALSACARDNAME:     \"${ALSACARDNAME}\""
-	echo "DEBUG: ALSADEVICENR}:    \"${ALSADEVICENR}\""
-	echo "DEBUG: ALSADEVICESTRING: \"${ALSADEVICESTRING}\""
-	echo "DEBUG: ALSADEVICELABEL:  \"${ALSADEVICELABEL}\""
+	echo_debug "ALSACARDNR:       \"${ALSACARDNR}\""
+	echo_debug "ALSACARDNAME:     \"${ALSACARDNAME}\""
+	echo_debug "ALSADEVICENR}:    \"${ALSADEVICENR}\""
+	echo_debug "ALSADEVICESTRING: \"${ALSADEVICESTRING}\""
+	echo_debug "ALSADEVICELABEL:  \"${ALSADEVICELABEL}\""
     fi
 }
 
 function set_audiovolume() {
-    if [ -z "$DRYRUN" ]; then
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "set_audiovolume initialized" 
+    fi
+
+    if [ ! -z "$DRYRUN" ]; then
+	echo -e "\nDRYRUN: not setting volume using command: \n"
+	echo -e "        amixer -c ${ALSACARDNR} -- sset ${ALSAMASTER} \
+playback ${MASTERVOLUME} unmute"
+    else
 	if [ ! -z "${SETVOLUME}" ]; then
             # set PCM mixer playback control to 100%
-	    amixer -c "${ALSACARDNR}" -- sset "${ALSAMASTER}" playback "${MASTERVOLUME}" unmute
+	    amixer -c "${ALSACARDNR}" -- sset "${ALSAMASTER}" \
+		playback "${MASTERVOLUME}" unmute
 	fi
-    else
-	echo -e "\nDRYRUN: not setting volume using command: \n"
-	echo -e "        amixer -c ${ALSACARDNR} -- sset ${ALSAMASTER} playback ${MASTERVOLUME} unmute"
+
     fi
 }
 
 function get_volumecontrol() {
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "get_volumecontrol initialized" 
+    fi
 
     ALSAMASTER=$(LANG=C amixer -c "${ALSACARDNR}" scontents | \
 	grep -B1 pvolume -m 1 | \
 	grep ^"Simple mixer" | \
 	sed "s/.*'\(.*\)'.*/\1/")
     if [ ! -z "${DEBUG}" ]; then
-	echo "\nDEBUG: ALSAMASTER=${ALSAMASTER} "
+	echo_debug "ALSAMASTER=${ALSAMASTER} "
     fi
     
 }
