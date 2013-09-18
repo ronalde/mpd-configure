@@ -27,14 +27,8 @@ if [ ! -z "${DEBUG}" ]; then
     echo_debug "alsa common functions initialized" 
 fi
 
-function get_alsa() {
-
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "get_alsa initialized" 
-    fi
-
-
-    # check sanity of alsa
+function check_alsa_sanity() {
+   # check sanity of alsa
     ALSACOMMANDS="amixer aplay"
     for ac in ${ALSACOMMANDS}; do
 	if hash ${ac} 2>/dev/null; then
@@ -46,12 +40,23 @@ function get_alsa() {
     	fi
     done
 
+}
+
+function get_alsa() {
+
+    if [ ! -z "${DEBUG}" ]; then
+	echo_debug "get_alsa initialized" 
+    fi
+
+    check_alsa_sanity
+
     if [ -z "${PREFERREDALSADEVICE}" ]; then
 	if [ ! -z "${DEBUG}" ]; then
 	    echo_debug "PREFERREDALSADEVICE not set in configuration" 
 	fi
 	PREFERREDALSADEVICE="USB Audio"
     fi
+
     if [ ! -z "${DEBUG}" ]; then
 	echo_debug "PREFERREDALSADEVICE = ${PREFERREDALSADEVICE}" 
     fi
@@ -72,6 +77,7 @@ function get_alsa() {
     else
 	ALSACARDDEVLINE=$(echo -e "${APLAYL}" | egrep -m 1 ^"card.*")
 	if [ ! -z "${DEBUG}" ]; then
+
 	    echo_debug "preferred alsa card not found"
 	    echo_debug "using the first available card to get a working config"
 	fi

@@ -159,7 +159,8 @@ function lastfm_conf() {
 		"\n}\n")
 	    conf_handler "${SECTION}" "${CONF}"
 	else
-	    error="ENABLE_LASTFM set but either LASTFM_USERNAME or LASTFM_PASSWORD empty."
+	    error="ENABLE_LASTFM set but either LASTFM_USERNAME \
+ or LASTFM_PASSWORD empty."
 	    die "$error"
 	fi
     fi

@@ -39,6 +39,7 @@ MPD_LOGFILE="${MPD_CONFDIR}/mpd.log"
 MPD_PIDFILE="${MPD_CONFDIR}/pid"
 MPD_STATEFILE="${MPD_CONFDIR}/state"
 
+
 function echo_stderr() { 
     echo -e "$@" 1>&2; 
 }
@@ -49,7 +50,6 @@ function die() {
     echo_stderr "ERROR: $@"
     exit 1
 }
-
 
 function echo_debug() {
     echo_stderr "DEBUG: ${1}"    
