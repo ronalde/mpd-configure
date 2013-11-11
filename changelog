@@ -1,0 +1,158 @@
+commit db0b22a3ef3c0f321a8196ee29d95f3764388c6b
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Nov 11 15:02:12 2013 +0100
+
+    TODO and changelog added
+
+commit 4215d82c9828e94a056236822d3d234799e79ec8
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 16:28:37 2013 +0200
+
+    prevent resampling and format conversion
+
+commit 1df45f4e0ab780d4a29b4796c6d823f02ffc09a1
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 16:09:03 2013 +0200
+
+    DRYRUN and DEBUG usage examples updated
+
+commit 01cfbd7feaf5aa9123d1679e0ecd4bb958dcd826
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 16:07:43 2013 +0200
+
+    DRYRUN and DEBUG usage examples
+
+commit a83f7039fa2246d644ad9b2ddcd3b62b3313602b
+Merge: b3b8de9 69d979f
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 16:00:57 2013 +0200
+
+    merge conflicts fixed
+
+commit b3b8de9ab3bd219fe5024b826525c4e682defc26
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 11:26:48 2013 +0200
+
+    - alsa card detection improved
+    - alsa volume control fixed
+    - handling of paths improved
+    - debug and dry-run handling fixed
+
+commit 69d979fed6a4e425c4c274f2e8ca91b5da982f93
+Merge: 6ee9f12 3bcb00f
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 13:42:14 2013 +0200
+
+    Merge branch 'master' of https://github.com/ronalde/mpd-configure
+    
+    Conflicts:
+    	mpd-configure
+    	mpdconfigure-alsa-functions
+    	mpdconfigure-common-functions
+
+commit 6ee9f12c9464f6846a459056c9f10bccb9e4f8a6
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 11:26:48 2013 +0200
+
+    - alsa card detection improved
+    - handling of paths improved
+    - debug and dry-run handling fixed
+
+commit 3bcb00f362948125764efccce564f59e2212990e
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Sep 18 11:26:48 2013 +0200
+
+    - alsa card detection improved
+    - handling of paths improved
+    - debug and dry-run handling fixed
+
+commit 5146749c1423144fcf94419c87f8dd7bed7b19f4
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Fri Apr 19 09:58:56 2013 +0200
+
+    Minor fixes
+
+commit 6dcc344e36ea24242bd75d3f1bd83c8018ea88c0
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Fri Apr 19 09:55:39 2013 +0200
+
+    Trying to make it more readable
+
+commit 961fa199622de521b8d4c45158e6296f0ce9748e
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Fri Apr 19 09:44:36 2013 +0200
+
+    - Added explanation which mpd.conf parameters will be modified by which preferebnce in mpdconfigure.conf
+    - Fixed using "USB Audio" as the default PREFERREDALSADEVICE.
+
+commit 864c9e62b7341acdd9e8906f7a41ac1fbfdef6f6
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Fri Apr 19 09:14:41 2013 +0200
+
+    more readable and consistent description of parameters
+
+commit e886daf88c6c834d79b01e8f2aef3627a5595e81
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 10:43:03 2013 +0200
+
+    fixed the mpd upstream url
+
+commit fe6f53e7ae823af8c5439a691a90abd27f27b13b
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 10:20:12 2013 +0200
+
+    GPL added
+
+commit b24759ba3431e59a18cb877294b0743581d0a913
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 10:00:30 2013 +0200
+
+    default settings comply with README
+
+commit 8b4ee1db53725a7cb97e61e0478a28b3602ea1f6
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 09:02:06 2013 +0200
+
+    specified bash to make the code more readable in git web view
+
+commit 618abe116b8ddfe96575d597864bf6fecc705195
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 08:59:52 2013 +0200
+
+    more rest in the README
+
+commit e71619764232bc28bbb71be650f1900db744e47f
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 08:56:29 2013 +0200
+
+    more rest in the README
+
+commit c7793495ad77920f316d9ac0cf7a17cec5c869d2
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 08:54:06 2013 +0200
+
+    more rest in the README
+
+commit a2ca46265dde86d726dbaa7130c7b314608fb94f
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 08:41:23 2013 +0200
+
+    more rest in the README
+
+commit 87abad0415b1d3ed9fa46d7686e27899b1473c51
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 08:33:28 2013 +0200
+
+    clarifications for non-ltsp-specific usage
+
+commit ffa91451acc9c25b75ff172cccb442a80157a925
+Author: Ronald van Engelen <r.v.engelen@gmail.com>
+Date:   Thu Apr 18 08:16:37 2013 +0200
+
+    first working version
+
+commit 0d8546bd271d79c4e545825b2293845c753f8bb9
+Author: ronalde <r.v.engelen@gmail.com>
+Date:   Wed Apr 17 22:34:02 2013 -0700
+
+    Initial commit
