@@ -43,6 +43,9 @@ fi
 if [ ! -z "${DRYRUN}" ]; then
     echo_stderr "DRYRUN: not touching \`${MPD_CONFFILE}'"
 else
+    if [ ! -d "${MPD_CONFDIR}" ]; then
+	mkdir -p "${MPD_CONFDIR}"
+    fi
     if [ ! -f "${MPD_CONFFILE}" ]; then
 	touch "${MPD_CONFFILE}"
 	write_conf "# Created by mpd auto configuration script"
@@ -107,9 +110,7 @@ function audio_conf() {
 	"\n\tdevice        \"${ALSADEVICESTRING}\"" \
 	"\n\tauto_resample \"${ALSAAUTORESAMPLE}\"" \
 	"\n\tauto_format   \"${ALSAAUTOFORMAT}\"" \
-	"\n\tmixer_type    \"hardware\"" \
-	"\n\tmixer_device  \"hw:${ALSACARDNR}\"" \
-	"\n\tmixer_control \"${ALSAMASTER}\"" \
+	"\n\tmixer_type    \"none\"" \
 	"\n}\n")
     conf_handler "${SECTION}" "${CONF}"
 }

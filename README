@@ -149,25 +149,15 @@ Possible values:
 - `Some string`: use the (first) interface which matches the specified string.
 
 
-`SETVOLUME`
-Enable setting the volume control of the sound card to the value of
-`MASTERVOLUME`. Possible values:
+`SETALSAVOLUME`
+Enable setting the volume control of the sound card to 0dB
+(100%). Possible values:
 - `1`: enabled (Default).
 - `0`: disabled.
 
- *NOTE*: This only works when the script is used on a live system. As
-  mpd currently does not have a function to set the volume, the script
-  uses `amixer` to achieve this.
-
-
-`MASTERVOLUME`	
-The level in dB or % of the volume of the `ALSADEVICE` to be set when
-`SETVOLUME` is enabled. In dB: ranging from `-110` (silent) to `0`
-(fully open). In %: ranging from `0` (silent) to `100` (fully
-open). Possible values:
-- commented out, `0dB` or `100%`: Set the volume to 0dB, eg. fully
-  open (Default).
-- other value: Use the value specified.
+ *NOTE*: This setting doesn't actually get stored in the resulting
+  mpd.conf. When enabled, it tries setting the alsa volume using
+  `amixer`.
 
 
 ### Network parameters

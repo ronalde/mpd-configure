@@ -2,3 +2,4 @@ TODO for mpd-configure
 ======================
 
 - Fix the detection of the mixer controls
+- Fix the handling of the output (mpd.conf) when it exists already or the parent directory does not exit

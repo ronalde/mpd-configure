@@ -47,6 +47,8 @@ function set_alsa_defaults() {
     ALSAAUTORESAMPLE="no"
     # disable sample format conversion (auto_format)
     ALSAAUTOFORMAT="no"
+    # value for mixer when SETALSAVOLUME is enabled
+    ALSAVOLUME="0dB"
 } 
 
 
@@ -169,19 +171,19 @@ function set_audiovolume() {
     if [ ! -z "$DRYRUN" ]; then
 	echo -e "\nDRYRUN: not setting volume using command: \n"
 	echo -e "        amixer -c ${ALSACARDNR} -- sset ${ALSAMASTER} \
-playback ${MASTERVOLUME} unmute"
+playback ${ALSAVOLUME} unmute"
     else
 	if [ ! -z "${SETVOLUME}" ]; then
             # set PCM mixer playback control to 100%
 	    amixer -c "${ALSACARDNR}" -- sset "${ALSAMASTER}" \
-		playback "${MASTERVOLUME}" unmute
+		playback "${ALSAVOLUME}" unmute
 	fi
 
     fi
 }
 
 function get_volumecontrol() {
-    # get the master volume control for the selected card
+    # try to get the master volume control for the selected card
     if [ ! -z "${DEBUG}" ]; then
 	echo_debug "get_volumecontrol initialized" 
     fi
