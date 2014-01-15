@@ -184,6 +184,14 @@ values:
 - commented out: disabled (Default)
 - `1`: enabled. 
 
+`ZEROCONF_NAME`
+Specify the name with which mpd will publish itself with upnp on the local network. 
+`$ALSADEVICELABEL through MPD` name for upnp discovery. Modifies the
+`mpd.conf` parameter and `zeroconf_name`. Possible
+values:
+- commented out: `$ALSADEVICELABEL through MPD` (Default)
+- `My MPD` or `Audiplayer`:  use the value specified. 
+
 
 Reference
 ---------
