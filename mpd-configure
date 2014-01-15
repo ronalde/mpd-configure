@@ -141,10 +141,11 @@ function misc_conf() {
 function zeroconf_conf() {
     # return the network
     if [ -n "${ENABLE_ZEROCONF}" ]; then
+	ZEROCONF_LABEL="${ZEROCONF_NAME:-MPD through ${ALSADEVICELABEL}}"
 	SECTION="ZEROCONF"
 	CONF=$(echo -e \
 	    "\nzeroconf_enabled      \"yes\"" \
-	    "\nzeroconf_name         \"${ZEROCONF_NAME:-${ALSADEVICELABEL} through MPD\"")
+	    "\nzeroconf_name         \"${ZEROCONF_LABEL}\"")
 	conf_handler "${SECTION}" "${CONF}"
     fi
 }
@@ -222,7 +223,7 @@ main
 if [ ! -z "${DRYRUN}" ]; then
     echo_stderr "Done with DRYRUN; nothing touched or changed"
 else
-    echo_stderr "Done! Resulting mpd configuration file is placed in \`${MPD_CONFFILE}"
+    echo_stderr "Done! Resulting mpd configuration file is placed in ${MPD_CONFFILE}"
 fi
 
 exit 0
