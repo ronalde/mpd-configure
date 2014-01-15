@@ -144,7 +144,7 @@ function zeroconf_conf() {
 	SECTION="ZEROCONF"
 	CONF=$(echo -e \
 	    "\nzeroconf_enabled      \"yes\"" \
-	    "\nzeroconf_name         \"${ALSADEVICELABEL} through MPD\"")
+	    "\nzeroconf_name         \"${ZEROCONF_NAME:-${ALSADEVICELABEL} through MPD\"")
 	conf_handler "${SECTION}" "${CONF}"
     fi
 }
