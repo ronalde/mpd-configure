@@ -12,6 +12,7 @@ paconfrestore="false"
 paconfcreated="false"
 defaultcard=""
 alsaoutputdevices=0
+procasound="/proc/asound"
 
 LANG=C
 
@@ -160,6 +161,63 @@ formats for ${alsadevicelabel} \n       because it is in use ..."
 
 }
 
+function pause() {
+   read -p "$*"
+}
+
+watchstream() {
+
+    detectstream
+
+    if [ "$?" -eq "0" ]; then
+	pause "Press [ENTER] when you want to monitor changes to the stream file" 
+	watch -n 0.1 "cat ${procusbstream}"
+    else
+	echo -e "Error: could not find any stream file \
+in ${procasound}.\n"
+	echo -e "Do you actually use a USB Audio Class \
+DA-converter?"
+	
+    fi
+}
+
+detectstreamalt() {
+    echo -e "Warning: stream file not found at expected \
+ place:\n ${procusbstream}\nwill try finding it elsewhere \
+ within ${procasound} ..."
+    wildguess="$(find ${procasound} -name '*stream*')"
+    if [ ! -z "${wildguess}" ]; then
+	echo -e "Could not determine which stream file to \
+watch, found the following:\n"
+	echo -e "${wildguess}"
+    else
+	return 1
+    fi
+
+}
+
+detectstream() {
+
+    ## map the selected sound card to the appropriate 
+    ## USB Audio Class stream in the file 
+    ## /proc/asound/cardX/streamY
+
+    if [ "$(lsmod | grep snd_usb_audio)" ]; then
+	## snd_usb_audio loaded
+	defusbstream="$(echo -e "hw:1,0" | \
+sed "s#hw:\([0-9]*\),\([0-9]*\)#${procasound}/card\1/stream\2#")"
+	if [ -f "${defusbstream}" ]; then
+	    procusbstream="${procusbstream}"
+	else
+	    detectstreamalt
+	fi
+    else
+	## snd_usb_audio not loaded
+	echo -e "Error: module snd_usb_audio not loaded"
+	return 1
+    fi
+
+}
 
 if [[ -f ${paconf} ]]; then
 
@@ -169,4 +227,6 @@ if [[ -f ${paconf} ]]; then
 else
     alsadetect
 fi
+
+watchstream
 
