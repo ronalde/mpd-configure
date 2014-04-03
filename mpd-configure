@@ -31,8 +31,9 @@ APP_NAME="mpd-configure"
 ## starting this script, eg: 
 ##  MPD_HOST="myhostname" ./mpd-configure
  
+SCRIPT_DIR=$(dirname $0)
 ## source the config file
-. mpd-configure.conf
+. ${SCRIPT_DIR}/mpd-configure.conf
 
 ## if not set, default to 0.0.0.0
 MPD_HOST="${MPD_HOST:-0.0.0.0}"
@@ -56,6 +57,8 @@ APLAY_LIMIT_FILTER="${APLAY_LIMIT_FILTER:-usb digital hdmi i2s spdif toslink ada
 APLAY_PREFERRED_FILTER="${APLAY_PREFERRED_FILTER:-USB Audio}"
 ## array to store pairs of hardware address (hw:x,y) and its label
 declare -A ALSA_OUTPUT_DEVICES
+## array to store the details of each card
+declare -A ALSA_OUTPUT_DISPLAY
 ## and store the hardware addresses in a simple
 ## indexed array for retrieving the default
 declare -a ALSA_OUTPUT_INDEXES=()
@@ -97,7 +100,7 @@ function write_conf() {
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
     [[ -z "$DRYRUN" ]] && \
-	echo -e "${CONF_CONTENTS}" >> ${MPD_CONFFILE} || \
+	echo -e "${CONF_CONTENTS}" >> "${MPD_CONFFILE}" || \
 	echo_stderr "DRYRUN: Not writing to ${MPD_CONFFILE}:\n${CONF_CONTENTS}"
 }
 
@@ -238,8 +241,8 @@ function fetch_alsadevices_list() {
 	    alsa_outputdev_displaylabel=" ${alsa_dev_no}) ${alsa_outputdev_label}:"
 	    ALSA_OUTPUT_DEVICES+=(["${hw_address}"]="${alsa_outputdev_label}")
 	    ALSA_OUTPUT_INDEXES+=("${hw_address}")
-	    ## display the results
-	    cat <<EOF
+	    ## store the the results for displaying
+	    IFS='' read -r -d '' alsa_output_display <<EOF
 
 ${alsa_outputdev_displaylabel}
 ${LST_PROPS[0]}${hw_address}
@@ -248,6 +251,8 @@ ${LST_PROPS[2]}${formats}
 ${LST_PROPS[3]}${uacclass}
 ${LST_PROPS[4]}${streamfile}
 EOF
+	    ## append it to the array
+	    ALSA_OUTPUT_DISPLAY+=(["${hw_address}"]="${alsa_output_display}")
 
 	fi
 
@@ -273,8 +278,12 @@ EOF
 
     if [[ ${#ALSA_OUTPUT_DEVICES[@]} -gt 1 ]]; then
 	if [ -z "${USER_PROMPTS}" ]; then
+	    ## display the details of each card
+	    echo_stderr "${ALSA_OUTPUT_DISPLAY[@]}"
+	    ## display instructions
 	    echo_stderr "${msg_multiple_alsahw}"
 	    prompt="   > Device to use: "
+	    ## prompt the user to select a device
 	    alsa_output_device="$(read -e -p "${prompt}" \
 -i "${default_hw_address}" alsa_output_device && \
 echo -e "${alsa_output_device}")"
