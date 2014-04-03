@@ -1,4 +1,145 @@
-commit db0b22a3ef3c0f321a8196ee29d95f3764388c6b
+commit 6a8b1997d57c4bdef2889af33a2c995d71ca982c
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 17:40:50 2014 +0200
+
+    Small fixes
+    
+    * check if the preferences file (`mpd-configure.conf`) is present
+      before trying to source it
+    * simpler messages when done
+
+commit a48a8368fe3b01d71f6895a66a96df45b5c49529
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 17:26:59 2014 +0200
+
+    Documentation fix
+    
+    * removed and changed non existing example variables
+    * changed paths to Debian defaults
+    * added example of using a command (`HOSTNAME="$(hostname)"`)
+
+commit 86c9a4f2fa5f01e2233f95fd2466b46af2b69656
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 17:17:49 2014 +0200
+
+    Small fix
+    
+    * added MPD_MUSICDIR: fixes the case when there's no XDG dirs and no
+      music dir specified
+
+commit fc3f4b410ec8287054d7901934091f443946d6c5
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 17:09:59 2014 +0200
+
+    Bugfixes:
+    
+    * added SCRIPT_DIR: needed when script is called from another
+      directory
+    * added ALSA_OUTPUT_DISPLAY: fixes the display of card details in case
+      there's only one or USER_PROMPTS is set.
+
+commit cd57e76e6729efb2a00aaa041539aa98b669dd30
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 14:40:16 2014 +0200
+
+    reflected changes in commit:cb6d162ca4d48222b48c77414076f56ccb8062ae
+
+commit cb6d162ca4d48222b48c77414076f56ccb8062ae
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 14:20:16 2014 +0200
+
+    * replaced the alsa output device detection and selection mechanisms with those from https://github.com/ronalde/mpd-configure/blob/master/tests/detect-alsa-output-capabilities.sh. This makes it possible for the user to choose a device when multiple devices are available.
+    * added a LIMIT filter to limit the available output devices, in addition to the PREFERRED filter which still works
+    * incorperated the contents of the mpdconfigure-* files in to the main script, which were sourced in earlier versions
+    * removed the volume control functions because they didn't work properly (only tested on my own system), and are not in the right place (no possibility for 'offline' use)
+
+commit 99abdd12fc22812f026b7dbdab1d2aed8295858b
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 11:20:34 2014 +0200
+
+    Cleaned up a bit according to http://mywiki.wooledge.org/BashGuide/Practices
+
+commit 7844404dbde8da827936b9c493cb14eaf29b7915
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Apr 2 18:01:13 2014 +0200
+
+    rewritten to minimize user interaction and handling of pulseaudio.
+
+commit dcbd3d9b2ce96238ef3b093ba761bbdf3e0d6fbb
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Apr 2 11:29:51 2014 +0200
+
+    rewritten to fix a problem watching the stream
+
+commit 972a494cb63d5b5014c69c50d72918e42b202727
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Mar 20 17:28:42 2014 +0100
+
+    house keeping
+
+commit 4774eb9a9bc39c1e9b4789e8f64847d005769a96
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Mar 20 15:45:16 2014 +0100
+
+    added detecting and watching /proc/asound/cardX/streamY capability
+
+commit e0324f8342d0aaadf490c9ca12d825126b580330
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Mar 20 12:58:22 2014 +0100
+
+    script added to detect capabilities of an alsa digital audio output device; see: http://lacocina.nl/2013/04/19/alsa-highres/
+
+commit 7e93e531f8180a0d49fc74fdf8591a601d2c2854
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 15 18:52:06 2014 +0100
+
+    fixed last commit
+
+commit 7c4c6df81d2cffe43e80e037eb170d43bba0d2ce
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 15 18:50:31 2014 +0100
+
+    fixed last commit
+
+commit 8f9038f1b9f3e277988a75467df624f6781a38a0
+Merge: 1c75a79 58f3224
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 15 18:45:16 2014 +0100
+
+    Merge branch 'master' of github.com:ronalde/mpd-configure
+
+commit 1c75a79d5c522aa316241233759fef8d7bba545a
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 15 16:24:34 2014 +0100
+
+    option ZEROCONF_NAME added
+
+commit 58f322429accce3659e28f081f52a63c763a116d
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 15 16:24:34 2014 +0100
+
+    option ZEROCONF_NAME added
+
+commit bcaeade075a7d7810d3bbc66c6c351cdea69be70
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Nov 15 12:41:51 2013 +0100
+
+    mixer fixes
+
+commit bd9290eb7d45302a3b47be897ded8c823c400de2
+Merge: 4379d90 7409ec8
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Nov 11 15:07:40 2013 +0100
+
+    TODO and changelog added
+
+commit 4379d9083681c006b5e183f89a5be1542f2cf729
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Nov 11 15:02:12 2013 +0100
+
+    TODO and changelog added
+
+commit 7409ec8b8fc404db4a1a7235339ea55906d12cc5
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Mon Nov 11 15:02:12 2013 +0100
 
