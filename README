@@ -121,12 +121,20 @@ written. Possible values:
 
 ### Alsa and sound
 
-`PREFERREDALSADEVICE`
-Specify the alsa hardware interface to be used. Modifies the
-`mpd.conf` parameters `type`, `name`, `device`, `mixer_type`,
-`mixer_device` and `mixer_control` in the section `audio_output`.
+`APLAY_LIMIT_FILTER`
+A space seperated list, which filters the alsa output devices on the keywords specified. 
 
-This should contain a *unique* portion of the string returned by:
+Possible values:
+- a space seperated string
+- Comment it out (or leave it empty) to prevent filtering.
+
+Default values:
+- "usb digital hdmi i2s spdif toslink adat uac": limit the list to output 
+  devices which contain one of those keywords (case insensitive).
+
+
+`APLAY_PREFERRED_FILTER`
+The available output devices (after filtering with `APLAY_LIMIT_FILTER` when applicable) may be further limited using a string which should contain a *unique* portion of the output of:
 
     LANG=C aplay -l | grep ^card
 
@@ -143,21 +151,12 @@ second interface of the second sound card):
     Digital
 
 Possible values:
-- commented out or `USB Audio`: use the first available UAC 1 or 2 DAC
-  (Default). When no UAC device is available; use the first available
-  sound card.
+- empty or commented out: no filtering is applied
 - `Some string`: use the (first) interface which matches the specified string.
 
-
-`SETALSAVOLUME`
-Enable setting the volume control of the sound card to 0dB
-(100%). Possible values:
-- `1`: enabled (Default).
-- `0`: disabled.
-
- *NOTE*: This setting doesn't actually get stored in the resulting
-  mpd.conf. When enabled, it tries setting the alsa volume using
-  `amixer`.
+Default value:
+- `USB Audio`: use the first available UAC 1 or 2 DAC. When no UAC device is 
+   available; use the first available sound card.
 
 
 ### Network parameters
@@ -196,9 +195,14 @@ values:
 Reference
 ---------
 
-- [Music Player Daemon (MPD)](http://www.musicpd.org/)
-- [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
-- [How to setup a bit-perfect digital audio streaming client
-  with free software (with LTSP and MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
+MPD specific:
+
 - [How to turn Music Player Daemon (mpd) into an audiophile music
-player](http://www.lacocina.nl/artikelen/mpd-configure-audiophile).
+player](http://lacocina.nl/mpd-configure-audiophile).
+- [Music Player Daemon (MPD)](http://www.musicpd.org/)
+
+LTSP specific:
+
+- [How to setup a bit-perfect digital audio streaming client
+  with free software (with LTSP and MPD)](http://lacocina.nl/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
+- [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
