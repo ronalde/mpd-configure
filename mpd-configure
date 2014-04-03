@@ -30,10 +30,14 @@ APP_NAME="mpd-configure"
 ## file `mpd-configure.conf' or specify them on the command line when
 ## starting this script, eg: 
 ##  MPD_HOST="myhostname" ./mpd-configure
- 
+
+## store the current directory 
 SCRIPT_DIR=$(dirname $0)
-## source the config file
-. ${SCRIPT_DIR}/mpd-configure.conf
+
+## source the config file if its present
+PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
+[[ -f "${PREFERENCES_FILE}" ]] && \
+    source "${PREFERENCES_FILE}"
 
 ## if not set, default to 0.0.0.0
 MPD_HOST="${MPD_HOST:-0.0.0.0}"
@@ -75,7 +79,8 @@ CONF_CONTENTS=""
 ## general messages and fixed strings
 PROP_NOT_APPLICABLE="n/a"
 MSG_DEVICE_BUSY="can't detect"
-
+MSG_DONE="\n\nmpd configuration saved in \`${MPD_CONFFILE}'.\n"
+MSG_DONE_DRYRUN="\ndryrun mpd configuration done (not saved).\n"
 
 function echo_stderr() {
     ## prevent messages from mixing with the actual output of the
@@ -596,7 +601,7 @@ zeroconf_conf
 write_conf
 
 [[ -z "${DRYRUN}" ]] && \
-    echo_stderr "Done! Resulting mpd configuration file is placed in ${MPD_CONFFILE}" || \
-    echo_stderr "Done with DRYRUN; nothing touched or changed"
+    echo_stderr "${MSG_DONE}" || \
+    echo_stderr "${MSG_DONE_DRYRUN}"
 
 ### done
