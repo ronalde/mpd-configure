@@ -1,229 +1,591 @@
-#!/bin/bash
-#
-#  Copyleft (l) 2012, 2013 Ronald van Engelen
-#
-#  Author: Ronald van Engelen <ronalde@launchpad.net>
-#
-#  This program is free software; you can redistribute it and/or
-#  modify it under the terms of the GNU General Public License as
-#  published by the Free Software Foundation; either version 2 of the
-#  License, or (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program.  If not, you can find it on the World Wide
-#  Web at http://www.gnu.org/copyleft/gpl.html, or write to the Free
-#  Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
-#  MA 02110-1301, USA.
-#
-#
-# See README for documentation
+#!/usr/bin/env bash
+##
+##  `mpd-configure' is a set of bash scripts to ease the configuration
+##  of mpd for audiophile purposes.
+##
+##  Copyright (C) 2014 Ronald van Engelen <ronalde+github@lacocina.nl>
+##  This program is free software: you can redistribute it and/or modify
+##  it under the terms of the GNU General Public License as published by
+##  the Free Software Foundation, either version 3 of the License, or
+##  (at your option) any later version.
+##
+##  This program is distributed in the hope that it will be useful,
+##  but WITHOUT ANY WARRANTY; without even the implied warranty of
+##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+##  GNU General Public License for more details.
+##
+##  You should have received a copy of the GNU General Public License
+##  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##
+##  The script, helpers and documentation are published at 
+##  https://github.com/ronalde/mpd-configure
+## 
+##  Also see `README'
 
-set -e
+LANG=C
 
-## source config file
-DIRNAME=$(dirname $0)
-. ${DIRNAME}/mpdconfigure.conf
-## source common-functions
-. ${DIRNAME}/mpdconfigure-common-functions
-## source alsa-functions
-. ${DIRNAME}/mpdconfigure-alsa-functions
+APP_NAME="mpd-configure"
+
+## users may change the global variables that this script uses in the
+## file `mpd-configure.conf' or specify them on the command line when
+## starting this script, eg: 
+##  MPD_HOST="myhostname" ./mpd-configure
+ 
+## source the config file
+. mpd-configure.conf
+
+## if not set, default to 0.0.0.0
+MPD_HOST="${MPD_HOST:-0.0.0.0}"
+
+## working dir for mpd
+MPD_USERHOMEDIR="${MPD_USERHOMEDIR:-${HOME}/.mpd}"
+## config file, defaults to ${HOME}/.mpd/mpd.conf
+MPD_CONFFILE="${MPD_CONFFILE:-${MPD_USERHOMEDIR}/mpd.conf}"
+## where to store data
+MPD_DATADIR="${MPD_DATADIR:-${MPD_USERHOMEDIR}}"
+MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
+MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
+MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
+MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
+MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
+
+### alsa defaults
+## space seperated list which limits the output devices available 
+APLAY_LIMIT_FILTER="${APLAY_LIMIT_FILTER:-usb digital hdmi i2s spdif toslink adat uac}"
+## filter to be used to get the preferred device
+APLAY_PREFERRED_FILTER="${APLAY_PREFERRED_FILTER:-USB Audio}"
+## array to store pairs of hardware address (hw:x,y) and its label
+declare -A ALSA_OUTPUT_DEVICES
+## and store the hardware addresses in a simple
+## indexed array for retrieving the default
+declare -a ALSA_OUTPUT_INDEXES=()
+## hardware address of selected alsa output device
+ALSA_OUTPUTDEV_ADDRESS=""
+## description/label of selected alsa output device
+ALSA_OUTPUTDEV_LABEL=""
+
+## global variable for holding the contents of the conf file
+CONF_CONTENTS=""
+
+## general messages and fixed strings
+PROP_NOT_APPLICABLE="n/a"
+MSG_DEVICE_BUSY="can't detect"
 
 
-if [ ! -z "${DEBUG}" ]; then
-    echo_debug "Starting automatic mpd configuration ..."
-    echo_debug "resulting mpd.conf file will be placed in \`${MPD_CONFFILE}'"
-fi
+function echo_stderr() {
+    ## prevent messages from mixing with the actual output of the
+    ## script (ie stdout)
 
-# empty or create the conf file 
-if [ ! -z "${DRYRUN}" ]; then
-    echo_stderr "DRYRUN: not touching \`${MPD_CONFFILE}'"
-else
-    if [ ! -d "${MPD_CONFDIR}" ]; then
-	mkdir -p "${MPD_CONFDIR}"
-    fi
-    if [ ! -f "${MPD_CONFFILE}" ]; then
-	touch "${MPD_CONFFILE}"
-	write_conf "# Created by mpd auto configuration script"
-	write_conf "# See: https://github.com/ronalde/mpd-configure/"
+    echo -e "$@" 1>&2; 
+}
+
+function die() {
+    ## exit with error while displaying an error message $1
+
+    echo_stderr "ERROR: $@"
+    exit 1
+}
+
+function debug() {
+    echo_stderr "DEBUG: ${1}"    
+}
+
+function write_conf() {
+    ## writes the contents of variable holding the configuration
+    ## contents to the configuration file if DRYRUN is empty
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    [[ -z "$DRYRUN" ]] && \
+	echo -e "${CONF_CONTENTS}" >> ${MPD_CONFFILE} || \
+	echo_stderr "DRYRUN: Not writing to ${MPD_CONFFILE}:\n${CONF_CONTENTS}"
+}
+
+function store_conf() {
+    ## appends the contents of the argument $1 to the
+    ## variable holding the configuration contents
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    conf_snippet="$1"
+
+    ## append the snippet to the global conf variable
+    CONF_CONTENTS="${CONF_CONTENTS}${conf_snippet}"
+
+}
+
+
+function command_not_found() {
+    ## give installation instructions when a command is not available
+    ## and exit with error
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    command="$1"
+    package="$2"
+    instructions="$3"
+    msg="Error: command \`${command}' not found. "
+
+    [[ -z "${instructions}" ]] && \
+	msg+="Users of Debian (or deratives, like Ubuntu) can install it with: \
+\n sudo apt-get install ${package}" || \
+	msg+="${instructions}"
+
+    die "${msg}"
+
+}
+
+
+function fetch_alsadevices_list() {
+    ## displays/returns a formatted list of alsa cards, each with its
+    ## digital output(s) and capabilities
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    MSG_NODIGITAL_OUTPUTS="No alsa cards with digital outputs found."
+
+    ## put labels for output in array
+    declare -a LST_PROPS=(\
+"   - hardware address =  " \
+"   - character device =  " \
+"   - digital formats  =  " \
+"   - usb audio class  =  " \
+"   - stream file      =  ")
+
+
+    cmd_output=""
+    alsa_dev_no=0    
+
+    ## get list of cards from CMD_APLAY or exit with error
+    aplay_outputs="$(${CMD_APLAY} -l | grep ^card)"
+    [[ -z "${aplay_outputs}" ]] && die "${MSG_NO_OUTPUTS}"
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "result before filtering:\n${aplay_outputs}"
+
+    if [[ ! -z "${APLAY_LIMIT_FILTER}" ]]; then
+	## filter the list of output devices according to APLAY_LIMIT_FILTER
+	## or exit with error
+	filter_re="${APLAY_LIMIT_FILTER// /|}"
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "filtering with LIMIT filter:\n\`${filter_re}'"
+
+	aplay_limited_outputs="$(echo -e "${aplay_outputs}" | grep -i -E "${filter_re}")"
+	[[ -z "${aplay_limited_outputs}" ]] && die "${MSG_NO_OUTPUTS}"
+
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "result after filtering with LIMIT:\n${aplay_limited_outputs}"
+
     else
-	die "\`${MPD_CONFFILE}' already exist"
+	aplay_limited_outputs="${aplay_outputs}"
     fi
-fi
+    
 
-if [ ! -z "${DEBUG}" ]; then
-    echo_debug "MPD_HOST = ${MPD_HOST}"
-fi
+    if [[ ! -z "${APLAY_PREFERRED_FILTER}" ]]; then
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "filtering with PREFERRED filter:\n\`${APLAY_PREFERRED_FILTER}'"
 
-XDG_USERDIRS=/etc/xdg/user-dirs.defaults
-if [ -f ${XDG_USERDIRS} ]; then
-    XDG_MUSICSETTING=$(grep -m 1 MUSIC ${XDG_USERDIRS})
-    XDG_MUSICDIR=${XDG_MUSICSETTING/MUSIC=/}
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "XDG_USERDIRS = ${XDG_USERDIRS}"
+	## filter the (limited) list of output devices according to
+	## APLAY_PREFERRED_FILTER or exit with error
+	filter="${APLAY_PREFERRED_FILTER}"
+	aplay_preferred_outputs="$(echo -e "${aplay_limited_outputs}" | grep -i "${filter}")"
+	if [[ -z "${aplay_preferred_outputs}" ]]; then
+	    ## no output device found which adheres to
+	    ## APLAY_LIMIT_FILTER and APLAY_PREFERRED_FILTER,
+	    ## defaulting to aplay_limited_outputs
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "no output device found with filter:\n\`${APLAY_PREFERRED_FILTER}'"
+	else
+	    ## device found
+	    aplay_limited_outputs="${aplay_preferred_outputs}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "result after PREFERRED filter:\n${aplay_limited_outputs}"
+
+	fi
     fi
 
-else
-    XDG_MUSICDIR=${HOME}
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "XDG_USERDIRS not present, using HOME"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "result after all filtering:\n${aplay_limited_outputs}"
+
+    ## loop through each line of aplay_limited_outputs and get the
+    ## properties of that alsa output device
+    while read -r line; do
+
+	if [[ "${line}" =~ "card "([0-9]*)": "(.*)" ["(.*)"], device "([0-9]*)": "(.*)" ["(.*)"]"(.*) ]]; then
+	    let alsa_dev_no+=1
+	    cardnr="${BASH_REMATCH[1]}"
+	    cardname="${BASH_REMATCH[2]}"
+	    cardlabel="${BASH_REMATCH[3]}"
+	    devnr="${BASH_REMATCH[4]}"
+	    devname="${BASH_REMATCH[5]}"
+	    devlabel="${BASH_REMATCH[6]}"
+	    hw_address="hw:${cardnr},${devnr}"
+
+	    chardev="$(return_alsa_chardev "${hw_address}")"
+	    formats="$(return_alsa_formats "${hw_address}")"
+	    if [[ "${formats}" = "${MSG_DEVICE_BUSY}" ]]; then
+		msg_in_use="$(alsa_device_busy "${chardev}")"
+		formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
+	    fi
+	    streamfile="$(return_alsa_streamfile "${hw_address}")"
+	    if [[ ! "${streamfile}" = "${PROP_NOT_APPLICABLE}" ]]; then
+		uacclass="$(return_alsa_uacclass "${streamfile}")"
+	    else
+		uacclass="${PROP_NOT_APPLICABLE}"
+	    fi
+	    
+	    alsa_outputdev_label="Output \`${devlabel}' on \`${cardlabel}' "
+	    alsa_outputdev_displaylabel=" ${alsa_dev_no}) ${alsa_outputdev_label}:"
+	    ALSA_OUTPUT_DEVICES+=(["${hw_address}"]="${alsa_outputdev_label}")
+	    ALSA_OUTPUT_INDEXES+=("${hw_address}")
+	    ## display the results
+	    cat <<EOF
+
+${alsa_outputdev_displaylabel}
+${LST_PROPS[0]}${hw_address}
+${LST_PROPS[1]}${chardev}
+${LST_PROPS[2]}${formats}
+${LST_PROPS[3]}${uacclass}
+${LST_PROPS[4]}${streamfile}
+EOF
+
+	fi
+
+    done <<< "${aplay_limited_outputs}"
+
+    ## messages in case of no or multiple alsahw devices
+    msg_no_alsahw="No alsa output devices found, will now exit."
+
+    IFS='' read -r -d '' msg_multiple_alsahw <<EOF
+
+   Specify the device you want to use below or accept the
+   default. Press [ENTER] to select. 
+EOF
+
+    [[ ${#ALSA_OUTPUT_DEVICES[@]} == 0 ]] && die "${msg_no_alsahw}"
+
+    ## when more than one matching output device is found and
+    ## USER_PROMPTS is not set, prompt the user to select one,
+    ## defaults to the first device found.
+
+    default_hw_address="${ALSA_OUTPUT_INDEXES[0]}"
+    alsa_output_device="${default_hw_address}"
+
+    if [[ ${#ALSA_OUTPUT_DEVICES[@]} -gt 1 ]]; then
+	if [ -z "${USER_PROMPTS}" ]; then
+	    echo_stderr "${msg_multiple_alsahw}"
+	    prompt="   > Device to use: "
+	    alsa_output_device="$(read -e -p "${prompt}" \
+-i "${default_hw_address}" alsa_output_device && \
+echo -e "${alsa_output_device}")"
+	fi
     fi
-fi
 
-# default to $HOME/$XDG_MUSICDIR
-MPD_MUSICDIR="${MPD_MUSICDIR:-${HOME}/${XDG_MUSICDIR}}"
-if [ ! -z "${DEBUG}" ]; then
-    echo_debug "XDG_MUSICDIR = ${XDG_MUSICDIR}"
-fi
+    ## store the properties of the chosen device in global vars
+    ALSA_OUTPUTDEV_ADDRESS="${alsa_output_device}"
+    ALSA_OUTPUTDEV_LABEL=${ALSA_OUTPUT_DEVICES["${alsa_output_device}"]}
 
-#MPD_STICKERFILE="${MPD_CONFDIR}/sticker.sqlite"
-#MPD_USER="xbmc"
+}
+
+
+function alsa_device_busy() {
+    ## looks for and returns processes that have exclusive access to
+    ## chardev $1
+
+    alsa_chardev="$1"
+
+    lsof_out="$(lsof -F c ${alsa_chardev})"
+    p_name="$(echo -e "${lsof_out}" | grep ^c | sed 's/^c\(.*\)$/\1/')"
+    p_id="$(echo -e "${lsof_out}" | grep ^p | sed 's/^p\(.*\)$/\1/')"
+    echo -e "in use by \`${p_name}' with pid \`${p_id}'"
+}
+
+function return_alsa_formats() {
+    ## fetches and returns a comma seperated string of playback formats
+    ## by feeding it dummy input while keeping the test silent 
+    ## by redirecting output to /dev/null.
+    ## 
+    ## needs address of alsa output device in `hw:x,y' format 
+    ## as single argument ($1)
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    alsa_hw_device="$1"
+
+    alsaformats="$(cat /dev/urandom | \
+LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | \
+grep '^-' | sed ':a;N;$!ba;s/\n-/,/g' | sed 's/^- //' )"
+
+    [[ ! -z "${alsaformats}" ]] && \
+	echo -e "${alsaformats}" || \
+	echo -e "${MSG_DEVICE_BUSY}"
+
+}
+
+function return_alsa_chardev() {
+    ## constructs, tests and returns the path to node in /dev.
+    ## 
+    ## needs address of alsa output device in `hw:x,y' format 
+    ## as single argument ($1)
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    alsa_hw_device="$1"
+
+    alsa_chardev="$(echo -e "${alsa_hw_device}" | \
+sed "s#hw:\([0-9]*\),\([0-9]*\)#/dev/snd/pcmC\1D\2p#")"
+    [[ -c "${alsa_chardev}" ]] && echo -e "${alsa_chardev}"
+
+}
+
+
+function return_alsa_streamfile() {
+    ## constructs, tests and returns the path to the stream file in
+    ## /proc and fills the ALSA_UAC_DEVICES array.
+    ## 
+    ## needs address of alsa output device in `hw:x,y' format 
+    ## as single argument ($1)
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    alsa_hw_device="$1"
+
+    if [[ "$(lsmod | grep snd_usb_audio)" ]]; then
+	alsa_streamfile="$(echo -e "${alsa_hw_device}" | \
+sed "s#hw:\([0-9]*\),\([0-9]*\)#/proc/asound/card\1/stream\2#")"
+	[[ -f "${alsa_streamfile}" ]] && \
+	    echo -e "${alsa_streamfile}" || \
+	    echo -e "${PROP_NOT_APPLICABLE}"
+    else
+	echo -e "${PROP_NOT_APPLICABLE}"
+    fi
+
+}
+
+function return_alsa_uacclass() {
+    ## returns/echoes the usb audio class with a description.
+    ## needs path to stream file as single argument ($1)
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    alsa_streamfile_path="$1"
+
+    ## store the contents of the stream file in an array
+    mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
+    ## expand the array 
+    alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+
+    ## part of begin of the protion of the line we're looking for (re)
+    ep_base="Endpoint: [3,5] OUT ("
+    ## the end of that portion
+    ep_end=")"
+
+    ## the portion we need ending with ep_end
+    ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
+    ## the portion without ep_end
+    ep_mode="${ep_matched_portion/)*/}"
+
+    ## strings alsa uses for endpoint descriptors
+    endpoint_adapt="ADAPTIVE"
+    endpoint_async="ASYNC"
+
+    ## store a pair of alsa endpoint descriptors/display labels
+    ## containing the usb audio class
+    declare -A endpoints=( \
+	["${endpoint_adapt}"]="1: isochronous adaptive" \
+	["${endpoint_async}"]="2: isochronous asynchronous" \
+	)
+
+    ## test if the filtered endpoint is adaptive/async and return/echo
+    ## its display label
+    [[ "${ep_mode}" = "${endpoints[${endpoint_adapt}]}" ]] && \
+	echo -e "${endpoints[${endpoint_adapt}]}" || \
+	echo -e "${endpoints[${endpoint_async}]}"
+
+}
 
 function network_conf() {
-    # configure the network section
-    SECTION="NETWORK"
-    CONF=$(echo -e \
-	"\nbind_to_address       \"${MPD_HOST}\"")
-    conf_handler "${SECTION}" "${CONF}"
+    ## configure the network section
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    section="NETWORK"
+
+    IFS='' read -r -d '' conf <<EOF
+## start section: ${section}
+bind_to_address "${MPD_HOST}"
+## end section:   ${section}
+
+EOF
+
+    store_conf "${conf}"
 }
 
 
 function audio_conf() {
-    # return the configured audio section for mpd.conf
+    ## return the configured audio section for mpd.conf
 
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "audio_conf initialized" 
-    fi
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    # try to get the right alsa device
-    get_alsa
+    section="AUDIO"
+    IFS='' read -r -d '' conf <<EOF
+## start section: ${section}
+audio_output {
+   type          "alsa"
+   name          "${ALSA_OUTPUTDEV_LABEL}"
+   device        "${ALSA_OUTPUTDEV_ADDRESS}"
+   auto_resample "no"
+   auto_format   "no"
+   mixer_type    "none"
+}
+## end section:   ${section}
 
-    SECTION="AUDIO"
-    CONF=$(echo -e \
-	"\naudio_output {" \
-	"\n\ttype          \"alsa\"" \
-	"\n\tname          \"${ALSADEVICELABEL}\"" \
-	"\n\tdevice        \"${ALSADEVICESTRING}\"" \
-	"\n\tauto_resample \"${ALSAAUTORESAMPLE}\"" \
-	"\n\tauto_format   \"${ALSAAUTOFORMAT}\"" \
-	"\n\tmixer_type    \"none\"" \
-	"\n}\n")
-    conf_handler "${SECTION}" "${CONF}"
+EOF
+
+    store_conf "${conf}"
+
 }
 
 function paths_conf() {
-    # construct path and file entries for mpd.conf
-    SECTION="PATHS"
-    CONF=$(echo -e \
-	"\nmusic_directory       \"${MPD_MUSICDIR}\"" \
-	"\nplaylist_directory    \"${MPD_PLAYLISTDIR}\"" \
-	"\ndb_file               \"${MPD_DBFILE}\"" \
-	"\nlog_file              \"${MPD_LOGFILE}\"" \
-	"\npid_file              \"${MPD_PIDFILE}\"" \
-	"\nstate_file            \"${MPD_STATEFILE}\"\n") 
-    conf_handler "${SECTION}" "${CONF}"
+    ## construct paths and file entries for mpd.conf
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    section="PATHS"
+    IFS='' read -r -d '' conf <<EOF
+## start section: ${section}
+music_directory     "${MPD_MUSICDIR}"
+playlist_directory  "${MPD_PLAYLISTDIR}"
+db_file             "${MPD_DBFILE}"
+log_file            "${MPD_LOGFILE}"
+pid_file            "${MPD_PIDFILE}"
+state_file          "${MPD_STATEFILE}" 
+## end section:   ${section}
+
+EOF
+
+    store_conf "${conf}"
+
 }
 
 function misc_conf() {
-    # construct other entries for mpd.conf 
-    SECTION="MISC"
-    CONF=$(echo -e \
-	"\nfilesystem_charset    \"UTF-8\"" \
-	"\nid3v1_encoding        \"UTF-8\"" \
-	"\nauto_update           \"yes\"" )
-    conf_handler "${SECTION}" "${CONF}"
+    ## construct other entries for mpd.conf 
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    section="MISC"
+    IFS='' read -r -d '' conf <<EOF
+## start section: ${section}
+filesystem_charset   "UTF-8"
+id3v1_encoding       "UTF-8"
+auto_update          "yes"
+## end section:   ${section}
+
+EOF
+
+    store_conf "${conf}"
+
 }
 
 function zeroconf_conf() {
-    # return the network
+    ## constructs zeroconf entries for mpd.conf
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
     if [ -n "${ENABLE_ZEROCONF}" ]; then
-	ZEROCONF_LABEL="${ZEROCONF_NAME:-MPD through ${ALSADEVICELABEL}}"
-	SECTION="ZEROCONF"
-	CONF=$(echo -e \
-	    "\nzeroconf_enabled      \"yes\"" \
-	    "\nzeroconf_name         \"${ZEROCONF_LABEL}\"")
-	conf_handler "${SECTION}" "${CONF}"
+	zeroconf_label="${ZEROCONF_NAME:-MPD through ${ALSA_OUTPUTDEV_LABEL}}"
+	section="ZEROCONF"
+	IFS='' read -r -d '' conf <<EOF
+## start section: ${section}
+zeroconf_enabled  "yes"
+zeroconf_name     "${zeroconf_label}"
+## end section:   ${section}
+
+EOF
+	store_conf "${conf}"
     fi
 }
 
 function lastfm_conf() {
     # construct lastfm section for mpd.conf
-    SECTION="LASTFM"
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    section="LASTFM"
     if [ -n "${ENABLE_LASTFM}" ]; then
 	if [ -n "${LASTFM_USERNAME}" ] && [ -n "${LASTFM_PASSWORD}" ]; then
-	    CONF=$(echo -e \
-		"\nplaylist_plugin {" \
-		"\n\tname          \"lastfm\"" \
-		"\n\tuser          \"${LASTFM_USERNAME}\"" \
-		"\n\tpassword      \"${LASTFM_PASSWORD}\"" \
-		"\n}\n")
-	    conf_handler "${SECTION}" "${CONF}"
+	    IFS='' read -r -d '' conf <<EOF
+## start section: ${section}
+playlist_plugin {
+    name       "lastfm"
+    user       "${LASTFM_USERNAME}"
+    password   "${LASTFM_PASSWORD}"
+}
+## end section:   ${section}
+EOF
+	    store_conf "${conf}"
 	else
-	    error="ENABLE_LASTFM set but either LASTFM_USERNAME \
- or LASTFM_PASSWORD empty."
-	    die "$error"
+	    die "\`ENABLE_LASTFM' set but either \`LASTFM_USERNAME' \
+ or \`LASTFM_PASSWORD' empty."
 	fi
     fi
 }
 
 
-function main {
+### program start
 
-    # construct and write the different portions for the mpd conf file
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "starting network_conf"
-    fi
-    network_conf
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "done with network_conf"
-    fi
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "starting paths_conf"
-    fi
-    paths_conf
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "done with paths_conf"
-    fi
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "starting audio_conf"
-    fi
-    audio_conf
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "done with audio_conf"
-    fi
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "starting misc_conf"
-    fi
-    misc_conf
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "done with misc_conf"
-    fi
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "starting lastfm_conf"
-    fi
-    lastfm_conf
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "done with lastfm_conf"
-    fi
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "starting zeroconf_conf"
-    fi
-    zeroconf_conf
-    if [ ! -z "${DEBUG}" ]; then
-	echo_debug "done with zeroconf_conf"
-    fi
-}
+## check if needed programs are available
+CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
 
-main
+## construct the byline
+formatted_date="$(date -Is)"
+app_url="https://github.com/ronalde/${APP_NAME}/"
+app_created_by="# Created by \`${APP_NAME}' on ${formatted_date}. \
+\n# See: ${app_url}\n\n"
 
+## empty or create the conf file 
 if [ ! -z "${DRYRUN}" ]; then
-    echo_stderr "Done with DRYRUN; nothing touched or changed"
+    echo_stderr "DRYRUN: not touching \`${MPD_CONFFILE}'"
 else
-    echo_stderr "Done! Resulting mpd configuration file is placed in ${MPD_CONFFILE}"
+    [[ ! -d "${MPD_DATADIR}" ]] && mkdir -p "${MPD_DATADIR}"
+    [[ -f "${MPD_CONFFILE}" ]] && die "\`${MPD_CONFFILE}' already exist"
+    touch "${MPD_CONFFILE}"
+    store_conf "${app_created_by}"
 fi
 
-exit 0
+## get default directories from xdg
+XDG_USERDIRS=/etc/xdg/user-dirs.defaults
+if [ -f ${XDG_USERDIRS} ]; then
+    XDG_MUSICSETTING=$(grep -m 1 MUSIC ${XDG_USERDIRS})
+    XDG_MUSICDIR=${XDG_MUSICSETTING/MUSIC=/}
+    [[ ! -z "${DEBUG}" ]] && debug "XDG_USERDIRS = ${XDG_USERDIRS}"
+else
+    XDG_MUSICDIR=${HOME}
+    [[ ! -z "${DEBUG}" ]] && debug "XDG_USERDIRS not present, using HOME"
+fi
+
+## defaults to $HOME/$XDG_MUSICDIR
+MPD_MUSICDIR="${MPD_MUSICDIR:-${HOME}/${XDG_MUSICDIR}}"
+
+[[ ! -z "${DEBUG}" ]] && debug "XDG_MUSICDIR = ${XDG_MUSICDIR}"
+
+## fill global vars ALSA_OUTPUTDEV_ADDRESS and ALSA_OUTPUTDEV_LABEL
+fetch_alsadevices_list
+
+## store conf snippets in CONF_CONTENTS
+network_conf
+paths_conf
+audio_conf
+misc_conf
+lastfm_conf
+zeroconf_conf
+
+## write the contents of CONF_CONTENTS to MPD_CONFFILE
+write_conf
+
+[[ -z "${DRYRUN}" ]] && \
+    echo_stderr "Done! Resulting mpd configuration file is placed in ${MPD_CONFFILE}" || \
+    echo_stderr "Done with DRYRUN; nothing touched or changed"
+
+### done
