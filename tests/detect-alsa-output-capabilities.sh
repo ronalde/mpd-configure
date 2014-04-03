@@ -3,13 +3,30 @@
 ## script to list alsa digital output devices by hardware address
 ## and the digital audio (output) formats they support
 ##
+##  Copyright (C) 2014 Ronald van Engelen <ronalde+github@lacocina.nl>
+##  This program is free software: you can redistribute it and/or modify
+##  it under the terms of the GNU General Public License as published by
+##  the Free Software Foundation, either version 3 of the License, or
+##  (at your option) any later version.
+##
+##  This program is distributed in the hope that it will be useful,
+##  but WITHOUT ANY WARRANTY; without even the implied warranty of
+##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+##  GNU General Public License for more details.
+##
+##  You should have received a copy of the GNU General Public License
+##  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##
 ## source:    https://github.com/ronalde/mpd-configure
 ## also see:  http://lacocina.nl/detect-alsa-output-capabilities
 
-## space seperated list of output devices that will be filtered for 
+
+## space seperated list of output devices that will be filtered for
 APLAY_OUTPUT_FILTER="usb digital hdmi i2s spdif toslink adat uac"
 
+## default filename for user settings for pulseaudio
 PA_CLIENTCONF_FILE=~/.pulse/client.conf
+## file name of the backup which the script can create
 PA_CLIENT_CONF_BACKUP="${PA_CLIENT_CONF}.da-backup"
 PA_CONF_RESTORE="false"
 PA_CONF_CREATED="false"
@@ -17,8 +34,12 @@ PA_CONF_CREATED="false"
 PROP_NOT_APPLICABLE="n/a"
 MSG_DEVICE_BUSY="can't detect"
 
-## array to store all alsa hw:x,y addresses
-declare -a ALSA_UAC_DEVICES=()
+## array to store pairs of hardware address (hw:x,y) and its stream
+## file (in /proc/asound)
+declare -A ALSA_UAC_DEVICES
+## and store the hardware addresses in a simple
+## indexed array for retrieving the default
+declare -a ALSA_UAC_INDEXES=()
 
 LANG=C
 #DEBUG="true"
@@ -48,11 +69,11 @@ pulse_restoreconf() {
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    if [ "${PA_CONF_CREATED}" = "true" ]; then
+    if [[ "${PA_CONF_CREATED}" = "true" ]]; then
 	## conf file was created by this script; remove it
 	rm "${PA_CLIENTCONF_FILE}"
     else
-	if [ "${PA_CONF_RESTORE}" = "true" ]; then
+	if [[ "${PA_CONF_RESTORE}" = "true" ]]; then
 	    ## restore existing conf file
 	    mv "${PA_CLIENT_CONF_BACKUP}" "${PA_CLIENTCONF_FILE}"
 	fi
@@ -82,13 +103,13 @@ pulse_disable() {
     ## check if pulseaudio is running for the current user
     parunning="$(pgrep -u ${USER} pulseaudio)"
 
-    if [ ! "$?" -eq "1" ]; then
+    if [[ ! "$?" -eq "1" ]]; then
 	inform "pulseaudio is running; will temporary disable and stop it ..."
 
         # temporary disable pulseaudio
-	if [ -f "${PA_CLIENTCONF_FILE}" ] ; then
+	if [[ -f "${PA_CLIENTCONF_FILE}" ]] ; then
 	    pulse_backupconf
-	    if [ "$?" -eq "0" ]; then
+	    if [[ "$?" -eq "0" ]]; then
 		sed -i 's/autospawn[[:space:]]*=[[:space:]]*\([no]*\)/autospawn = no/gI' ${PA_CLIENTCONF_FILE} 
 		PA_CONF_RESTORE="true"
 	    fi
@@ -103,7 +124,7 @@ pulse_disable() {
 	## check if that worked
 #	pakillok="$(pgrep -u ${USER} pulseaudio)"
 
-	if [ "$?" = "1" ] ; then
+	if [[ "$?" = "1" ]] ; then
 	    ## pulse is still running
 	    die "Could not kill pulseaudio."
 	fi
@@ -152,14 +173,15 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
 
 	    chardev="$(return_alsa_chardev "${hw_address}")"
 	    formats="$(return_alsa_formats "${hw_address}")"
-	    if [ "${formats}" = "${MSG_DEVICE_BUSY}" ]; then
+	    if [[ "${formats}" = "${MSG_DEVICE_BUSY}" ]]; then
 		msg_in_use="$(alsa_device_busy "${chardev}")"
 		formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
 	    fi
 	    streamfile="$(return_alsa_streamfile "${hw_address}")"
-	    if [ ! "${streamfile}" = "${PROP_NOT_APPLICABLE}" ]; then
+	    if [[ ! "${streamfile}" = "${PROP_NOT_APPLICABLE}" ]]; then
 		uacclass="$(return_alsa_uacclass "${streamfile}")"
-		ALSA_UAC_DEVICES+=("${hw_address}")
+		ALSA_UAC_DEVICES+=(["${hw_address}"]="${streamfile}")
+		ALSA_UAC_INDEXES+=("${hw_address}")
 	    else
 		uacclass="${PROP_NOT_APPLICABLE}"
 	    fi
@@ -215,12 +237,16 @@ EOF
 	    ;;
     esac
 
+    ## prompt the user to select a hardware address in order to watch
+    ## its associated stream file in /proc/asound, defaults to the
+    ## first uac device found.
     prompt="   > Device to watch: "
-    DEFAULT_UAC="${ALSA_UAC_DEVICES[0]}"
+    default_hw_address="${ALSA_UAC_INDEXES[0]}"
     UAC_DEVICE="$(read -e -p "${prompt}" \
--i "${DEFAULT_UAC}" UAC_DEVICE && \
+-i "${default_hw_address}" UAC_DEVICE && \
 echo -e "${UAC_DEVICE}")"
-    ${CMD_WATCH} -n 0.1 cat $(return_alsa_streamfile "${UAC_DEVICE}")
+
+    ${CMD_WATCH} -n 0.1 cat "${ALSA_UAC_DEVICES[${UAC_DEVICE}]}"
 
 }
 
@@ -287,7 +313,7 @@ return_alsa_streamfile() {
 
     alsa_hw_device="$1"
 
-    if [ "$(lsmod | grep snd_usb_audio)" ]; then
+    if [[ "$(lsmod | grep snd_usb_audio)" ]]; then
 	alsa_streamfile="$(echo -e "${alsa_hw_device}" | \
 sed "s#hw:\([0-9]*\),\([0-9]*\)#/proc/asound/card\1/stream\2#")"
 	[[ -f "${alsa_streamfile}" ]] && \
@@ -300,36 +326,59 @@ sed "s#hw:\([0-9]*\),\([0-9]*\)#/proc/asound/card\1/stream\2#")"
 }
 
 
-return_alsa_uacclass() {
-    ## returns the usb audio class.
-    ## 
+function return_alsa_uacclass() {
+    ## returns/echoes the usb audio class with a description.
     ## needs path to stream file as single argument ($1)
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    alsa_streamfile="$1"
-    
-    endpoint_filter="Endpoint: [0-9] OUT"
-    declare -a endpoints=( "ADAPTIVE" "ASYNC")
-    declare -a class_labels=( "1: isochronous adaptive" "2: isochronous asynchronous")
-    
-    alsa_uacclass="$(grep -E "${endpoint_filter}" "${alsa_streamfile}" | sed "s/${endpoint_filter} (\(.*\))$/\1/" | sed 's/ //g')"
-    [[ "${endpoints[0]}" == "${alsa_uacclass}" ]] && \
-	echo -e "${class_labels[0]}" || \
-	echo -e "${class_labels[1]}"
+    alsa_streamfile_path="$1"
+
+    ## store the contents of the stream file in an array
+    mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
+    ## expand the array 
+    alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+
+    ## part of begin of the protion of the line we're looking for (re)
+    ep_base="Endpoint: [3,5] OUT ("
+    ## the end of that portion
+    ep_end=")"
+
+    ## the portion we need ending with ep_end
+    ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
+    ## the portion without ep_end
+    ep_mode="${ep_matched_portion/)*/}"
+
+    ## strings alsa uses for endpoint descriptors
+    endpoint_adapt="ADAPTIVE"
+    endpoint_async="ASYNC"
+
+    ## store a pair of alsa endpoint descriptors/display labels
+    ## containing the usb audio class
+    declare -A endpoints=( \
+	["${endpoint_adapt}"]="1: isochronous adaptive" \
+	["${endpoint_async}"]="2: isochronous asynchronous" \
+	)
+
+    ## test if the filtered endpoint is adaptive/async and return/echo
+    ## its display label
+    [[ "${ep_mode}" = "${endpoints[${endpoint_adapt}]}" ]] && \
+	echo -e "${endpoints[${endpoint_adapt}]}" || \
+	echo -e "${endpoints[${endpoint_async}]}"
 
 }
 
 
-
 command_not_found() {
-    ## give installation instructions when a command is not available
+    ## give installation instructions for package $2 when command $1
+    ## is not available, optional with non default instructions $3
+    ## and exit with error
 
     command="$1"
     package="$2"
     instructions="$3"
     msg="Error: command \`${command}' not found. "
-    if [ -z "${instructions}" ]; then
+    if [[ -z "${instructions}" ]]; then
 	msg+="Users of Debian (or deratives, like Ubuntu) can install it with:\n"
 	msg+=" sudo apt-get install ${package}"
     else
