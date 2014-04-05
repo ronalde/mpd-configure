@@ -43,7 +43,7 @@ PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
 MPD_HOST="${MPD_HOST:-0.0.0.0}"
 
 ## music directory
-MPD_MUSICDIR="{MPD_MUSICDIR:-${HOME}}"
+MPD_MUSICDIR="${MPD_MUSICDIR:-${HOME}}"
 ## working directory for mpd
 MPD_USERHOMEDIR="${MPD_USERHOMEDIR:-${HOME}/.mpd}"
 ## config file, defaults to ${HOME}/.mpd/mpd.conf
