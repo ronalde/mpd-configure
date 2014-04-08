@@ -87,9 +87,6 @@ declare -A ALSA_UAC_DEVICES
 declare -a ALSA_DO_INDEXES=()
 declare -a ALSA_UAC_INDEXES=()
 
-## common bash rematch template for matching card ([1]) and device ([2])
-BR_ALSA_HWADDR_TEMPLATE="hw:([0-9]*),([0-9]*)"
-
 LANG=C
 #DEBUG="true"
 
@@ -240,7 +237,7 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
 	## construct batch rematch (brm) regexp for card portion (ie before `,')
 	brm_card="card[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\]"
 	## same for device portion
-	brm_dev="[[:space:]]device[[:space:]]([0-9]*):[[:space:]](.*)[[:space:]]\[(.*)\](.*)"
+	brm_dev="[[:space:]]device[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\](.*)"
 	## put together
 	brm_template="${brm_card},${brm_dev}"
 
