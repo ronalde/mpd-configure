@@ -383,8 +383,13 @@ function alsa_device_busy() {
     ## try lsof
     lsof_out="$(lsof -F c ${alsa_chardev} 2>/dev/null)"
     if [[ "$?" == 0 ]]; then
-	p_name="$(echo -e "${lsof_out}" | grep ^c | sed 's/^c\(.*\)$/\1/')"
-	p_id="$(echo -e "${lsof_out}" | grep ^p | sed 's/^p\(.*\)$/\1/')"
+	## store first line (strip out second line starting with c)
+	p_firstline="${lsof_out%c*}"
+	## strip first line (pid): starting after first
+	## character (p) and stop before newline character
+	p_id="${lsof_out:1:(${#p_firstline}-2)}"
+	## get second line by filtering lsof_out from (length of p_id+1)
+	p_name="${lsof_out:(${#p_firstline}+1):${#lsof_out}}"
 	echo -e "in use by \`${p_name}' with pid \`${p_id}'"
     else
 	echo -e "${MSG_RUN_AS_ROOT}"
