@@ -45,7 +45,7 @@ MSG_PA_RESTARTED_BYSESSION=" - pulseaudio restarted by session."
 
 MSG_TAB=" * "
 
-ALSA_DO_IF="digital audio interface"
+ALSA_DO_IF="digital audio output interface"
 ALSA_DO_UAC="USB Audio Class (UAC)"
 ALSA_DO_NONUAC="non-UAC"
 
@@ -60,6 +60,7 @@ MSG_MATCH_UACDO_NONE="No ${ALSA_DO_UAC} ${ALSA_DO_IF}s found."
 MSG_MATCH_UACDO_SINGLE="One ${ALSA_DO_UAC} ${ALSA_DO_IF} found."
 MSG_MATCH_UACDO_MULTIPLE="Multiple ${ALSA_DO_UAC} ${ALSA_DO_IF}s found."
 
+MSG_WATCH_PROMPT=" Hardware address of ${ALSA_DO_IF} > "
 MSG_SUMMARY=" Summary:\n"
 
 IFS='' read -r -d '' MSG_WATCH_SINGLE <<'EOF'
@@ -69,10 +70,9 @@ IFS='' read -r -d '' MSG_WATCH_SINGLE <<'EOF'
 EOF
 IFS='' read -r -d '' MSG_WATCH_MULTIPLE <<'EOF'
 
- Specify the device you want to monitor below or accept the
- default:
+ Specify the hardware address of the interface to monitor below:
   - Press [ENTER] to start monitoring that interface.
-  - [CTRL+C] can be used to quit now and to exit the watch screen.
+  - Press [CTRL+C] to quit now or to exit the screen while monitoring.
 EOF
 
 ## declarative arrays to store pairs of hardware address (hw:x,y) and
@@ -218,16 +218,6 @@ function fetch_alsadevices_list() {
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    ## put labels for output in array
-    declare -a LST_PROPS=(\
-"   - hardware address =  " \
-"   - character device =  " \
-"   - digital formats  =  " \
-"   - hw_params file   =  " \
-"   - usb audio class  =  " \
-"   - stream file      =  ")
-
-
     cmd_output=""
     alsa_dev_no=0    
 
@@ -236,12 +226,14 @@ function fetch_alsadevices_list() {
 grep ^card | \
 grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
 
+    ## exit if no digital interfaces where found
     [[ -z "${aplay_output}" ]] && die "\n${MSG_TAB}${MSG_MATCH_DO_NONE}\n"
 
     ## loop through each line of aplay output   
     while read -r line; do
 
-	if [[ "${line}" =~ "card "([0-9]*)": "(.*)" ["(.*)"], device "([0-9]*)": "(.*)" ["(.*)"]"(.*) ]]; then
+	if [[ "${line}" =~ "card "([0-9]*)": "(.*)" ["(.*)"], device \
+"([0-9]*)": "(.*)" ["(.*)"]"(.*) ]]; then
 	    let alsa_dev_no+=1
 	    cardnr="${BASH_REMATCH[1]}"
 	    cardname="${BASH_REMATCH[2]}"
@@ -270,32 +262,36 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
 	    ALSA_DO_DEVICES+=(["${hw_address}"]="${hwparamsfile}")
 	    ALSA_DO_INDEXES+=("${hw_address}")
 
-	    card_label=" ${alsa_dev_no}) Card \`${cardlabel}' using output \`${devlabel}':"
+	    card_display_title=" ${alsa_dev_no}) ${ALSA_DO_IF/digital/Digital} \`${hw_address}'"
+	    card_display_label="Card \`${cardlabel}' using output \`${devlabel}'"
+
+	    ## put labels for output in indexed array
+	    declare -a LST_PROPS=(\
+"   - soundcard        =  " \
+"   - output interface =  " \
+"   - usb audio class  =  " \
+"   - digital formats  =  " \
+"   - character device =  " \
+"   - hw_params file   =  " \
+"   - stream file      =  ")
 	 	    
 	    ## display the results
 	    cat <<EOF
 
-${card_label}
-${LST_PROPS[0]}${hw_address}
-${LST_PROPS[1]}${chardev}
-${LST_PROPS[2]}${formats}
-${LST_PROPS[3]}${hwparamsfile}
-${LST_PROPS[4]}${uacclass}
-${LST_PROPS[5]}${streamfile}
+${card_display_title}
+${LST_PROPS[0]}${cardlabel}
+${LST_PROPS[1]}${devlabel}
+${LST_PROPS[2]}${uacclass}
+${LST_PROPS[3]}${formats}
+${LST_PROPS[4]}${chardev}
+${LST_PROPS[5]}${hwparamsfile}
+${LST_PROPS[6]}${streamfile}
 
 EOF
 	fi
 
     done <<< "${aplay_output}"
 
-    ## display a summary
-    summary="$(summarize)"
-    inform "${summary}"
-
-    ## prompt to watch the monitoring file
-    prompt_watch
-
-    ## done
 }
 
 
@@ -303,31 +299,30 @@ function summarize() {
     ## based on the global arrays, return/echo the interfaces found
 
     msg=""
+    nr_nonuacdo_devs=0
 
-    case ${#ALSA_UAC_DEVICES[@]} in 
-	"0")
-	    ## no uac device detected
-	    msg="${MSG_TAB}${MSG_MATCH_UACDO_NONE}"
-	    case ${#ALSA_DO_DEVICES[@]} in
-		"1")
-		    ## single non-uac digital out interface
-		    msg="${msg}\n${MSG_TAB}${MSG_MATCH_NONUACDO_SINGLE}"
-		    ;;
-		*)
-		    ## multiple non-uac digital out interfaces; show how many
-		    msg="${msg}\n${MSG_TAB}${MSG_MATCH_NONUACDO_MULTIPLE/Multiple/${#ALSA_DO_DEVICES[@]}}"
-		    ;;
-	    esac
-	    ;;
-	"1")
+    if [[ ${#ALSA_UAC_DEVICES[@]} == 0 ]]; then
+	## no uac device detected
+	msg="${MSG_TAB}${MSG_MATCH_UACDO_NONE}"
+
+	if [[ ${#ALSA_DO_DEVICES[@]} == 1 ]]; then
+	    ## single non-uac digital out interface
+	    msg="${msg}\n${MSG_TAB}${MSG_MATCH_NONUACDO_SINGLE}"
+	else
+	    ## multiple non-uac digital out interfaces; show how many (subtract uac devices)
+	    let nr_nonuacdo_devs=${#ALSA_DO_DEVICES[@]}-${#ALSA_UAC_DEVICES[@]}
+	    msg="${msg}\n${MSG_TAB}${MSG_MATCH_NONUACDO_MULTIPLE/Multiple/${nr_nonuacdo_devs}}"
+	fi
+    else
+	## one or more uac devices found
+	if [[ ${#ALSA_UAC_DEVICES[@]} == 1 ]]; then
 	    ## single uac device found
 	    msg="${MSG_TAB}${MSG_MATCH_UACDO_SINGLE}"
-	    ;;
-	*)
+	else
 	    ## multiple uac devices found; show how many
 	    msg="${MSG_TAB}${MSG_MATCH_UACDO_MULTIPLE/Multiple/${#ALSA_UAC_DEVICES[@]}}"
-	    ;;
-    esac
+	fi
+    fi
 
     ## return the summary
     echo -e "${MSG_SUMMARY}${msg}"
@@ -341,7 +336,7 @@ function prompt_watch() {
     ##
     ## excepts output of disaply_summary as param $1
 
-    prompt="  > Device to watch: "
+    prompt="${MSG_WATCH_PROMPT}"
     summary=""
 
     case ${#ALSA_DO_DEVICES[@]} in
@@ -537,6 +532,13 @@ pulse_disable
 
 ## fetch list with alsa cards and outputs
 fetch_alsadevices_list
+
+## display a summary
+summary="$(summarize)"
+inform "${summary}"
+
+## prompt to watch the monitoring file
+prompt_watch
 
 ## restore pulse to state before running the script
 pulse_restoreconf
