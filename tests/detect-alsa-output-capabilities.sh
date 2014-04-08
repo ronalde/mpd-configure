@@ -92,7 +92,7 @@ LANG=C
 
 ### generic functions
 function echo_stderr() {
-    echo -e "$@" 1>&2; 
+    printf "$@\n" 1>&2; 
 }
 
 function die() {
@@ -197,7 +197,7 @@ function pulse_disable() {
 	    fi
 	else
 	    ## no existing conf file; create a new one
-	    echo "autospawn = no" > "${PA_CLIENTCONF_FILE}"
+	    printf "autospawn = no\n" > "${PA_CLIENTCONF_FILE}"
 	    PA_CONF_CREATED="true"
 	fi
 	
@@ -334,7 +334,7 @@ function summarize() {
     fi
 
     ## return the summary
-    echo -e "${MSG_SUMMARY}${msg}"
+    printf "${MSG_SUMMARY}${msg}\n"
 
 }
 
@@ -368,14 +368,14 @@ function prompt_watch() {
 	default_hw_address="${ALSA_DO_INDEXES[0]}"
 	WATCH_DEVICE="$(read -e -p "${prompt}" \
 -i "${default_hw_address}" WATCH_DEVICE && \
-echo -e "${WATCH_DEVICE}")"
+printf "${WATCH_DEVICE}")"
 	${CMD_WATCH} -n 0.1 cat "${ALSA_DO_DEVICES[${WATCH_DEVICE}]}"
     else
 	## UAC
 	default_hw_address="${ALSA_UAC_INDEXES[0]}"
 	WATCH_DEVICE="$(read -e -p "${prompt}" \
 -i "${default_hw_address}" WATCH_DEVICE && \
-echo -e "${WATCH_DEVICE}")"
+printf "${WATCH_DEVICE}")"
 	${CMD_WATCH} -n 0.1 cat "${ALSA_UAC_DEVICES[${WATCH_DEVICE}]}"
 
     fi
@@ -402,10 +402,10 @@ function alsa_device_busy() {
 	p_id="${lsof_out:1:(${#p_firstline}-2)}"
 	## get second line by filtering lsof_out from (length of p_id+1)
 	p_name="${lsof_out:(${#p_firstline}+1):${#lsof_out}}"
-	echo -e "in use by \`${p_name}' with pid \`${p_id}'"
+	printf "in use by \`${p_name}' with pid \`${p_id}'"
     else
 	## normal user can't access lsof output of system daemons
-	echo -e "${MSG_RUN_AS_ROOT}"
+	printf "${MSG_RUN_AS_ROOT}"
     fi
     
 }
@@ -429,8 +429,8 @@ LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
     while read -r line; do format="${format}, ${line/- /}"; done <<< "${aplay_out}"
     formats="${format#, }"
     [[ ! -z "${formats}" ]] && \
-	echo -e "${formats}" || \
-	echo -e "${MSG_DEVICE_BUSY}"
+	printf "${formats}" || \
+	printf "${MSG_DEVICE_BUSY}"
 
 }
 
@@ -447,7 +447,7 @@ function return_alsa_chardev() {
 
     ## test if its a character device or exit with error
     [[ -c "${chardev}" ]] && \
-	echo -e "${chardev}" || \
+	printf "${chardev}" || \
 	die "${MSG_NO_DEVICE}: \`${chardev}'"
     
 
@@ -467,7 +467,7 @@ function return_alsa_hwparamsfile() {
 
     ## test if its a file or exit with error
     [[ -f "${hwparamsfile}" ]] && \
-	echo -e "${hwparamsfile}" || \
+	printf "${hwparamsfile}" || \
 	die "${MSG_NO_FILE}: \`${hwparamsfile}'"
 
 }
@@ -487,8 +487,8 @@ function return_alsa_streamfile() {
 
     ## test if streamfile exist and is accessable and return it or return fixed string
     [[ -f "${streamfile}" ]] && \
-	echo -e "${streamfile}" || \
-	echo -e "${PROP_NOT_APPLICABLE}"
+	printf "${streamfile}" || \
+	printf "${PROP_NOT_APPLICABLE}"
 
 }
 
@@ -530,8 +530,8 @@ function return_alsa_uacclass() {
     ## test if the filtered endpoint is adaptive/async and return/echo
     ## its display label
     [[ "${ep_mode}" = "${endpoints[${endpoint_adapt}]}" ]] && \
-	echo -e "${endpoints[${endpoint_adapt}]}" || \
-	echo -e "${endpoints[${endpoint_async}]}"
+	printf "${endpoints[${endpoint_adapt}]}" || \
+	printf "${endpoints[${endpoint_async}]}"
 
 }
 
