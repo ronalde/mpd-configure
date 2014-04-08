@@ -37,6 +37,8 @@ PA_KILLED=""
 PROP_NOT_APPLICABLE="(n/a)"
 MSG_DEVICE_BUSY="can't detect"
 MSG_RUN_AS_ROOT="device in use, run as root to display process."
+MSG_NO_DEVICE="no such device"
+MSG_NO_FILE="no such file"
 
 MSG_PA_RUNNING=" - pulseaudio is running; will temporary disable and stop it ..."
 MSG_PA_CONF_RESTORED="\n - pulseaudio configuration restored."
@@ -84,6 +86,9 @@ declare -A ALSA_UAC_DEVICES
 ## defaults
 declare -a ALSA_DO_INDEXES=()
 declare -a ALSA_UAC_INDEXES=()
+
+## common bash rematch template for matching card ([1]) and device ([2])
+BR_ALSA_HWADDR_TEMPLATE="hw:([0-9]*),([0-9]*)"
 
 LANG=C
 #DEBUG="true"
@@ -232,8 +237,15 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
     ## loop through each line of aplay output   
     while read -r line; do
 
-	if [[ "${line}" =~ "card "([0-9]*)": "(.*)" ["(.*)"], device \
-"([0-9]*)": "(.*)" ["(.*)"]"(.*) ]]; then
+	## construct batch rematch (brm) regexp for card portion (ie before `,')
+	brm_card="card[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\]"
+	## same for device portion
+	brm_dev="[[:space:]]device[[:space:]]([0-9]*):[[:space:]](.*)[[:space:]]\[(.*)\](.*)"
+	## put together
+	brm_template="${brm_card},${brm_dev}"
+
+	## start matching
+	if [[ "${line}" =~ ${brm_template} ]]; then
 	    let alsa_dev_no+=1
 	    cardnr="${BASH_REMATCH[1]}"
 	    cardname="${BASH_REMATCH[2]}"
@@ -243,13 +255,13 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
 	    devlabel="${BASH_REMATCH[6]}"
 	    hw_address="hw:${cardnr},${devnr}"
 
-	    chardev="$(return_alsa_chardev "${hw_address}")"
+	    chardev="$(return_alsa_chardev "${cardnr}" "${devnr}")"
 	    formats="$(return_alsa_formats "${hw_address}")"
 	    if [[ "${formats}" = "${MSG_DEVICE_BUSY}" ]]; then
 		msg_in_use="$(alsa_device_busy "${chardev}")"
 		formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
 	    fi
-	    streamfile="$(return_alsa_streamfile "${hw_address}")"
+	    streamfile="$(return_alsa_streamfile "${cardnr}" "${devnr}")"
 	    if [[ ! "${streamfile}" = "${PROP_NOT_APPLICABLE}" ]]; then
 		uacclass="$(return_alsa_uacclass "${streamfile}")"
 		ALSA_UAC_DEVICES+=(["${hw_address}"]="${streamfile}")
@@ -258,7 +270,7 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
 		uacclass="${PROP_NOT_APPLICABLE}"
 	    fi
 
-	    hwparamsfile="$(return_alsa_hwparamsfile "${hw_address}")"
+	    hwparamsfile="$(return_alsa_hwparamsfile "${cardnr}" "${devnr}")"
 	    ALSA_DO_DEVICES+=(["${hw_address}"]="${hwparamsfile}")
 	    ALSA_DO_INDEXES+=("${hw_address}")
 
@@ -380,18 +392,22 @@ function alsa_device_busy() {
 
     alsa_chardev="$1"
 
-    ## try lsof
+    ## try lsof while hiding/redirecting errors
     lsof_out="$(lsof -F c ${alsa_chardev} 2>/dev/null)"
     if [[ "$?" == 0 ]]; then
-	## store first line (strip out second line starting with c)
+	## user may inspect lsof output. lsof out consist of:
+	## pXXX  (XXX = numeric process id)
+	## cYYY  (YYY = process name)
+	## store first line by stripping out second line starting with c
 	p_firstline="${lsof_out%c*}"
-	## strip first line (pid): starting after first
-	## character (p) and stop before newline character
+	## store first line/strip output of lsof by starting after first character (p) 
+	## and stopping before newline character (=length of p_firstline string)
 	p_id="${lsof_out:1:(${#p_firstline}-2)}"
 	## get second line by filtering lsof_out from (length of p_id+1)
 	p_name="${lsof_out:(${#p_firstline}+1):${#lsof_out}}"
 	echo -e "in use by \`${p_name}' with pid \`${p_id}'"
     else
+	## normal user can't access lsof output of system daemons
 	echo -e "${MSG_RUN_AS_ROOT}"
     fi
     
@@ -408,13 +424,15 @@ function return_alsa_formats() {
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
     alsa_hw_device="$1"
+    ALSA_BEFORE_FORMATS="Available formats:"
 
-    alsaformats="$(cat /dev/urandom | \
-LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | \
-grep '^-' | sed ':a;N;$!ba;s/\n-/,/g' | sed 's/^- //' )"
+    aplay_out="$(cat /dev/urandom | \
+LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
 
-    [[ ! -z "${alsaformats}" ]] && \
-	echo -e "${alsaformats}" || \
+    while read -r line; do format="${format}, ${line/- /}"; done <<< "${aplay_out}"
+    formats="${format#, }"
+    [[ ! -z "${formats}" ]] && \
+	echo -e "${formats}" || \
 	echo -e "${MSG_DEVICE_BUSY}"
 
 }
@@ -422,39 +440,38 @@ grep '^-' | sed ':a;N;$!ba;s/\n-/,/g' | sed 's/^- //' )"
 function return_alsa_chardev() {
     ## constructs, tests and returns the path to node in /dev.
     ## 
-    ## needs address of alsa output device in `hw:x,y' format 
-    ## as single argument ($1)
+    ## needs cardnr ($1) and devnr ($2) as arguments
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    alsa_hw_device="$1"
+    cardnr="$1"
+    devnr="$2"
+    chardev="/dev/snd/pcmC${cardnr}D${devnr}p"
 
-    alsa_chardev="$(echo -e "${alsa_hw_device}" | \
-sed "s#hw:\([0-9]*\),\([0-9]*\)#/dev/snd/pcmC\1D\2p#")"
-    [[ -c "${alsa_chardev}" ]] && echo -e "${alsa_chardev}"
+    ## test if its a character device or exit with error
+    [[ -c "${chardev}" ]] && \
+	echo -e "${chardev}" || \
+	die "${MSG_NO_DEVICE}: \`${chardev}'"
+    
 
 }
 
 function return_alsa_hwparamsfile() {
     ## constructs, tests and returns the path to the hw_params file in
-    ## /proc to fill the ALSA_DO_DEVICES array.
+    ## /proc
     ##
-    ## needs address of alsa output device in `hw:x,y' format
-    ## as single argument ($1)
+    ## needs cardnr ($1) and devnr ($2) as arguments
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    alsa_hw_device="$1"
-    alsa_hw_template='"hw:"([0-9]*)","([0-9]*)'
+    cardnr="$1"
+    devnr="$2"
+    hwparamsfile="/proc/asound/card${cardnr}/pcm${devnr}p/sub0/hw_params"
 
-    if [[ "${alsa_hw_device}" =~ "${alsa_hw_template}" ]]; then
-	cardnr="${BASH_REMATCH[1]}"
-	devnr="${BASH_REMATCH[2]}"
-    fi
-    alsa_hwparamsfile="/proc/asound/card${cardnr}/pcm${devnr}p/sub0/hw_params"
-    [[ -f "${alsa_hwparamsfile}" ]] && \
-	echo -e "${alsa_hwparamsfile}" || \
-	die "could not access hw_params file: \`${alsa_hwparamsfile}'"
+    ## test if its a file or exit with error
+    [[ -f "${hwparamsfile}" ]] && \
+	echo -e "${hwparamsfile}" || \
+	die "${MSG_NO_FILE}: \`${hwparamsfile}'"
 
 }
 
@@ -463,22 +480,18 @@ function return_alsa_streamfile() {
     ## constructs, tests and returns the path to the stream file in
     ## /proc to fill the ALSA_UAC_DEVICES array.
     ## 
-    ## needs address of alsa output device in `hw:x,y' format 
-    ## as single argument ($1)
+    ## needs cardnr ($1) and devnr ($2) as arguments
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    alsa_hw_device="$1"
+    cardnr="$1"
+    devnr="$2"
+    streamfile="/proc/asound/card${cardnr}/stream${devnr}"
 
-    if [[ "$(lsmod | grep snd_usb_audio)" ]]; then
-	alsa_streamfile="$(echo -e "${alsa_hw_device}" | \
-sed "s#hw:\([0-9]*\),\([0-9]*\)#/proc/asound/card\1/stream\2#")"
-	[[ -f "${alsa_streamfile}" ]] && \
-	    echo -e "${alsa_streamfile}" || \
-	    echo -e "${PROP_NOT_APPLICABLE}"
-    else
+    ## test if streamfile exist and is accessable and return it or return fixed string
+    [[ -f "${streamfile}" ]] && \
+	echo -e "${streamfile}" || \
 	echo -e "${PROP_NOT_APPLICABLE}"
-    fi
 
 }
 
