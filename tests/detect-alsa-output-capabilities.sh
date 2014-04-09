@@ -234,7 +234,7 @@ grep -i -E "${APLAY_OUTPUT_FILTER// /|}")"
     ## loop through each line of aplay output   
     while read -r line; do
 
-	## construct batch rematch (brm) regexp for card portion (ie before `,')
+	## construct bash rematch (brm) regexp for card portion (ie before `,')
 	brm_card="card[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\]"
 	## same for device portion
 	brm_dev="[[:space:]]device[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\](.*)"
