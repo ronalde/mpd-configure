@@ -144,7 +144,8 @@ function fetch_alsa_outputinterfaces() {
 	    ## get the formats the interface natively handles or
 	    ## return the process id and name blocking the interface
 	    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
-	    if [[ "${formats}" = "${MSG_DEVICE_BUSY}" ]]; then
+	    if [[ "${alsa_if_formats}" = "${MSG_DEVICE_BUSY}" ]]; then
+		debug "***** in use"
 		msg_in_use="$(alsa_device_busy "${alsa_if_chardev}")"
 		alsa_if_formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
 	    fi
@@ -297,7 +298,9 @@ function return_alsa_formats() {
     aplay_out="$(cat /dev/urandom | \
 LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
 
-    while read -r line; do format="${format}, ${line/- /}"; done <<< "${aplay_out}"
+    while read -r line; do 
+	format="${format}, ${line/- /}"
+    done <<< "${aplay_out}"
     formats="${format#, }"
     [[ ! -z "${formats}" ]] && \
 	printf "${formats}" || \
