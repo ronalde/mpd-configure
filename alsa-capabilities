@@ -1,0 +1,618 @@
+#!/usr/bin/env bash
+
+## This script displays a list with the audio capabilities of each
+## alsa audio output interface and stores them in arrays for use in
+## other scripts.  This functionality is exposed by the
+## `return_alsa_interface' function which is avaliable after sourcing
+## the file. When ran from a shell, it will call that function.
+##
+##  Copyright (C) 2014 Ronald van Engelen <ronalde+github@lacocina.nl>
+##  This program is free software: you can redistribute it and/or modify
+##  it under the terms of the GNU General Public License as published by
+##  the Free Software Foundation, either version 3 of the License, or
+##  (at your option) any later version.
+##
+##  This program is distributed in the hope that it will be useful,
+##  but WITHOUT ANY WARRANTY; without even the implied warranty of
+##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+##  GNU General Public License for more details.
+##
+##  You should have received a copy of the GNU General Public License
+##  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##
+## Source:    https://github.com/ronalde/mpd-configure
+## See also:  http://lacocina.nl/detect-alsa-output-capabilities
+
+## an alsa sound card is referred to as a `dev' (device) in this
+## script, while an alsa audio output device is referred to as an
+## `if' (interface), and within those:
+## - `ao' > analog outputs
+## - `do' > all (non-usb audio class) digital outputs
+## - `uo' > usb audio class digital outputs
+
+LANG=C
+
+## set DEBUG to a non empty value to display internal program flow to
+## stderr
+# DEBUG="true"
+
+
+### generic functions
+
+function echo_stderr() {
+    printf "$@\n" 1>&2; 
+}
+
+function die() {
+    echo_stderr "\nError: $@"
+    exit 1
+}
+
+function inform() {
+    echo_stderr "$@\n"
+}
+
+function debug() {
+    echo_stderr "DEBUG *** $@"
+}
+
+function command_not_found() {
+    ## give installation instructions for package $2 when command $1
+    ## is not available, optional with non default instructions $3
+    ## and exit with error
+
+    command="$1"
+    package="$2"
+    instructions="$3"
+    msg="Error: command \`${command}' not found. "
+    if [[ -z "${instructions}" ]]; then
+	msg+="Users of Debian (or deratives, like Ubuntu) can install it with:\n"
+	msg+=" sudo apt-get install ${package}"
+    else
+	msg+="${instructions}"
+    fi
+    die "${msg}"
+
+}
+
+
+### alsa related functions
+
+function fetch_alsa_outputinterfaces() {
+    ## parses each output interface returned by `aplay -l' after
+    ## filtering (when the appropriate commandline options are given),
+    ## stores its capabilities in the appropriate global indexed
+    ## arrays and displays them.
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    ## store the output of `aplay -l`
+    aplay_output="$(${CMD_APLAY} -l)"
+    declare -a aplay_lines=()
+    ## reset the counter for interfaces without filtering
+    NR_AIFS_BEFOREFILTERING=0
+
+    ## iterate each line of aplay output
+    while read -r line ; do 
+	## filter for `^card' and then for `OPT_FILTER' to get matching
+	## lines from aplay and store them in an array
+	if [[ "${line}" =~ "card "[0-99]":" ]]; then
+
+	    [[ ! -z "${DEBUG}" ]] && debug  "Inspecting interface: ${line}"
+
+	    ## raise the counter for interfaces without filtering
+	    let NR_AIFS_BEFOREFILTERING+=1
+
+	    ## check if line matches `OPT_FILTER'
+	    if [[ -z "${OPT_FILTER}"  || \
+		"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
+		[[ ! -z "${DEBUG}" ]] && debug  "               match: ${line}"
+		## store the line in an array
+		aplay_lines+=("${line}")
+	    fi
+	fi
+    done <<< "${aplay_output}"
+
+    ## loop through each item in the array
+    for line in "${aplay_lines[@]}"; do 
+	## set if type to default (ie analog)
+	alsa_if_type="ao"
+
+	## construct bash rematch (brm) regexp for sound device
+	## portion (ie before `,')
+	brm_dev="card[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\]"
+	## same for interface portion
+	brm_if="[[:space:]]device[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\](.*)"
+	## put together
+	brm_template="${brm_dev},${brm_if}"
+
+	## start matching
+	if [[ "${line}" =~ ${brm_template} ]]; then
+	    alsa_dev_nr="${BASH_REMATCH[1]}"
+	    alsa_dev_name="${BASH_REMATCH[2]}"
+	    alsa_dev_label="${BASH_REMATCH[3]}"
+	    alsa_if_nr="${BASH_REMATCH[4]}"
+	    alsa_if_name="${BASH_REMATCH[5]}"
+	    alsa_if_label="${BASH_REMATCH[6]}"
+	    alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
+	    alsa_if_hwparamsfile="$(return_alsa_hwparamsfile "${alsa_dev_nr}" "${alsa_if_nr}")"
+	    alsa_if_monitorfile="${alsa_if_hwparamsfile}"
+
+	    ## get the character device for the interface (ie `/dev/snd/xxx')
+	    alsa_if_chardev="$(return_alsa_chardev "${alsa_dev_nr}" "${alsa_if_nr}")"
+
+	    ## get the formats the interface natively handles or
+	    ## return the process id and name blocking the interface
+	    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
+	    if [[ "${formats}" = "${MSG_DEVICE_BUSY}" ]]; then
+		msg_in_use="$(alsa_device_busy "${alsa_if_chardev}")"
+		alsa_if_formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
+	    fi
+
+	    ## check if the interface name matches one of the strings
+	    ## in the digital filter array
+	    for filter in "${DO_INTERFACE_FILTER[@]}"; do
+
+		## `,,' downcases the string, while `*var*' does a wildcard match
+		if [[ "${alsa_if_name,,}" == *"${filter}"* ]]; then
+		    [[ ! -z "${DEBUG}" ]] && debug "match = ${alsa_if_name,,}: ${filter}"
+		    ## set ao type to d(igital)o(out)
+		    alsa_if_type="do"
+		    ## exit this for loop
+		    break
+		fi
+	    done
+
+	    ## try to get the stream file for the interface (ie
+	    ## `/proc/asound/cardX/streamY'); such determines whether
+	    ## its a uac device and if so, which class
+	    alsa_if_streamfile="$(return_alsa_streamfile "${alsa_dev_nr}" "${alsa_if_nr}")"
+
+	    if [[ ! "${alsa_if_streamfile}" = "${MSG_PROP_NOTAPPLICABLE}" ]]; then
+		## set interface to u(sb)o(ut)
+		alsa_if_type="uo"
+		## uac devices will use the stream file instead of
+		## hwaparams file to monitor
+		alsa_if_monitorfile="${alsa_if_streamfile}"
+
+		## get the type of uac endpoint
+		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
+
+		## lookup the uac class in the array for this type of endpoint (EP)
+		## (for readability)
+		alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
+		## get the uac class number (ie `1' or `2')
+		alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
+		## get the uac label (ie everything after `x: ')
+		alsa_if_uac_class_label="${alsa_if_uac_class:4}"
+		
+	    else
+		## no uac interface
+		alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+	    fi
+	fi
+
+	## for each type of interface, store a `hardware address' and
+	## `monitoring file' pair in the proper array and construct
+	## the display title
+	case "${alsa_if_type}" in
+	    "ao")
+		## only if neither `OPT_LIMIT_DO' and `OPT_LIMIT_UO' are set
+		[[ ! -z ${OPT_LIMIT_DO} || ! -z ${OPT_LIMIT_UO} ]] && continue || match="true"
+		;;
+	    "do")
+		## only if neither `OPT_LIMIT_AO' and `OPT_LIMIT_UO' are set
+		[[ ! -z ${OPT_LIMIT_AO} || ! -z ${OPT_LIMIT_UO} ]] && continue || match="true"
+		;;
+	    "uo")
+		## only if `OPT_LIMIT_AO' is not set
+		[[ ! -z ${OPT_LIMIT_AO} ]] && continue || match="true"
+	esac
+
+	if [[ ! -z "${match}" ]]; then
+
+	    alsa_if_title_label="${ALSA_IF_LABELS[${alsa_if_type}]}"
+
+	    ## construct the display title
+	    alsa_if_display_title=$(printf " %s) %s \`%s'" \
+		"${#ALSA_AIF_HWADDRESSES[@]}" "${alsa_if_title_label}" "${alsa_if_hwaddress}")
+
+	    ## store the details of the current interface in global arrays
+	    ALSA_AIF_HWADDRESSES+=("${alsa_if_hwaddress}")
+	    ALSA_AIF_MONITORFILES+=("${alsa_if_monitorfile}")
+	    ALSA_AIF_DISPLAYTITLES+=("${alsa_if_display_title}")
+	    ALSA_AIF_DEVLABELS+=("${alsa_dev_label}")
+	    ALSA_AIF_LABELS+=("${alsa_if_label}")
+	    ALSA_AIF_UACCLASSES+=("${alsa_if_uac_class}")
+	    ALSA_AIF_FORMATS+=("${alsa_if_formats}")
+	    ALSA_AIF_CHARDEVS+=("${alsa_if_chardev}")
+
+	fi
+
+	## construct a list with the properties of the current
+	## interface if `OPT_QUIET' is not set
+	if [[ -z "${OPT_QUIET}" ]]; then
+	    alsa_details_output=$(cat <<EOF
+${alsa_if_display_title}
+    - card/device name       =  ${alsa_dev_label}
+    - interface name         =  ${alsa_if_label}
+    - usb audio class        =  ${alsa_if_uac_class}
+    - digital formats        =  ${alsa_if_formats}
+    - character device       =  ${alsa_if_chardev}
+    - monitor file           =  ${alsa_if_monitorfile}
+EOF
+) 
+	    ## echo it to std_err
+	    inform "${alsa_details_output}"
+
+	fi
+
+    done
+
+}
+
+
+function alsa_device_busy() {
+    ## looks for and returns processes that have exclusive access to
+    ## chardev $1
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    alsa_chardev="$1"
+
+    ## try lsof while hiding/redirecting errors
+    lsof_out="$(lsof -F c ${alsa_chardev} 2>/dev/null)"
+    if [[ "$?" == 0 ]]; then
+	## user may inspect lsof output. lsof out consist of:
+	## pXXX  (XXX = numeric process id)
+	## cYYY  (YYY = process name)
+	## store first line by stripping out second line starting with c
+	p_firstline="${lsof_out%c*}"
+	## store first line/strip output of lsof by starting after first character (p) 
+	## and stopping before newline character (=length of p_firstline string)
+	p_id="${lsof_out:1:(${#p_firstline}-2)}"
+	## get second line by filtering lsof_out from (length of p_id+1)
+	p_name="${lsof_out:(${#p_firstline}+1):${#lsof_out}}"
+	printf "in use by \`${p_name}' with pid \`${p_id}'"
+    else
+	## normal user can't access lsof output of system daemons
+	printf "${MSG_RUN_AS_ROOT}"
+    fi
+    
+}
+
+function return_alsa_formats() {
+    ## fetches and returns a comma seperated string of playback formats
+    ## by feeding it dummy input while keeping the test silent 
+    ## by redirecting output to /dev/null.
+    ## 
+    ## needs address of alsa output device in `hw:x,y' format 
+    ## as single argument ($1)
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    alsa_hw_device="$1"
+    ALSA_BEFORE_FORMATS="Available formats:"
+
+    aplay_out="$(cat /dev/urandom | \
+LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
+
+    while read -r line; do format="${format}, ${line/- /}"; done <<< "${aplay_out}"
+    formats="${format#, }"
+    [[ ! -z "${formats}" ]] && \
+	printf "${formats}" || \
+	printf "${MSG_DEVICE_BUSY}"
+
+}
+
+function return_alsa_chardev() {
+    ## constructs, tests and returns the path to node in /dev.
+    ## 
+    ## needs devnr ($1) and ifnr ($2) as arguments
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    devnr="$1"
+    ifnr="$2"
+    chardev="/dev/snd/pcmC${devnr}D${ifnr}p"
+
+    ## test if its a character device or exit with error
+    [[ -c "${chardev}" ]] && \
+	printf "${chardev}" || \
+	die "${MSG_NO_DEVICE}: \`${chardev}'"
+    
+
+}
+
+function return_alsa_hwparamsfile() {
+    ## constructs, tests and returns the path to the hw_params file in
+    ## /proc
+    ##
+    ## needs devnr ($1) and ifnr ($2) as arguments
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    devnr="$1"
+    ifnr="$2"
+    hwparamsfile="/proc/asound/card${devnr}/pcm${ifnr}p/sub0/hw_params"
+
+    ## test if its a file or exit with error
+    [[ -f "${hwparamsfile}" ]] && \
+	printf "${hwparamsfile}" || \
+	die "${MSG_NO_FILE}: \`${hwparamsfile}'"
+
+}
+
+
+function return_alsa_streamfile() {
+    ## constructs, tests and returns the path to the stream file in
+    ## /proc to fill the ALSA_UO_INTERFACES array.
+    ## 
+    ## needs devnr ($1) and ifnr ($2) as arguments
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'\n"
+
+    devnr="$1"
+    ifnr="$2"
+    streamfile="/proc/asound/card${devnr}/stream${ifnr}"
+
+    ## test if streamfile exist and is accessable and return it or return fixed string
+    [[ -f "${streamfile}" ]] && \
+	printf "${streamfile}" || \
+	printf "${MSG_PROP_NOTAPPLICABLE}"
+
+}
+
+
+function return_alsa_uac_ep() {
+    ## returns/echoes the usb audio class endpoint as a fixed string
+    ## (ie `ADAPTIVE' or `ASYNC'.
+    ## needs path to stream file as single argument ($1)
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    alsa_streamfile_path="$1"
+
+    ## store the contents of the stream file in an array
+    mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
+    ## expand the array 
+    alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+
+    ## part of begin of the protion of the line we're looking for (re)
+    ep_base="Endpoint: [3,5] OUT ("
+    ## the end of that portion
+    ep_end=")"
+
+    ## the portion we need ending with ep_end
+    ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
+    ## the portion without ep_end
+    ep_mode="${ep_matched_portion/)*/}"
+
+    ## return the filtered endpoint type
+    printf "%s" "${ep_mode}"
+}
+
+
+### command line parsing
+
+function analyze_opt_limit() {
+    ## check if the argument for the `-l' (limit) option is proper
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    opt_limit="$1"
+    case ${opt_limit} in
+        a|analog) 
+	    OPT_LIMIT_AO="True"
+	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_AO set to \`${OPT_LIMIT_AO}'"
+	    ;;
+        u|usb|uac) 
+	    OPT_LIMIT_UO="True"
+	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_UO set to \`${OPT_LIMIT_UO}'"
+	    ;;
+        d|digital)
+	    OPT_LIMIT_DO="True"
+	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_DO set to \`${OPT_LIMIT_DO}'"
+	    ;;
+	*)
+	    args=$(printf "\"%s\", " "${OPT_LIMIT_ARGS[@]}")
+	    die "the \`-l' (limit) option requires one of the following arguments:\
+\n${args%*, }"
+    esac
+}
+
+
+function usage() {
+    ## display syntax and exit
+
+    msg=$(cat <<EOF
+Usage:
+$0 [ -l a|d|u ]  [ -c <filter> ] [ -q ]
+
+Displays a list of alsa audio output interfaces with their details and
+ends with the hardware address (\`hw:x,y') for the first available
+interface. When the \`-q (quiet)' option is set, the list is
+surpressed, ie only the hardware address is displayed.
+
+The list may be filtered by using the limit option \`-l' with an
+argument, either \`a' (or \`analog'), \`d' (or \`digital') or \`u' (or
+\`usb' or \`uac') to only show interfaces fitting that limit. In
+addition, a custom filter may be specified as an argument for the \`c'
+option.
+
+Returns 0 if an interface is available or 1 in case of no matches.
+
+  -l a | analog     Limit the interfaces to analog ones.
+  -l u | usb | uac  Limit the available output devices to those that
+                    support USB Audio Class.
+  -l d | digital    Limit the available interfaces to digital ones using
+                    a static (and arbitrary) filter.
+  -c <regexp>       Limit the available interfaces further to match
+                    \`<regexp>'.
+  -q, --quiet       Surpress listing each interface with its details,
+                    ie only store the details of each card in the
+                    appropriate arrays.
+  -h, --help        Show this help message
+EOF
+)
+    inform "${msg}"
+    exit 1
+}
+
+function analyze_command_line() {
+    ## parse command line arguments using bash getopts
+
+    ## put characters in the array in a string
+    shortopts=":${SHORT_OPTS[@]/ /}"
+
+    while getopts "${shortopts}" option; do
+        case "$option" in
+            l) 
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "option ${OPTIND}: \`${option}' set to \`${OPTARG}'"
+		OPT_LIMIT="True"
+		analyze_opt_limit "${OPTARG}"
+
+		;;
+            q)
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "option ${OPTIND}: \`${option}' set to \`${OPTARG}'"
+		OPT_QUIET=true
+		;;
+            c) 
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "option ${OPTIND}: \`${option}' set to \`${OPTARG}'"
+		OPT_FILTER="${OPTARG}"
+		;;
+           h|\?) 
+		done_opts=true
+		usage
+		;;
+            *) 
+		done_opts=true
+		;;
+        esac
+    done
+}
+
+function return_alsa_interface() {
+    ## main function; see usage()
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    ## check if needed commands are available
+    CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+
+    ## parse command line arguments
+    analyze_command_line "$@"
+
+    ## create a list of alsa audio output interfaces and parse it.
+    fetch_alsa_outputinterfaces
+    
+    ## exit with error if no matching output line was found
+    if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
+	msg="\n${MSG_MATCH_IF_NONE_UNLIMITED}"
+	##  display information about the number of interfaces before filtering
+	[[ ! ${NR_AIFS_BEFOREFILTERING} == 0 ]] && \
+	    msg=$(printf "${MSG_MATCH_IF_NONE_LIMITED}"  "${NR_AIFS_BEFOREFILTERING}")
+	die "\n${msg}"
+    fi
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "Number of audio interfaces after filtering: ${#ALSA_AIF_HWADDRESSES[@]}"
+
+    ## return success if interfaces are found
+    return 0
+
+
+}
+
+
+### global variables
+
+## indexed arrays to store the details of interfaces of one would
+## declare such an array in another script, that array would be filled
+## instead of these.
+[[ -z ${ALSA_AIF_HWADDRESSES} ]] && declare -a ALSA_AIF_HWADDRESSES=()
+[[ -z ${ALSA_AIF_DISPLAYTITLES} ]] && declare -a ALSA_AIF_DISPLAYTITLES=()
+[[ -z ${ALSA_AIF_MONITORFILES} ]] && declare -a ALSA_AIF_MONITORFILES=()
+[[ -z ${ALSA_AIF_DEVLABELS} ]] && declare -a ALSA_AIF_DEVLABELS=()
+[[ -z ${ALSA_AIF_LABELS} ]] && declare -a ALSA_AIF_LABELS=()
+[[ -z ${ALSA_AIF_UACCLASSES} ]] && declare -a ALSA_AIF_UACCLASSES=()
+[[ -z ${ALSA_AIF_FORMATS} ]] && declare -a ALSA_AIF_FORMATS=()
+[[ -z ${ALSA_AIF_CHARDEVS} ]] && declare -a ALSA_AIF_CHARDEVS=()
+
+## counter for unfiltered interfaces
+NR_AIFS_BEFOREFILTERING=0
+
+## static filter for digital interfaces
+DO_FILTER_LIST="$(cat <<EOF
+adat
+aes
+ebu
+digital
+dsd
+hdmi
+i2s
+iec958
+spdif
+s/pdif
+toslink
+uac
+usb
+EOF
+    )"
+
+declare -a DO_INTERFACE_FILTER=($(printf -- '%s' "${DO_FILTER_LIST// /" "}"))
+
+## construction for displayed output 
+UAC="USB Audio Class"
+ALSA_IF_LABEL="alsa audio output interface"
+declare -A ALSA_IF_LABELS=()
+ALSA_IF_LABELS+=(["ao"]="Analog ${ALSA_IF_LABEL}")
+ALSA_IF_LABELS+=(["do"]="Digital ${ALSA_IF_LABEL}")
+ALSA_IF_LABELS+=(["uo"]="${UAC} ${ALSA_IF_LABELS[do]}")
+ALSA_NON_DO_IF="Analog ${ALSA_IF_LABEL}"
+ALSA_NON_UO_IF="Non-UAC ${ALSA_DO_IF}"
+
+## strings alsa uses for UAC endpoint descriptors.
+UO_EP_ADAPT_FILTER="ADAPTIVE"
+UO_EP_ASYNC_FILTER="ASYNC"
+## labels for UAC classes.
+UO_EP_ADAPT_LABEL="1 - isochronous adaptive"
+UO_EP_ASYNC_LABEL="2 - isochronous asynchronous"
+
+## declarative array holding the available UAC classes with
+## description
+declare -A UO_EP_LABELS=( \
+	["${UO_EP_ADAPT_FILTER}"]="${UO_EP_ADAPT_LABEL}" \
+	["${UO_EP_ASYNC_FILTER}"]="${UO_EP_ASYNC_LABEL}" \
+	)
+
+## system messages
+MSG_PROP_NOTAPPLICABLE="(n/a)"
+MSG_PROP_NOTAVAILABLE="(none)"
+MSG_DEVICE_BUSY="can't detect"
+MSG_RUN_AS_ROOT="device in use, run as root to display process."
+MSG_NO_DEVICE="no such device"
+MSG_NO_FILE="no such file"
+MSG_TAB=" * "
+MSG_MARGIN="${MSG_TAB//\*/ }"
+MSG_MATCH_IF_NONE_UNLIMITED="${MSG_TAB}No ${ALSA_IF_LABEL}s found."
+MSG_MATCH_IF_NONE_LIMITED="${MSG_TAB}From the %s available ${ALSA_IF_LABEL}s, \
+none matched your filter."
+
+## command line options
+### optional input parameters, the ones with `:' need an argument
+declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb" "uac")
+SHORT_OPTS=("l:" "c:" "q" "h")
+[[ ! -z ${OPT_LIMIT_AO} ]] && OPT_LIMIT_AO=${OPT_LIMIT_AO}
+[[ ! -z ${OPT_LIMIT_DO} ]] && OPT_LIMIT_DO=${OPT_LIMIT_DO}
+[[ ! -z ${OPT_LIMIT_UO} ]] && OPT_LIMIT_UO=${OPT_LIMIT_UO}
+[[ ! -z ${OPT_QUIET} ]] && OPT_QUIET=${OPT_QUIET}
+[[ ! -z ${OPT_FILTER} ]] && OPT_FILTER=${OPT_FILTER}
+
+## if the script is not sourced by another script but run within its
+## own shell call function `return_alsa_interface'
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] || return_alsa_interface "$@"
+

@@ -1,59 +1,82 @@
 README for mpd-configure
 ========================
 
-The `mpd-configure` script creates a valid
+The `mpd-configure` bash script creates a valid
 [mpd](http://www.musicpd.org/) configuration file, optimised for bit
-perfect playback of high resolution digital audio files.
+perfect playback of high resolution digital audio files. It relies
+completely on the accompanying bash script `alsa-capabilities'.
+
+When that script is not sourced, like mpd-configure does, but run from
+the command line, it will display each alsa audio output interface,
+with its capabilities, like the type (ie. Analog, Digital or USB Audio
+Class) and the native (digital) audio formats it supports, as well as
+other properties, like it's character device (in `/dev/snd') and the
+file to watch or monitor (in `/proc/asound'). 
+
+The interfaces returned by the script may be reduced by setting
+prefabbed or custom filters. These options can be displayed by running
+the script with the `-h' help option, eg:
+
+ ./alsa-capabilities -h
 
 
 Background
 ----------
 
-I created this script in an attempt to create a network booted,
-hardware independent audiophile streaming audio player using [Music
-Player Daemon (MPD)](http://www.musicpd.org/) running as a [Linux
-Terminal Server Project (LTSP)](http://www.ltsp.org/) client, see the
-article [How to setup a bit-perfect digital audio streaming client
-with free software (with LTSP and
-MPD)](http://www.lacocina.nl/artikelen/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd).
-
-However, the script can be used on any computer running the mpd
-daemon. See the article [How to turn Music Player Daemon (mpd) into an
-audiophile music
+I created this script to assist users in turning mpd in an audiophile
+digital music player. See the article [How to turn Music Player Daemon
+(mpd) into an audiophile music
 player](http://www.lacocina.nl/artikelen/mpd-configure-audiophile).
 
 
-Manual usage with a fixed installation
---------------------------------------
+Simple usage
+------------
 
 For systems with a fixed configuration --eg a PC with a locally
-installed mpd, connected to a DAC-- the script may be invoked
-manually:
+installed mpd, connected to some USB DAC-- the script may be
+invoked manually:
 
-    ./mpd-configure
-
-
-This will create the file `~/.mpd/mpd.conf`. `mpd` can than be started and told to use this configuration file:
-
-    mpd ~/.mpd/mpd.conf
+    ./mpd-configure > ~/mpd.conf
 
 
-Alternatively, the resulting configuration file can be copied to the
-system wide mpd configuration file when you want to run mpd as a
-system daemon:
+This will create the file `~/mpd.conf` configured to use the first
+available audio output interface in bit perfect mode. If more than one
+output interface (or DAC) is found, it will prompt you to specify
+which one to use. As bitperfect mode assumes that `mpd` has exclusive
+access to this output interface, the script will notify the user if
+its in use.
 
-    sudo cp ~/.mpd/mpd.conf /etc/mpd.conf
+If you use a (single) USB Audio Class DAC you may specify the
+`LIMIT_INTERFACE_TYPE="usb"` parameter in the `mpd-configure.conf`
+file or on the command line, and it will automagically and without
+questions configure mpd to use that DAC:
+
+    LIMIT_INTERFACE_TYPE="usb" ./mpd-configure > ~/mpd.conf
+
+
+After creating such a configuration file, `mpd` can betold to use this
+configuration file with:
+
+    mpd ~/mpd.conf
+
+
+To use the generated configuration file system wide, it can be copied
+to the system wide mpd configuration file when you want to run `mpd`
+as a system daemon:
+
+    sudo cp ~/mpd.conf /etc/mpd.conf
     sudo service mpd restart
 
+
+More complex usage
+------------------
+
 For debugging or testing purposes one may set the `DRYRUN` and/or
-`DEBUG` parameters through the `./mpdconfigure.conf` file or on the
+`DEBUG` parameters through the `mpd-configure.conf` file or on the
 command line, eg:
 
     DEBUG=True ./mpd-configure
     DRYRUN=True ./mpd-configure
-
-More dynamic environments
--------------------------
 
 In dynamic environments --for example a network booted ltsp client,
 which hardware may be altered each boot, connected to whatever DAC--
@@ -67,28 +90,28 @@ home directory of the auto logon user specified in
 run the script and start `mpd` using the script generated
 `~/.mpd/mpd.conf`, ie:
 
-    ~/mpd-configure/mpd-configure && mpd ~/.mpd/mpd.conf
+    ~/mpd-configure/mpd-configure -l u > ~/.mpd/mpd.conf && mpd ~/.mpd/mpd.conf
 
 
 Preferences
 -----------
 
-Preferences can be set in the file `mpdconfigure.conf`. Default all
+Preferences can be set in the file `mpd-configure.conf`. By default all
 preferences are commented out.
 
 
 ### General parameters
 
 `DEBUG`
-Output values of variables to stdout for easier debugging. Possible
-values:
+Output values of variables and program flow to std_err for easier
+debugging. Possible values:
 - commented out: disabled (Default).
 - `1` (or non-empty): enabled.
 
 
 `DRYRUN`
-Do not actually modify anything, eg. write to configuration file and
-try to set volume controls. Possible values:
+Do not actually modify anything, eg. write to configuration
+file. Possible values:
 - commentend out: disabled (Default).
 - `1` (or non-empty): enabled
 
@@ -100,8 +123,8 @@ See `man mpd.conf` for explanation.
 `MPD_MUSICDIR`
 The path to the directory where the music is stored. Modifies the
 `mpd.conf` parameter `music_directory`. Possible values:
-- commented out: use `$HOME/$XDG_MUSIC_DIR` if exists and specified in
-  `~/.config/user-dirs.conf`, otherwise use `$HOME` (Default).
+- commented out: use `$XDG_MUSIC_DIR` if it exists and specified in
+  `~/.config/user-dirs.dir`, otherwise use `$HOME`.
 - `/some/path`: use the path specified.
 
 `MPD_USERHOMEDIR`
@@ -115,48 +138,55 @@ time files. Modifies the `mpd.conf` parameters `playlist_directory`,
 `MPD_CONFFILE`
 Path to where the generated mpd configuration file will be
 written. Possible values:
-- commented out: Use `~/.mpd/mpd.conf` (Default).
-- `/some/path/mpd.conf`: use the path specified.
+- commented out: don't write to a file (Default). One may redirect the output of the script using 
+`./mpd-configure > /path/to/mpd.conf`
+- `/path/to/mpd.conf`: use the path specified.
 
 
 ### Alsa and sound
 
-`APLAY_LIMIT_FILTER`
-A space seperated list, which filters the alsa output devices on the keywords specified. 
+`LIMIT_INTERFACE_TYPE`
+A keyword which limits the type of alsa interfaces to be returned: 
 
 Possible values:
-- a space seperated string
+- "usb", "digital" or "analog"
 - Comment it out (or leave it empty) to prevent filtering.
 
-Default values:
-- "usb digital hdmi i2s spdif toslink adat uac": limit the list to output 
-  devices which contain one of those keywords (case insensitive).
+Default value:
+- (empty) "": do not limit the interfaces that will be found.
 
 
-`APLAY_PREFERRED_FILTER`
-The available output devices (after filtering with `APLAY_LIMIT_FILTER` when applicable) may be further limited using a string which should contain a *unique* portion of the output of:
+`LIMIT_INTERFACE_FILTER`
+The available output devices (after filtering with
+`LIMIT_INTERFACE_TYPE` when applicable) may be further limited using a
+regular expression (which thus is case sensentive) which should match
+the output of:
 
     LANG=C aplay -l | grep ^card
 
 If for example the output is like this:
 
-    card 1: SB [HDA ATI SB], device 0: ALC662 rev1 Analog [ALC662 rev1 Analog]
-    card 1: SB [HDA ATI SB], device 1: ALC662 rev1 Digital [ALC662 rev1 Digital]
+    card 0: MID [HDA Intel MID], device 0: HDMI 0 [HDMI 0]
+    card 1: receiv [Pink Faun USB 32/384 USB receiv], device 0: USB Audio [USB Audio]
 
 ... you could use one of the following values to match the *second* line
 (which in this example matches the alsa `hw:1,1` interface, eg. the
 second interface of the second sound card):
 
-    ALC662 rev1 Digital
-    Digital
+    "USB Audio"
+    "[uU][sS][bB] \w+ "
+
+but not
+
+    "USB audio"
+
 
 Possible values:
 - empty or commented out: no filtering is applied
-- `Some string`: use the (first) interface which matches the specified string.
+- `Some regular expression`: use the (first) interface which matches the regexp.
 
 Default value:
-- `USB Audio`: use the first available UAC 1 or 2 DAC. When no UAC device is 
-   available; use the first available sound card.
+- commented out (empty): use the first available interface. 
 
 
 ### Network parameters
