@@ -149,7 +149,7 @@ written. Possible values:
 A keyword which limits the type of alsa interfaces to be returned: 
 
 Possible values:
-- "usb", "digital" or "analog"
+- `usb`, `digital` or `analog`
 - Comment it out (or leave it empty) to prevent filtering.
 
 Default value:
