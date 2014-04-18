@@ -145,7 +145,6 @@ function fetch_alsa_outputinterfaces() {
 	    ## return the process id and name blocking the interface
 	    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
 	    if [[ "${alsa_if_formats}" = "${MSG_DEVICE_BUSY}" ]]; then
-		debug "***** in use"
 		msg_in_use="$(alsa_device_busy "${alsa_if_chardev}")"
 		alsa_if_formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
 	    fi
