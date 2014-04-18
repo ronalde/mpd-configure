@@ -138,8 +138,11 @@ time files. Modifies the `mpd.conf` parameters `playlist_directory`,
 `MPD_CONFFILE`
 Path to where the generated mpd configuration file will be
 written. Possible values:
-- commented out: don't write to a file (Default). One may redirect the output of the script using 
-`./mpd-configure > /path/to/mpd.conf`
+- commented out: don't write to a file (Default). One may redirect the
+  output of the script using:
+
+  ./mpd-configure > /path/to/mpd.conf
+
 - `/path/to/mpd.conf`: use the path specified.
 
 
@@ -214,7 +217,8 @@ values:
 - `1`: enabled. 
 
 `ZEROCONF_NAME`
-Specify the name with which mpd will publish itself with upnp on the local network. 
+Specify the name with which mpd will publish itself with upnp on the
+local network.
 `$ALSADEVICELABEL through MPD` name for upnp discovery. Modifies the
 `mpd.conf` parameter and `zeroconf_name`. Possible
 values:
@@ -229,10 +233,13 @@ MPD specific:
 
 - [How to turn Music Player Daemon (mpd) into an audiophile music
 player](http://lacocina.nl/mpd-configure-audiophile).
+- [What digital audio format does your USB DA-converter support and
+  use?](http://lacocina.nl/detect-alsa-output-capabilities)
 - [Music Player Daemon (MPD)](http://www.musicpd.org/)
 
 LTSP specific:
 
-- [How to setup a bit-perfect digital audio streaming client
-  with free software (with LTSP and MPD)](http://lacocina.nl/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
+- [How to setup a bit-perfect digital audio streaming client with free
+  software (with LTSP and
+  MPD)](http://lacocina.nl/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
 - [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
