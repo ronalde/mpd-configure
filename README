@@ -17,7 +17,7 @@ The interfaces returned by the script may be reduced by setting
 prefabbed or custom filters. These options can be displayed by running
 the script with the `-h' help option, eg:
 
- ./alsa-capabilities -h
+   bash alsa-capabilities -h
 
 
 Background
@@ -36,7 +36,7 @@ For systems with a fixed configuration --eg a PC with a locally
 installed mpd, connected to some USB DAC-- the script may be
 invoked manually:
 
-    ./mpd-configure > ~/mpd.conf
+    bash mpd-configure > ~/mpd.conf
 
 
 This will create the file `~/mpd.conf` configured to use the first
@@ -90,7 +90,7 @@ home directory of the auto logon user specified in
 run the script and start `mpd` using the script generated
 `~/.mpd/mpd.conf`, ie:
 
-    ~/mpd-configure/mpd-configure -l u > ~/.mpd/mpd.conf && mpd ~/.mpd/mpd.conf
+    LIMIT_INTERFACE_TYPE="usb" ~/mpd-configure/mpd-configure > ~/.mpd/mpd.conf && mpd ~/.mpd/mpd.conf
 
 
 Preferences
