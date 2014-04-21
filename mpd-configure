@@ -68,22 +68,25 @@ function write_error() {
 
 
 function really_write() {
+    ## writes the contents of CONF_CONTENTS to MPD_CONFFILE
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
     if [[ -z "${DRYRUN}" ]]; then
 	## do the actual writing
 	echo -e "${CONF_CONTENTS}" > "${MPD_CONFFILE}" && \
-	    msg="${MSG_DONE}"
+	    msg="${MSG_DONE}" || die "Could not write to \`${MPD_CONFFILE}': $?"
     else
 	## dryrun enabled: display the contents of mpd_conffile
 	msg="DRYRUN: Not writing to ${MPD_CONFFILE}: \
 \n${CONF_CONTENTS} \
 \n${MSG_DONE_DRYRUN}"
-	
     fi
 
+    ## display the result
     printf "${msg}"
+
+    [[ ! -z "${DEBUG}" ]] && debug "result: \`${msg}'"
 
 }
 
@@ -97,7 +100,7 @@ function write_conffile() {
     mpd_conf_dir="$(dirname ${MPD_CONFFILE})"
 
     if [[ ! -d "${mpd_conf_dir}" ]]; then
-	## conf dir does not exist, try to create it
+	[[ ! -z "${DEBUG}" ]] && debug "conf dir does not exist, try to create it"
 	dirok="$(mkdir -p "${mpd_conf_dir}" 2>&1 >/dev/null)"
 	[[ ! -z ${dirok} ]] && \
 	    msg="Can't create directory \`${mpd_conf_dir}' which is necessary for storing \
@@ -111,32 +114,39 @@ function write_conffile() {
     ## exit with error if this failed
     [[ ! -z "${msg}" ]] && die "\n${MSG_TAB}${msg}"
 
+    [[ ! -z "${DEBUG}" ]] && debug "mpd_conf_dir ok: \`${mpd_conf_dir}'"
+
     if [[ -f "${MPD_CONFFILE}" ]]; then
+
 	## conf file exists, check if its writable
 	if [[ ! -w "${MPD_CONFFILE}" ]]; then
 	    ## not writable, exit with error 
 	    msg="\n${MSG_TAB}Existing ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' is present, \
 but is not writable."
 	    die "${msg}"
-	else
-	    ## is writable 
-   	    msg="${MSG_TAB}Original ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' exists."
-	    inform "${msg}"
+	fi
+
+	## is writable, prompt to overwrite
+	msg="${MSG_TAB}Original ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' exists."
+	inform "${msg}"
+	## only prompt when OVERWRITE_EXISTING_CONFFILE is not set
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "OVERWRITE_EXISTING_CONFFILE: \`${OVERWRITE_EXISTING_CONFFILE}'"
+	if [[ -z ${OVERWRITE_EXISTING_CONFFILE} ]]; then
 	    prompt="${MSG_MARGIN}>> Overwrite it?: "
-	    overwrite="$(read -e -p "${prompt}" \
--i "Yes" overwrite && \
+	    overwrite="$(read -e -p "${prompt}" -i "Yes" overwrite && \
 echo -e "${overwrite}")"
 	    ## if prompt returns (downcased) `yes' then overwrite the file
-	    if [[ "${overwrite,,}" = "yes" ]]; then
-		## user choose to overwrite, try that
-		fileok="$(really_write)"
-	    else
+	    if ! [[ "${overwrite,,}" = "yes" ]]; then
 		## user choose no to overwrite; exit with message
 		inform "Not overwriting existing ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}'."
 		exit 0
 	    fi
 	fi
     fi
+
+    ## do the actual writing
+    fileok="$(really_write)"
 
 }
 
