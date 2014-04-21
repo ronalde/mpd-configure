@@ -3,15 +3,27 @@ README for mpd-configure
 
 The `mpd-configure` bash script creates a valid
 [mpd](http://www.musicpd.org/) configuration file, optimised for bit
-perfect playback of high resolution digital audio files. It relies
-completely on the accompanying bash script `alsa-capabilities'.
+perfect playback of high resolution digital audio files. It relies on
+the accompanying bash script `alsa-capabilities' for getting
+information about the available interfaces from alsa.
 
-When that script is not sourced, like mpd-configure does, but run from
-the command line, it will display each alsa audio output interface,
-with its capabilities, like the type (ie. Analog, Digital or USB Audio
-Class) and the native (digital) audio formats it supports, as well as
-other properties, like it's character device (in `/dev/snd') and the
-file to watch or monitor (in `/proc/asound'). 
+All configuration parameters for mpd are available in configuration
+snippet files in the `./confs-available/` directory. By symlinking
+them to the `./confs-enabled/` directory, they will be included by the
+`mpd-configure` script in the resulting mpd configuration file. Any
+bash variable in those configuration snippets, will be expanded to
+their calculated values by the script.
+
+
+About the alsa-capabilities script
+----------------------------------
+
+`alsa-capabilities' may be run from the commandline. It will then
+display each alsa audio output interface with its capabilities, like
+the type (ie. Analog, Digital or USB Audio Class) and the native
+(digital) audio formats it supports, as well as other properties, like
+it's character device (in `/dev/snd') and the file to watch or monitor
+(in `/proc/asound').
 
 The interfaces returned by the script may be reduced by setting
 prefabbed or custom filters. These options can be displayed by running
@@ -37,7 +49,6 @@ installed mpd, connected to some USB DAC-- the script may be
 invoked manually:
 
     bash mpd-configure > ~/mpd.conf
-
 
 This will create the file `~/mpd.conf` configured to use the first
 available audio output interface in bit perfect mode. If more than one
