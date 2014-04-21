@@ -150,18 +150,6 @@ echo -e "${overwrite}")"
 
 }
 
-function store_conf() {
-    ## appends the contents of the argument $1 to the
-    ## variable holding the configuration contents
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    conf_snippet="$1"
-
-    ## append the snippet to the global conf variable
-    CONF_CONTENTS="${CONF_CONTENTS}${conf_snippet}"
-}
-
 
 function command_not_found() {
     ## give installation instructions when a command is not available
@@ -211,7 +199,7 @@ function fetch_alsa_hwaddresses() {
     default_aif_hwaddress="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
 
     if [[ ${#ALSA_AIF_HWADDRESSES[@]} -gt 1 ]]; then
-	if [ -z "${USER_PROMPTS}" ]; then
+	if [[ -z "${USER_PROMPTS}" ]]; then
 	    ## display instructions for multiple interfaces and prompt
 	    #echo_stderr "${msg_multiple_alsahw}"
 	    #prompt="${MSG_MARGIN}>> Interface to use: "
@@ -234,147 +222,17 @@ echo -e "${alsa_aif_hwaddress}")"
     fi
 
     ## store the hardware address and label for usage in audio_conf
-    ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
-    ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selectedkey}]} - \
+    CONF_ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
+    CONF_ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selectedkey}]} - \
 ${ALSA_AIF_LABELS[${selectedkey}]}"
 }
 
-function audio_conf() {
-    ## return the configured audio section for mpd.conf
-    ## the ALSA_AIF* variables are filled in fetch_alsa_hwaddresses
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    section="audio"
-    IFS='' read -r -d '' conf <<EOF
-## start ${section} section
-audio_output {
- type                "alsa"
- name                "${ALSA_AIF_DEVLABEL}"
- device              "${ALSA_AIF_HWADDRESS}"
- auto_resample       "no"
- auto_format         "no"
- }
-## end ${section} section
-
-EOF
-
-    store_conf "${conf}"
-
-}
-
-
-function network_conf() {
-    ## configure the network section
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    section="network"
-
-    IFS='' read -r -d '' conf <<EOF
-## start ${section} section
-bind_to_address     "${MPD_HOST}"
-## end ${section} section
-
-EOF
-
-    store_conf "${conf}"
-}
-
-function paths_conf() {
-    ## construct paths and file entries for mpd.conf
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    section="paths"
-    IFS='' read -r -d '' conf <<EOF
-## start ${section} section
-music_directory     "${MPD_MUSICDIR}"
-playlist_directory  "${MPD_PLAYLISTDIR}"
-db_file             "${MPD_DBFILE}"
-log_file            "${MPD_LOGFILE}"
-pid_file            "${MPD_PIDFILE}"
-state_file          "${MPD_STATEFILE}"
-## end ${section} section
-
-EOF
-
-    store_conf "${conf}"
-
-}
-
-function misc_conf() {
-    ## construct other entries for mpd.conf 
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    section="misc"
-    IFS='' read -r -d '' conf <<EOF
-## start ${section} section
-filesystem_charset  "UTF-8"
-id3v1_encoding      "UTF-8"
-auto_update         "yes"
-replaygain          "off"
-mixer_type          "none"
-max_playlist_length "16777216"
-
-## end ${section} section
-
-EOF
-
-    store_conf "${conf}"
-
-}
-
-function zeroconf_conf() {
-    ## constructs zeroconf entries for mpd.conf
-
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    if [ -n "${ENABLE_ZEROCONF}" ]; then
-	zeroconf_label="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
-	section="zeroconf"
-	IFS='' read -r -d '' conf <<EOF
-## start ${section} section
-zeroconf_enabled    "yes"
-zeroconf_name       "${zeroconf_label}"
-## end section ${section}
-
-EOF
-	store_conf "${conf}"
-    fi
-}
-
-function lastfm_conf() {
-    # construct lastfm section for mpd.conf
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
-
-    section="lastfm"
-    if [ -n "${ENABLE_LASTFM}" ]; then
-	if [ -n "${LASTFM_USERNAME}" ] && [ -n "${LASTFM_PASSWORD}" ]; then
-	    IFS='' read -r -d '' conf <<EOF
-## start ${section} section
-playlist_plugin {
-    name                "lastfm"
-    user                "${LASTFM_USERNAME}"
-    password            "${LASTFM_PASSWORD}"
-    }
-## end ${section} section
-EOF
-	    store_conf "${conf}"
-	else
-	    die "\`ENABLE_LASTFM' set but either \`LASTFM_USERNAME' \
- or \`LASTFM_PASSWORD' empty."
-	fi
-    fi
-}
-
-function check_readable() {
+function check_readable_path() {
     ## checks if path ($1), needed for ($2) is readable, or adds
     ## problem description ($2) to problems array
 
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
     path="$1"
     purpose="$2"
     problem="$3"
@@ -385,9 +243,11 @@ function check_readable() {
 }
 
 
-function check_writeable() {
+function check_writeable_path() {
     ## checks if path ($1), needed for ($2) is writeable, or adds
     ## problem description ($2) to problems array
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
     path="$1"
     purpose="$2"
@@ -397,6 +257,63 @@ function check_writeable() {
 \n${MSG_MARGIN}you won't be able to ${problem}.\n"
 
     [[ -w "${path}" ]] || PROBLEMS+=("${msg}") 
+}
+
+
+function source_enabled_confs() {
+    ## source conf snippets in ./confs-enabled/*.conf while
+    ## substituting the variables in those conf files with the ones
+    ## generated in this script.
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    for conf_file in ${CONFS_ENABLED}; do
+	echo -e "\n## start processing \`${conf_file##*/}'"
+	while IFS='' read -r line ; do
+	    #debug "### line: ${line}"
+	    if [[ "${line}" =~ \$\{([a-zA-Z_][a-zA-Z_0-9]*)\} ]] ; then
+		## match the variable in the template (eg the complete `${VARIABLE}' string) 
+		var_template=${BASH_REMATCH[1]}
+		#debug "### vt: ${var_template}"
+		expandend_value=var_template
+		local ev="${!expandend_value}"
+		#debug "### ev: ${ev}"
+		line=${line//\$\{${var_template}\}/${!ev}}
+	    fi
+	    ## skip commented lines
+	    ## create trimmed version of line
+	    if [[ -z ${INCLUDE_COMMENTS} ]]; then
+		trimmed=$([[ "${line}" =~ [[:space:]]*([^[:space:]]|[^[:space:]].*[^[:space:]])[[:space:]]* ]]; echo -n "${BASH_REMATCH[1]}")
+
+		if [[ "${trimmed#\#*}" = "${trimmed}" ]]; then
+		    if [[ ! -z "${trimmed}" ]]; then
+			echo -e "${line}"
+		    fi
+		fi
+	    else
+		echo -e "${line}"
+	    fi
+	done <${conf_file}
+	echo -e "## done processing"
+    done
+}
+
+function conf_header() {
+    ## construct the byline for the configuration file
+
+    formatted_date="$(date -Is)"
+    app_url="https://github.com/ronalde/${APP_NAME}/"
+
+    printf "\n%s\n%s begin of %s\n%s created by \`%s' on %s.\n%s see: %s\n%s" \
+	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" "${MSG_CONF_TITLE}" \
+	"${MSG_CONF_SEP}" "${APP_NAME}" "${formatted_date}" \
+	"${MSG_CONF_SEP}" "${app_url}" "${MSG_CONF_LINESEP}\n"
+
+}
+
+function conf_footer() {
+    printf "\n\n%s\n%s end of %s\n%s\n" \
+	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" "${MSG_CONF_TITLE}" "${MSG_CONF_LINESEP}"
 }
 
 ### program start
@@ -412,6 +329,8 @@ ALSA_CAPABILITIES_SCRIPT="${SCRIPT_DIR}/${ALSA_CAPABILITIES_FILE}"
 [[ -f "${ALSA_CAPABILITIES_SCRIPT}" ]] && \
     . "${ALSA_CAPABILITIES_SCRIPT}" || \
     die "required script \`${ALSA_CAPABILITIES_SCRIPT}' not found"
+
+CONFS_ENABLED=${SCRIPT_DIR}/confs-enabled/*.conf
 
 ## global indexed arrays that will be filled from `alsacapabilities.sh'
 declare -a ALSA_AIF_HWADDRESSES=()
@@ -440,44 +359,16 @@ MSG_DONE="\n\n${MSG_MPD_CONFFILE} saved in \`${MPD_CONFFILE}'.\n"
 MSG_DONE_DRYRUN="\ndryrun mpd configuration done (not saved).\n"
 MSG_TAB=" * "
 MSG_MARGIN="${MSG_TAB//\*/ }"
+MSG_CONF_LINESEP="$(printf '#%.0s' {1..76})"
+MSG_CONF_SEP="###"
+MSG_CONF_TITLE="mpd configuration file"
+
 
 ## check if needed programs are available
 CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
 
 ## if not set, default to 0.0.0.0
-MPD_HOST="${MPD_HOST:-0.0.0.0}"
-
-if [[ -z ${MPD_MUSICDIR} ]]; then
-    ## get `music' directory from xdg
-    XDG_USER_USERDIRS=${HOME}/.config/user-dirs.dirs
-    ## source the user settings if present to fill XDG_MUSIC_DIR
-    [[ -f ${XDG_USER_USERDIRS} ]] && source ${XDG_USER_USERDIRS}
-    ## if empty revert to HOME
-    [[ -z ${XDG_MUSIC_DIR} ]] && XDG_MUSIC_DIR=${HOME}
-fi
-
-## defaults to $XDG_MUSIC_DIR
-MPD_MUSICDIR="${MPD_MUSICDIR:-${XDG_MUSIC_DIR}}"
-check_readable "${MPD_MUSICDIR}" "music directory" "listen to music"
-
-## working directory for mpd
-MPD_USERHOMEDIR="${MPD_USERHOMEDIR:-${HOME}/.mpd}"
-check_readable "${MPD_USERHOMEDIR}" "mpd home directory" "use ${MSG_MPD_CONFFILE}"
-check_writeable "${MPD_USERHOMEDIR}" "mpd home directory" "store ${MSG_MPD_CONFFILE}"
-## where to store data
-MPD_DATADIR="${MPD_DATADIR:-${MPD_USERHOMEDIR}}"
-MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
-check_readable "${MPD_PLAYLISTDIR}" "playlist directory" "use playlists"
-check_writeable "${MPD_PLAYLISTDIR}" "playlist directory" "change or create playlists"
-MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
-check_readable "${MPD_DBFILE}" "database file" "use mpd"
-check_writeable "${MPD_DBFILE}" "database file" "store changes in mpd"
-MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
-check_writeable "${MPD_LOGFILE}" "log file" "start or use mpd"
-MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
-check_writeable "${MPD_PIDFILE}" "PID file" "start, stop or restart mpd using service daemon"
-MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
-
+CONF_MPD_HOST="${CONF_MPD_HOST:-0.0.0.0}"
 
 ## pass limits to the alsa-capabilities script
 if [[ ! -z ${LIMIT_INTERFACE_TYPE} ]]; then
@@ -493,37 +384,66 @@ fi
 
 [[ ! -z ${LIMIT_INTERFACE_FILTER} ]] && OPT_FILTER="${LIMIT_INTERFACE_FILTER}"
 
-debug "\nPotential problems for the current configuration:\n${PROBLEMS[@]}\n"
-### start constructing the conf files' contents
-## construct the byline
-formatted_date="$(date -Is)"
-app_url="https://github.com/ronalde/${APP_NAME}/"
+## display (potential) problematic situations, like no right access to
+## files and directories
 
-msg_conf_linesep="$(printf '#%.0s' {1..76})"
-msg_conf_sep="###"
-msg_conf_title="mpd configuration file"
-
-msg_conf_begin="\n${msg_conf_linesep}\n${msg_conf_sep} begin ${msg_conf_title}\n"
-msg_conf_end="${msg_conf_sep} end ${msg_conf_title}\n${msg_conf_linesep}\n"
-
-store_conf "${msg_conf_begin}"
-app_created_by="${msg_conf_sep} created by \`${APP_NAME}' on ${formatted_date}. \
-\n${msg_conf_sep} see: ${app_url}\n\n"
-store_conf "${app_created_by}"
+[[ ! -z "${DEBUG}" ]] && \
+    debug "\nPotential problems for the current configuration:\n${PROBLEMS[@]}\n"
 
 ## get an array with available alsa hardware addresses
 fetch_alsa_hwaddresses
 
+### paths
+
+if [[ -z ${MPD_MUSICDIR} ]]; then
+    ## get `music' directory from xdg
+    XDG_USER_USERDIRS=${HOME}/.config/user-dirs.dirs
+    ## source the user settings if present to fill XDG_MUSIC_DIR
+    [[ -f ${XDG_USER_USERDIRS} ]] && source ${XDG_USER_USERDIRS}
+    ## if empty revert to HOME
+    [[ -z ${XDG_MUSIC_DIR} ]] && XDG_MUSIC_DIR=${HOME}
+fi
+
+## defaults to $XDG_MUSIC_DIR
+CONF_MPD_MUSICDIR="${MPD_MUSICDIR:-${XDG_MUSIC_DIR}}"
+check_readable_path "${MPD_MUSICDIR}" "music directory" "listen to music"
+
+## working directory for mpd
+mpd_homedir="${CONF_MPD_HOMEDIR:-${HOME}/.mpd}"
+check_readable_path "${mpd_homedir}" "mpd home directory" "use ${MSG_MPD_CONFFILE}"
+check_writeable_path "${mpd_homedir}" "mpd home directory" "store ${MSG_MPD_CONFFILE}"
+## where to store data
+MPD_DATADIR="${MPD_DATADIR:-${mpd_homedir}}"
+CONF_MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
+check_readable_path "${MPD_PLAYLISTDIR}" "playlist directory" "use playlists"
+check_writeable_path "${MPD_PLAYLISTDIR}" "playlist directory" "change or create playlists"
+CONF_MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
+check_readable_path "${MPD_DBFILE}" "database file" "use mpd"
+check_writeable_path "${MPD_DBFILE}" "database file" "store changes in mpd"
+CONF_MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
+check_writeable_path "${MPD_LOGFILE}" "log file" "start or use mpd"
+CONF_MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
+check_writeable_path "${MPD_PIDFILE}" "PID file" "start, stop or restart mpd using service daemon"
+CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
+
+## zeroconf
+CONF_ZEROCONF_LABEL="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
+
 ## store conf snippets in CONF_CONTENTS
-network_conf
-paths_conf
-audio_conf
-misc_conf
-lastfm_conf
-zeroconf_conf
+#network_conf
+#paths_conf
+#audio_conf
+#misc_conf
+#lastfm_conf
+#zeroconf_conf
+header="$(conf_header)"
+footer="$(conf_footer)"
+jaap="${header}$(source_enabled_confs)${footer}"
+echo -e "${jaap}"
+
 
 ## print the footer 
-store_conf "${msg_conf_end}"
+#store_conf "${msg_conf_end}"
 
 ## displays the contents of CONF_CONTENTS or write them to MPD_CONFFILE if set
 [[ -z "${MPD_CONFFILE}" ]] && \
