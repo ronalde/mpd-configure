@@ -104,6 +104,9 @@ run the script and start `mpd` using the script generated
 
     LIMIT_INTERFACE_TYPE="usb" ~/mpd-configure/mpd-configure > ~/.mpd/mpd.conf && mpd ~/.mpd/mpd.conf
 
+### Usage from within python
+
+See the [./examples](https://github.com/ronalde/mpd-configure/tree/master/examples) subdirectory.
 
 Preferences
 -----------
