@@ -410,44 +410,42 @@ check_readable_path "${MPD_MUSICDIR}" "music directory" "listen to music"
 
 ## working directory for mpd
 mpd_homedir="${CONF_MPD_HOMEDIR:-${HOME}/.mpd}"
-check_readable_path "${mpd_homedir}" "mpd home directory" "use ${MSG_MPD_CONFFILE}"
-check_writeable_path "${mpd_homedir}" "mpd home directory" "store ${MSG_MPD_CONFFILE}"
+check_readable_path "${mpd_homedir}" "mpd home directory" \
+    "use ${MSG_MPD_CONFFILE}"
+check_writeable_path "${mpd_homedir}" "mpd home directory" \
+    "store ${MSG_MPD_CONFFILE}"
 ## where to store data
 MPD_DATADIR="${MPD_DATADIR:-${mpd_homedir}}"
 CONF_MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
 check_readable_path "${MPD_PLAYLISTDIR}" "playlist directory" "use playlists"
-check_writeable_path "${MPD_PLAYLISTDIR}" "playlist directory" "change or create playlists"
+check_writeable_path "${MPD_PLAYLISTDIR}" "playlist directory" \
+    "change or create playlists"
 CONF_MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
 check_readable_path "${MPD_DBFILE}" "database file" "use mpd"
 check_writeable_path "${MPD_DBFILE}" "database file" "store changes in mpd"
 CONF_MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
 check_writeable_path "${MPD_LOGFILE}" "log file" "start or use mpd"
 CONF_MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
-check_writeable_path "${MPD_PIDFILE}" "PID file" "start, stop or restart mpd using service daemon"
+check_writeable_path "${MPD_PIDFILE}" "PID file" \
+    "start, stop or restart mpd using service daemon"
 CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
 
 ## zeroconf
 CONF_ZEROCONF_LABEL="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
 
 ## store conf snippets in CONF_CONTENTS
-#network_conf
-#paths_conf
-#audio_conf
-#misc_conf
-#lastfm_conf
-#zeroconf_conf
 header="$(conf_header)"
 footer="$(conf_footer)"
-jaap="${header}$(source_enabled_confs)${footer}"
-echo -e "${jaap}"
+CONF_CONTENTS="${header}$(source_enabled_confs)${footer}"
 
 
 ## print the footer 
 #store_conf "${msg_conf_end}"
 
-## displays the contents of CONF_CONTENTS or write them to MPD_CONFFILE if set
+## displays the contents of CONF_CONTENTS or write them to
+## MPD_CONFFILE if set
 [[ -z "${MPD_CONFFILE}" ]] && \
-    echo -e "${CONF_CONTENTS}" ||  \
+    printf "${CONF_CONTENTS}" ||  \
     write_conffile
 
 ### done
