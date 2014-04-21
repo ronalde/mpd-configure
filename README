@@ -4,7 +4,7 @@ README for mpd-configure
 The `mpd-configure` bash script creates a valid
 [mpd](http://www.musicpd.org/) configuration file, optimised for bit
 perfect playback of high resolution digital audio files. It relies on
-the accompanying bash script `alsa-capabilities' for getting
+the accompanying bash script `alsa-capabilities` for getting
 information about the available interfaces from alsa.
 
 All configuration parameters for mpd are available in configuration
@@ -18,16 +18,16 @@ their calculated values by the script.
 About the alsa-capabilities script
 ----------------------------------
 
-`alsa-capabilities' may be run from the commandline. It will then
+`alsa-capabilities` may be run from the commandline. It will then
 display each alsa audio output interface with its capabilities, like
 the type (ie. Analog, Digital or USB Audio Class) and the native
 (digital) audio formats it supports, as well as other properties, like
-it's character device (in `/dev/snd') and the file to watch or monitor
-(in `/proc/asound').
+it's character device (in `/dev/snd`) and the file to watch or monitor
+(in `/proc/asound`).
 
 The interfaces returned by the script may be reduced by setting
 prefabbed or custom filters. These options can be displayed by running
-the script with the `-h' help option, eg:
+the script with the `-h` help option, eg:
 
    bash alsa-capabilities -h
 
