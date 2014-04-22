@@ -4,7 +4,7 @@ import subprocess, os, re
 from signal import signal, SIGPIPE, SIG_DFL
 
 ## limit the type of interfaces returned
-limittype = 'digital'
+limittype = 'analog'
 
 ## name of custom bash script, that sources `alsa-capabilities' which
 ## returns a string consiting of one line per interface, each with the

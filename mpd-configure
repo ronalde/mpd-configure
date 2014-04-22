@@ -432,15 +432,12 @@ CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
 
 ## zeroconf
 CONF_ZEROCONF_LABEL="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
+[[ ! -z ${CONF_ZEROCONF_ENABLED} ]] && CONF_ZEROCONF_ENABLED="${CONF_ZEROCONF_ENABLED}"
 
 ## store conf snippets in CONF_CONTENTS
 header="$(conf_header)"
 footer="$(conf_footer)"
 CONF_CONTENTS="${header}$(source_enabled_confs)${footer}"
-
-
-## print the footer 
-#store_conf "${msg_conf_end}"
 
 ## displays the contents of CONF_CONTENTS or write them to
 ## MPD_CONFFILE if set
