@@ -1,4 +1,208 @@
-commit 6a8b1997d57c4bdef2889af33a2c995d71ca982c
+commit 057b86e1456fd3e87d9ff148785c64f99e3c35c6 (HEAD, origin/master, origin/HEAD, master)
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu May 8 16:23:33 2014 +0200
+
+    removed example lastfm plugin
+
+commit 0d59e8dd420bc61db28eeb16e99da4769dcf3b5a
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 22 10:59:20 2014 +0200
+
+    documented conf snippets
+
+commit 376ea826a7a97be675e83e8f7d7be647c46fe051
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 15:36:06 2014 +0200
+
+    added example
+
+commit 767de396a76219aea35c800f794b027ff322a5f1
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 15:34:33 2014 +0200
+
+    fixed formatting
+
+commit bac2981d2178e02488b39f6e3874ceeb71e86de3
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 15:33:57 2014 +0200
+
+    fixed formatting
+
+commit 33e3cadf0b689062c1de82b0bab72b40826fd1a5
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 14:41:08 2014 +0200
+
+    example custom script and usage for python added
+
+commit 9fc6ef00c1cfd85b88edfe54c71bd8e9e96dc302
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 13:58:51 2014 +0200
+
+    updated README to reflect changing to confs-enabled based configuration snippets
+
+commit 5b09f1b556fc5fa94de71383dac2cfe538b86213
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 13:51:38 2014 +0200
+
+    obsolete, already settings defined in general.conf
+
+commit 39ec2aec7ba31b8df8e3266d8d36d7d7b17c7eaa
+Merge: a044382 cfeddd9
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 13:44:33 2014 +0200
+
+    Merge branch 'confsnippets'
+
+commit a04438210314f8eb6486051bfebcf3176d482ef8
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 13:42:46 2014 +0200
+
+    small bugfix: fixed write_conffile and really_write
+
+commit cfeddd91450621ba651d95bcb450e5f6c3b53a41
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Mon Apr 21 13:40:19 2014 +0200
+
+    configuration snippets in seperate files
+
+commit cbe4b7c9523566131cdc1559e125d6d8a95bd4f9
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Apr 18 19:33:09 2014 +0200
+
+    some more cross selling
+
+commit dc5b086766fede0eb0ebe2a5e6b453eb867883e4
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Apr 18 19:30:42 2014 +0200
+
+    small typo fixed in README
+
+commit 72c2cf2f376f4cf38cd01745ad3002092a7aca18
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Apr 18 19:29:18 2014 +0200
+
+    small typo fixed in README
+
+commit 8c27db27e4b2f23f6a72ef4b10af372b31baf324
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Apr 18 19:06:21 2014 +0200
+
+    removed a temporary debug statement
+
+commit 31d50779040704a61087915a2eed6dc2d7ebebda
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Apr 18 19:02:59 2014 +0200
+
+    Small fix
+    * `alsa-capabilities`: fixed the error which caused the script to not
+      display the process that had exclusive access ton an interface
+
+commit 78be6cae1d730480d80eaa6ee2d2ce32b4abab83
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Fri Apr 18 18:06:18 2014 +0200
+
+    Major update and rewrite
+     * moved `tests/detect-alsa-output-capabilities.sh` to `alsa-capabilities`
+     * modified `alsa-capabilities` to make it suitable to be sourced or
+       run from the command line
+     * added simple and regexp filtering to `alsa-capabilities`
+     * removed alsa interface detection logic out of `mpd-configure`. This
+       is now done sourcing `alsa-capabilities`.
+     * modified `mpd-configure` to not write to a file by default (see
+       updated `README`)
+
+commit 245e625d23f9cfe48899fdfad81ca419d4246086
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Apr 9 08:48:45 2014 +0200
+
+    typo
+
+commit 58a8ac92e48f80924b0485f3ae269efe211cefad
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 8 16:09:07 2014 +0200
+
+    replaced "echo -e" with "printf"
+
+commit 6b151f4119b37338d30f384a45183526f65c5004
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 8 16:02:31 2014 +0200
+
+    some minor tweaks
+
+commit ace470209d2eb8a7fbe8a6d248428e46c29ef977
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 8 16:00:59 2014 +0200
+
+    and saved some shell spawns more
+
+commit c0b80db40596e54a5b5ee26e7c749436d9a64467
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 8 14:25:36 2014 +0200
+
+    saved a few shell spawns
+
+commit 65866d17ed2fb78df1f1b1b70377c2ab7a89ebf9
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 8 13:50:09 2014 +0200
+
+    small display improvements
+
+commit 35b16d2cd0d85c04c5bfb92c1bbd42332e3398bc
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Tue Apr 8 12:58:29 2014 +0200
+
+    Additional functionality:
+     - one may now monitor (`watch`) the `hw_params` file for a non-UAC
+       digital audio interface
+    Improvements:
+     - `fetch_alsadevices_list`: put the display (`summarize`) and prompt
+       (`prompt_watch`) functionality in their own functions
+     - `alsa_device_busy`: improved the handling of failed `lsof` attempts
+       when a program
+       (other than pulseaudio) has the alsa hw device in use: now it
+       informs the user and advices to run the script as root
+     - improved the display and naming of the results (see global vars and
+       `summarize`)
+    Cleanup:
+     - adhere to the bash styleguide (function prefix for functions)
+
+commit eb8fb72c69f743ea7f6618a5119235419feb9eba
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Sat Apr 5 11:20:11 2014 +0200
+
+    * accidently deleted the dollar sign
+
+commit fa31614f0c191d7eef4c2c1ad38e5c8d9f7de22c
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 18:46:10 2014 +0200
+
+    added tests/samples/cat-stevens-wild-world-hdtracks-32-96.wav to .gitignore
+
+commit 027cdcf5e734f3857350be923885d297719311e7
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 18:45:41 2014 +0200
+
+    added tests/samples/cat-stevens-wild-world-hdtracks-24-96.wav to .gitignore
+
+commit 35c483df49aaa899d3b122f39be58f7356286f88
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 18:45:20 2014 +0200
+
+    added tests/samples/cat-stevens-wild-world-hdtracks-24-192.wav to .gitignore
+
+commit 18c1097cbcc73a28a6fd1d5c3c4b72738c6c7279
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 18:42:34 2014 +0200
+
+    added sample to .gitignore
+
+commit 097faaf51c1f744bd0cc65eee4ebf4250faec77c
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Thu Apr 3 18:14:13 2014 +0200
+
+    added latest commits
+
+commit 6e7199149ad643d27e33376bc8ecdc2553538b0a
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 17:40:50 2014 +0200
 
@@ -8,7 +212,7 @@ Date:   Thu Apr 3 17:40:50 2014 +0200
       before trying to source it
     * simpler messages when done
 
-commit a48a8368fe3b01d71f6895a66a96df45b5c49529
+commit e5d8487f2355021fa8425367441776dcbad8ddd9
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 17:26:59 2014 +0200
 
@@ -18,7 +222,7 @@ Date:   Thu Apr 3 17:26:59 2014 +0200
     * changed paths to Debian defaults
     * added example of using a command (`HOSTNAME="$(hostname)"`)
 
-commit 86c9a4f2fa5f01e2233f95fd2466b46af2b69656
+commit f190d84554dc9113453e6de7b3c954b2e59c4537
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 17:17:49 2014 +0200
 
@@ -27,7 +231,7 @@ Date:   Thu Apr 3 17:17:49 2014 +0200
     * added MPD_MUSICDIR: fixes the case when there's no XDG dirs and no
       music dir specified
 
-commit fc3f4b410ec8287054d7901934091f443946d6c5
+commit 870ad15337889d3686d32df6803e6127373cbb54
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 17:09:59 2014 +0200
 
@@ -38,50 +242,55 @@ Date:   Thu Apr 3 17:09:59 2014 +0200
     * added ALSA_OUTPUT_DISPLAY: fixes the display of card details in case
       there's only one or USER_PROMPTS is set.
 
-commit cd57e76e6729efb2a00aaa041539aa98b669dd30
+commit b2c24e50bb3d3ad95395ced140fad0c0a22edf98
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 14:40:16 2014 +0200
 
     reflected changes in commit:cb6d162ca4d48222b48c77414076f56ccb8062ae
 
-commit cb6d162ca4d48222b48c77414076f56ccb8062ae
+commit fc051ccab1582446b1ffca40342a78df4f1ae6d4
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 14:20:16 2014 +0200
 
-    * replaced the alsa output device detection and selection mechanisms with those from https://github.com/ronalde/mpd-configure/blob/master/tests/detect-alsa-output-capabilities.sh. This makes it possible for the user to choose a device when multiple devices are available.
-    * added a LIMIT filter to limit the available output devices, in addition to the PREFERRED filter which still works
-    * incorperated the contents of the mpdconfigure-* files in to the main script, which were sourced in earlier versions
-    * removed the volume control functions because they didn't work properly (only tested on my own system), and are not in the right place (no possibility for 'offline' use)
+    Bugfixes:
+    
+    * replaced the alsa output device detection and selection mechanisms
+      with those from
+      https://github.com/ronalde/mpd-configure/detect-alsa-output-capabilities.sh
+      This makes it possible for the user to choose a device when multiple
+      devices are available.
+    * added a `APLAY_LIMIT_FILTER` variable which pre-filters the
+      available output devices. The resulting filtered list is the input
+      for the rest of the script, including the `APLAY_PREFERRED_FILTER`
+      filter which still works
+    * incorporated the contents of the `mpdconfigure-*` files in to the main
+      script, which were sourced in earlier versions
+    * removed the volume control functions because they didn't work
+      properly and didn't fit in the scripts typical usage
 
-commit 99abdd12fc22812f026b7dbdab1d2aed8295858b
+commit a49772754fcee265dac349823a1ed15b100c847c
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Apr 3 11:20:34 2014 +0200
 
     Cleaned up a bit according to http://mywiki.wooledge.org/BashGuide/Practices
 
-commit 7844404dbde8da827936b9c493cb14eaf29b7915
+commit 1982570e54966f48af75d286d3e5805951b1f869
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Wed Apr 2 18:01:13 2014 +0200
 
     rewritten to minimize user interaction and handling of pulseaudio.
 
-commit dcbd3d9b2ce96238ef3b093ba761bbdf3e0d6fbb
+commit c8446f42d8c39ce92c12db7d57076ed5aec5bb2e
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Wed Apr 2 11:29:51 2014 +0200
 
     rewritten to fix a problem watching the stream
 
-commit 972a494cb63d5b5014c69c50d72918e42b202727
+commit ee60836065f314b45b41617d05cdd9ca66c90511
 Author: Ronald van Engelen <ronalde@lacocina.nl>
 Date:   Thu Mar 20 17:28:42 2014 +0100
 
     house keeping
-
-commit 4774eb9a9bc39c1e9b4789e8f64847d005769a96
-Author: Ronald van Engelen <ronalde@lacocina.nl>
-Date:   Thu Mar 20 15:45:16 2014 +0100
-
-    added detecting and watching /proc/asound/cardX/streamY capability
 
 commit e0324f8342d0aaadf490c9ca12d825126b580330
 Author: Ronald van Engelen <ronalde@lacocina.nl>
