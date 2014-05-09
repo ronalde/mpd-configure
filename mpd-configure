@@ -259,6 +259,58 @@ function check_writeable_path() {
     [[ -w "${path}" ]] || PROBLEMS+=("${msg}") 
 }
 
+function parse_configuration_line() {
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    line="$@"
+    match=""
+    local expanded_value=""
+    expanded_name=""
+    var_template=""
+    var_search=""
+    var_part=""
+
+    if [[ "${line}" =~ ([[:alpha:]_]*)[[:space:]]*\"\$\{(.*)\}\" ]] ; then
+	## line is mpd configuration: `config_value "${...}"'
+	
+	## given a line of `config_value "${...}"'
+	## the name of the variable with or without a default value: `...'
+	var_part="${BASH_REMATCH[2]}"
+	var_template="${var_part}"
+	var_search="${var_template}"
+	if [[ "${var_part}" =~ ^(.*):-(.*) ]]; then
+	    ## the line contains a variable with default value:
+	    ##  `config_value "${VARNAME:-default_value}"'
+
+	    ## store the variable name: `VARNAME'
+	    var_template="${BASH_REMATCH[1]}"
+	    ## the variable name including its default value `VARNAME:-default_value'
+	    var_search="${BASH_REMATCH[1]}:-${BASH_REMATCH[2]}"
+	fi
+	## assign the name of the variable (`VARNAME') to $expanded_name
+	expandend_name=var_template
+	## assign the value of the variable (`$VARNAME') to $expanded_value
+	local expanded_value="${!expandend_name}"
+	if [[ ! -z "${DEBUG}" ]]; then
+	    debug "### match"
+	    debug "###  - var_part                  : \`${var_part}'"
+	    debug "###  - var_template              : \`${var_template}'"
+	    debug "###  - var_search (search)       : \`${var_search}'"
+	    debug "###  - expanded_name             : \`${expanded_name}'"
+	    debug "###  - expanded_value            : \`${expanded_value}'"
+	    debug "###  - !expanded_value (replace) : \`${!expanded_value}'"
+	    debug "###  - calculated value          : \`${line//\$\{${var_search}\}/${!expanded_value}}'"
+	fi
+	
+	## return the line with its real/expanded value
+	printf "%s" "${line//\$\{${var_search}\}/${!expanded_value}}"
+    else
+	## a normal line; return it
+	printf "%s" "${line}"
+    fi
+    
+}
 
 function source_enabled_confs() {
     ## source conf snippets in ./confs-enabled/*.conf while
@@ -267,19 +319,12 @@ function source_enabled_confs() {
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
+    #MPDCONF_CLIENTLIMITS_MAX_CONNECTIONS=""
+
     for conf_file in ${CONFS_ENABLED}; do
 	echo -e "\n## start processing \`${conf_file##*/}'"
 	while IFS='' read -r line ; do
-	    #debug "### line: ${line}"
-	    if [[ "${line}" =~ \$\{([a-zA-Z_][a-zA-Z_0-9]*)\} ]] ; then
-		## match the variable in the template (eg the complete `${VARIABLE}' string) 
-		var_template=${BASH_REMATCH[1]}
-		#debug "### vt: ${var_template}"
-		expandend_value=var_template
-		local ev="${!expandend_value}"
-		#debug "### ev: ${ev}"
-		line=${line//\$\{${var_template}\}/${!ev}}
-	    fi
+
 	    ## skip commented lines
 	    ## create trimmed version of line
 	    if [[ -z ${INCLUDE_COMMENTS} ]]; then
@@ -287,10 +332,18 @@ function source_enabled_confs() {
 
 		if [[ "${trimmed#\#*}" = "${trimmed}" ]]; then
 		    if [[ ! -z "${trimmed}" ]]; then
+			#local varname=
+			line="$(parse_configuration_line "${line}")"
+	    
+			local interpreted_line="${!line}"
+			echo_stderr "!line: \`${!line}'"
+			echo_stderr "line: \`${line}'"
+			## original code
 			echo -e "${line}"
 		    fi
 		fi
 	    else
+		line="$(parse_configuration_line "${line}")"
 		echo -e "${line}"
 	    fi
 	done <${conf_file}
@@ -312,8 +365,9 @@ function conf_header() {
 }
 
 function conf_footer() {
-    printf "\n\n%s\n%s end of %s\n%s\n" \
-	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" "${MSG_CONF_TITLE}" "${MSG_CONF_LINESEP}"
+    printf "\n\n%s\n%s end of %s\n%s" \
+	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" \
+	"${MSG_CONF_TITLE}" "${MSG_CONF_LINESEP}\n"
 }
 
 ### program start
@@ -330,7 +384,15 @@ ALSA_CAPABILITIES_SCRIPT="${SCRIPT_DIR}/${ALSA_CAPABILITIES_FILE}"
     . "${ALSA_CAPABILITIES_SCRIPT}" || \
     die "required script \`${ALSA_CAPABILITIES_SCRIPT}' not found"
 
+tempconfs="$(mktemp)"
+sed 's/^\([[:alpha:]_]*\)[[:space:]]*"\${\(.*\):-\(.*\)}"$/export \2="\${\2:-\3}"/' ${SCRIPT_DIR}/confs-enabled/*.conf | grep -E ^export > "${tempconfs}" && \
+    source "${tempconfs}" || \
+    die "could not source \`${tempconfs}'"
+
+echo_stderr "tempconfs: \`${tempconfs}'"
+## list of enabled configuration snippet files
 CONFS_ENABLED=${SCRIPT_DIR}/confs-enabled/*.conf
+
 
 ## global indexed arrays that will be filled from `alsacapabilities.sh'
 declare -a ALSA_AIF_HWADDRESSES=()
@@ -442,7 +504,7 @@ CONF_CONTENTS="${header}$(source_enabled_confs)${footer}"
 ## displays the contents of CONF_CONTENTS or write them to
 ## MPD_CONFFILE if set
 [[ -z "${MPD_CONFFILE}" ]] && \
-    printf "${CONF_CONTENTS}" ||  \
+    printf "%s\n" "${CONF_CONTENTS}" ||  \
     write_conffile
 
 ### done
