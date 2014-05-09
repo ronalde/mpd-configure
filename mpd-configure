@@ -264,14 +264,11 @@ function parse_configuration_line() {
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
     line="$@"
-    match=""
-    local expanded_value=""
-    expanded_name=""
-    var_template=""
-    var_search=""
-    var_part=""
 
-    if [[ "${line}" =~ ([[:alpha:]_]*)[[:space:]]*\"\$\{(.*)\}\" ]] ; then
+    ## construct the regular expression for configuration items
+    local brm='([[:alpha:][:alnum:]_]*)[[:space:]]*\"\$\{(.*)\}\"$'
+    ## match the regexp
+    if [[ "${line}" =~ ${brm} ]] ; then
 	## line is mpd configuration: `config_value "${...}"'
 	
 	## given a line of `config_value "${...}"'
@@ -279,32 +276,31 @@ function parse_configuration_line() {
 	var_part="${BASH_REMATCH[2]}"
 	var_template="${var_part}"
 	var_search="${var_template}"
-	if [[ "${var_part}" =~ ^(.*):-(.*) ]]; then
+	if [[ "${var_part}" =~ ^(.*):-(.*)$ ]]; then
 	    ## the line contains a variable with default value:
 	    ##  `config_value "${VARNAME:-default_value}"'
 
 	    ## store the variable name: `VARNAME'
 	    var_template="${BASH_REMATCH[1]}"
+	    var_value="${BASH_REMATCH[2]}"
 	    ## the variable name including its default value `VARNAME:-default_value'
 	    var_search="${BASH_REMATCH[1]}:-${BASH_REMATCH[2]}"
 	fi
 	## assign the name of the variable (`VARNAME') to $expanded_name
-	expandend_name=var_template
+	exp_name=var_template
 	## assign the value of the variable (`$VARNAME') to $expanded_value
-	local expanded_value="${!expandend_name}"
-	if [[ ! -z "${DEBUG}" ]]; then
-	    debug "### match"
-	    debug "###  - var_part                  : \`${var_part}'"
-	    debug "###  - var_template              : \`${var_template}'"
-	    debug "###  - var_search (search)       : \`${var_search}'"
-	    debug "###  - expanded_name             : \`${expanded_name}'"
-	    debug "###  - expanded_value            : \`${expanded_value}'"
-	    debug "###  - !expanded_value (replace) : \`${!expanded_value}'"
-	    debug "###  - calculated value          : \`${line//\$\{${var_search}\}/${!expanded_value}}'"
-	fi
+	local exp_value="${!exp_name}"
 	
 	## return the line with its real/expanded value
-	printf "%s" "${line//\$\{${var_search}\}/${!expanded_value}}"
+	if [[ ! -z "${!exp_value}" ]]; then
+	    printf "%s" "${line//\$\{${var_search}\}/${!exp_value}}"
+	else
+	    [[ -z ${INCLUDE_COMMENTS} ]] && \
+		printf "" || \
+		printf "# %s (value not set)" "${line//\$\{${var_search}\}/${!exp_value}}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "not writing empty configuration setting \`${var_template}'."
+	fi
     else
 	## a normal line; return it
 	printf "%s" "${line}"
@@ -319,10 +315,37 @@ function source_enabled_confs() {
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
-    #MPDCONF_CLIENTLIMITS_MAX_CONNECTIONS=""
+    ## temporary file needed to source enabled configuration snippets files
+    tempconfs="$(mktemp)"
 
+    ## fill the file with all configuration lines from `confs-enabled/*.conf`
+    sed 's/^\([[:alnum:][:space:]_]*\)[[:space:]]*"\${\(.*\):-\(.*\)}"$/export \2="\${\2:-\3}"/' \
+	${SCRIPT_DIR}/confs-enabled/*.conf | grep -E ^export > "${tempconfs}"
+
+    ## source it (needed for variable expansion)
+    source "${tempconfs}" || die "could not source \`${tempconfs}'"
+
+    ## remove it when DEBUG is not set
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "sourced configuration values stored in \`${tempconfs}'.\n" || \
+	rm "${tempconfs}"
+
+    ## iterate each file
     for conf_file in ${CONFS_ENABLED}; do
-	echo -e "\n## start processing \`${conf_file##*/}'"
+
+	## check if the symlink points to a valid file
+	isvalid="$(readlink -e "${conf_file}")"
+
+	## process the next one if the symlink is broken 
+	if [[ -z "${isvalid}" ]]; then
+	    [[ ! -z "${DEBUG}" ]] && debug "not a valid symlink \`${conf_file}'"
+	    continue
+	fi
+
+	## the file exists, parse it
+	printf "\n## start processing \`%s'\n" "${conf_file##*/}"
+
+	## iterate each line
 	while IFS='' read -r line ; do
 
 	    ## skip commented lines
@@ -332,14 +355,13 @@ function source_enabled_confs() {
 
 		if [[ "${trimmed#\#*}" = "${trimmed}" ]]; then
 		    if [[ ! -z "${trimmed}" ]]; then
-			#local varname=
+			## parse the line
 			line="$(parse_configuration_line "${line}")"
-	    
+			
 			local interpreted_line="${!line}"
-			echo_stderr "!line: \`${!line}'"
-			echo_stderr "line: \`${line}'"
 			## original code
-			echo -e "${line}"
+			[[ ! -z "${line}" ]] && \
+			    printf "%s\n" "${line}"
 		    fi
 		fi
 	    else
@@ -384,15 +406,8 @@ ALSA_CAPABILITIES_SCRIPT="${SCRIPT_DIR}/${ALSA_CAPABILITIES_FILE}"
     . "${ALSA_CAPABILITIES_SCRIPT}" || \
     die "required script \`${ALSA_CAPABILITIES_SCRIPT}' not found"
 
-tempconfs="$(mktemp)"
-sed 's/^\([[:alpha:]_]*\)[[:space:]]*"\${\(.*\):-\(.*\)}"$/export \2="\${\2:-\3}"/' ${SCRIPT_DIR}/confs-enabled/*.conf | grep -E ^export > "${tempconfs}" && \
-    source "${tempconfs}" || \
-    die "could not source \`${tempconfs}'"
-
-echo_stderr "tempconfs: \`${tempconfs}'"
 ## list of enabled configuration snippet files
 CONFS_ENABLED=${SCRIPT_DIR}/confs-enabled/*.conf
-
 
 ## global indexed arrays that will be filled from `alsacapabilities.sh'
 declare -a ALSA_AIF_HWADDRESSES=()
@@ -402,16 +417,19 @@ declare -a ALSA_AIF_LABELS=()
 ## for storing (potential) problems 
 declare -a PROBLEMS=()
 
-## users may change the global variables that this script uses in the
-## file `mpd-configure.conf' or specify them on the command line when
-## starting this script, eg: 
-##  MPD_HOST="myhostname" ./mpd-configure
-
 ## source the config file if its present
 PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
 [[ -f "${PREFERENCES_FILE}" ]] && \
     source "${PREFERENCES_FILE}"
 
+## for backwards compatibility
+[[ ! -z "${CONF_ZEROCONF_ENABLED}" ]] || [[ ! -z "${ENABLE_LASTFM}" ]] && \
+    die "configuration settings \`CONF_ZEROCONF_ENABLED' and
+    \`ENABLE_LASTFM' \nare no longer valid. please consult \`README'."
+
+## for backwards compatibility
+[[ ! -z "${CONF_MPD_HOST}" ]] && G_NETWORK_BINDTOADDRESS="${CONF_MPD_HOST}"
+[[ ! -z "${CONF_ZEROCONF_LABEL}" ]] && G_ZEROCONF_ZEROCONFNAME="${CONF_ZEROCONF_LABEL}"
 ## global variable for holding the contents of the conf file
 CONF_CONTENTS=""
 
@@ -492,13 +510,15 @@ check_writeable_path "${MPD_PIDFILE}" "PID file" \
     "start, stop or restart mpd using service daemon"
 CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
 
-## zeroconf
-CONF_ZEROCONF_LABEL="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
-[[ ! -z ${CONF_ZEROCONF_ENABLED} ]] && CONF_ZEROCONF_ENABLED="${CONF_ZEROCONF_ENABLED}"
+## set default zeroconf label
+[[ ! -z "${G_ZEROCONF_ZEROCONFNAME}" ]] && \
+    G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
 
 ## store conf snippets in CONF_CONTENTS
 header="$(conf_header)"
 footer="$(conf_footer)"
+
+## iterate each line in enabled files in `confs-enabled/*.conf`
 CONF_CONTENTS="${header}$(source_enabled_confs)${footer}"
 
 ## displays the contents of CONF_CONTENTS or write them to
