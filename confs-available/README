@@ -46,7 +46,7 @@ Enabling a configuration snippet file
 -------------------------------------
 
 Each file in `./confs-available/` may be enabled by symlinking it to
-`..confs-enabled/` and (re-)running the `mpd-configure` script, eg:
+`../confs-enabled/` and (re-)running the `mpd-configure` script, eg:
 
 ```bash
 cd mpd-configure                     # go to the root of the mpd-configure script
