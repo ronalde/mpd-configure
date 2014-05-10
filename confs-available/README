@@ -1,6 +1,5 @@
-README for `./confs-available` and `./conf-enabled`
-===================================================
-
+README for configuration snippet files
+======================================
 
 This directory contains *configuration snippet files* for
 `mpd-configure`, which contain configuration directives for mpd
