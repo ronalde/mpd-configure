@@ -232,7 +232,7 @@ function check_readable_path() {
     ## checks if path ($1), needed for ($2) is readable, or adds
     ## problem description ($2) to problems array
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
     path="$1"
     purpose="$2"
     problem="$3"
@@ -373,6 +373,134 @@ function source_enabled_confs() {
     done
 }
 
+function perform_automagic() {
+    ### automagic configuration stuff
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    ## client limits
+    ## if the directory specified in `CONF_MPD_MUSICDIR` is accessible,
+    ## calculate the number of audio files and double that.
+    ## max_playlist_length
+    
+    default_length=16384
+
+    if [[ -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]]; then
+	## setting not configured
+	if [[ -d "${CONF_MPD_MUSICDIR}" ]]; then
+	    ## music dir exists; calculate number of files
+	    musicfiles="${CONF_MPD_MUSICDIR}/*/*/*"
+	    nr_musicfiles="$(printf "file: \`%s'\n" ${musicfiles} | wc -l)"
+	    let double_nr_musicfiles=( ${nr_musicfiles} * 2 )
+	    [[ ${double_nr_musicfiles} -gt ${default_length} ]] && \
+		G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${double_nr_musicfiles} || \
+		G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
+	else
+	    ## music dir not available; use default
+	    G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
+	fi
+    fi
+    
+    ## if empty set `G_CLIENTLIMITS_MAXCOMMANDLISTSIZE` to 1/8 of
+    ## `G_CLIENTLIMITS_MAXPLAYLISTLENGTH`
+    [[ -z ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE} && ! -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]] && \
+	let G_CLIENTLIMITS_MAXCOMMANDLISTSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 8 )
+    
+    ## if empty, set `MAXOUTPUTBUFFERSIZE` to 1/2 of
+    ## `G_CLIENTLIMITS_MAXPLAYLISTLENGTH`
+    [[ -z ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE} && ! -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]] && \
+	let G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 2 )
+    
+    if [[ ! -z "${DEBUG}" ]]; then
+	debug "G_CLIENTLIMITS_MAXPLAYLISTLENGTH: \`${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}'"
+	debug "G_CLIENTLIMITS_MAXCOMMANDLISTSIZE: \`${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}'"
+	debug "G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE: \`${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}'"
+    fi
+    
+    ## get network name for zeroconf
+    if [[ -z "${G_ZEROCONF_ZEROCONFNAME}" ]]; then
+	## `G_ZEROCONF_ZEROCONFNAME` is not set; set default zeroconf label 
+	
+	hostname_string=""
+	if [[ ! "${CONF_MPD_HOST}" =~ "127.0.0" || ! "${CONF_MPD_HOST}" = "0.0.0.0" ]]; then
+	    ## real ip address; try to get fqdn name, fallback to 'short' hostname
+	    hostname="$(hostname --fqdn ${CONF_MPD_HOST})"
+	    [[ -z "${hostname}" ]] && \
+		hostname="$(hostname)"
+	fi
+	
+	## set string to use if hostname contains something
+	[[ ! -z ${hostname} ]] && \
+	    hostname_string="on ${hostname} "
+	
+	G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD \
+${hostname_string}through ${CONF_ALSA_AIF_DEVLABEL}}"
+	
+    fi
+
+}
+
+function get_and_check_paths() {
+    ### get and check paths
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+
+    ### music dir
+    ## check if user set the music dir configuration parameters
+    if [[ -z ${CONF_MPD_MUSICDIR} && -z ${G_PATHS_MUSICDIRECTORY} ]]; then
+	## try getting the `MUSIC' directory from XDG and use that,
+	## otherwise user current dir
+	if [[ ! -z ${CMD_XDGUSERDIR} ]]; then 
+	    xdg_music_dir="$(${CMD_XDGUSERDIR} MUSIC)"
+	    [[ "$?" = "0" ]] && \
+		G_PATHS_MUSICDIRECTORY="${xdg_music_dir}"
+	fi
+    fi
+    
+    ## use current dir if still empty
+    [[ -z ${G_PATHS_MUSICDIRECTORY} ]] && G_PATHS_MUSICDIRECTORY="$(pwd)"
+    
+    check_readable_path "${G_PATHS_MUSICDIRECTORY}" "music directory" "listen to music"
+    
+    ## working directory for mpd
+    
+    ## use user xdg config dir or current path
+    XDG_CONFIG_DIR="${HOME}/.config"
+    [[ -d ${XDG_CONFIG_DIR} ]] || \
+	XDG_CONFIG_DIR=$(pwd)
+    
+    ## set default path
+    XDG_CONFIG_MPDDIR=${XDG_CONFIG_DIR}/mpd
+    
+    ## if `CONF_MPD_HOMEDIR` not set by user, otherwise use `XDG_CONFIG_MPDDIR`
+    [[ -z ${CONF_MPD_HOMEDIR} ]] && \
+	CONF_MPD_HOMEDIR=${XDG_CONFIG_MPDDIR}
+    
+    ## check if it is accessible
+    check_readable_path "${CONF_MPD_HOMEDIR}" "mpd home directory" \
+	"use ${MSG_MPD_CONFFILE}"
+    check_writeable_path "${CONF_MPD_HOMEDIR}" "mpd home directory" \
+	"store ${MSG_MPD_CONFFILE}"
+    
+    ## where to store data
+    MPD_DATADIR="${MPD_DATADIR:-${CONF_MPD_HOMEDIR}}"
+    CONF_MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
+    check_readable_path "${MPD_PLAYLISTDIR}" "playlist directory" "use playlists"
+    check_writeable_path "${MPD_PLAYLISTDIR}" "playlist directory" \
+	"change or create playlists"
+    CONF_MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
+    check_readable_path "${MPD_DBFILE}" "database file" "use mpd"
+    check_writeable_path "${MPD_DBFILE}" "database file" "store changes in mpd"
+    CONF_MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
+    check_writeable_path "${MPD_LOGFILE}" "log file" "start or use mpd"
+    CONF_MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
+    check_writeable_path "${MPD_PIDFILE}" "PID file" \
+	"start, stop or restart mpd using service daemon"
+    CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
+    
+}
+
+
 function conf_header() {
     ## construct the byline for the configuration file
 
@@ -399,6 +527,10 @@ APP_NAME="mpd-configure"
 ## store the current directory 
 SCRIPT_DIR=$(dirname $0)
 
+## check if needed programs are available
+CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+CMD_XDGUSERDIR=$(which xdg-user-dir)
+
 ALSA_CAPABILITIES_FILE="alsa-capabilities"
 ALSA_CAPABILITIES_SCRIPT="${SCRIPT_DIR}/${ALSA_CAPABILITIES_FILE}"
 
@@ -422,6 +554,9 @@ PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
 [[ -f "${PREFERENCES_FILE}" ]] && \
     source "${PREFERENCES_FILE}"
 
+## if not set, default to 0.0.0.0
+CONF_MPD_HOST="${CONF_MPD_HOST:-0.0.0.0}"
+
 ## for backwards compatibility
 [[ ! -z "${CONF_ZEROCONF_ENABLED}" ]] || [[ ! -z "${ENABLE_LASTFM}" ]] && \
     die "configuration settings \`CONF_ZEROCONF_ENABLED' and
@@ -443,12 +578,6 @@ MSG_CONF_LINESEP="$(printf '#%.0s' {1..76})"
 MSG_CONF_SEP="###"
 MSG_CONF_TITLE="mpd configuration file"
 
-
-## check if needed programs are available
-CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
-
-## if not set, default to 0.0.0.0
-CONF_MPD_HOST="${CONF_MPD_HOST:-0.0.0.0}"
 
 ## pass limits to the alsa-capabilities script
 if [[ ! -z ${LIMIT_INTERFACE_TYPE} ]]; then
@@ -473,81 +602,13 @@ fi
 ## get an array with available alsa hardware addresses
 fetch_alsa_hwaddresses
 
+## get and check paths
+get_and_check_paths
 
-### paths
+### perform automagic configuration
+perform_automagic
 
-if [[ -z ${MPD_MUSICDIR} ]]; then
-    ## get `music' directory from xdg
-    XDG_USER_USERDIRS=${HOME}/.config/user-dirs.dirs
-    ## source the user settings if present to fill XDG_MUSIC_DIR
-    [[ -f ${XDG_USER_USERDIRS} ]] && source ${XDG_USER_USERDIRS}
-    ## if empty revert to HOME
-    [[ -z ${XDG_MUSIC_DIR} ]] && XDG_MUSIC_DIR=${HOME}
-fi
-
-## defaults to $XDG_MUSIC_DIR
-CONF_MPD_MUSICDIR="${MPD_MUSICDIR:-${XDG_MUSIC_DIR}}"
-check_readable_path "${MPD_MUSICDIR}" "music directory" "listen to music"
-
-## working directory for mpd
-mpd_homedir="${CONF_MPD_HOMEDIR:-${HOME}/.mpd}"
-check_readable_path "${mpd_homedir}" "mpd home directory" \
-    "use ${MSG_MPD_CONFFILE}"
-check_writeable_path "${mpd_homedir}" "mpd home directory" \
-    "store ${MSG_MPD_CONFFILE}"
-## where to store data
-MPD_DATADIR="${MPD_DATADIR:-${mpd_homedir}}"
-CONF_MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
-check_readable_path "${MPD_PLAYLISTDIR}" "playlist directory" "use playlists"
-check_writeable_path "${MPD_PLAYLISTDIR}" "playlist directory" \
-    "change or create playlists"
-CONF_MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
-check_readable_path "${MPD_DBFILE}" "database file" "use mpd"
-check_writeable_path "${MPD_DBFILE}" "database file" "store changes in mpd"
-CONF_MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
-check_writeable_path "${MPD_LOGFILE}" "log file" "start or use mpd"
-CONF_MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
-check_writeable_path "${MPD_PIDFILE}" "PID file" \
-    "start, stop or restart mpd using service daemon"
-CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
-
-### automagic configuration stuff
-### client limits
-## if the directory specified in `CONF_MPD_MUSICDIR` is accessible, calculate the number of audio files and double that.  max_playlist_length
-debug "G_CLIENTLIMITS_MAXPLAYLISTLENGTH: ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}"
-if [[ -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} && -d "${CONF_MPD_MUSICDIR}" ]]; then
-    default_length=16384
-    musicfiles="${CONF_MPD_MUSICDIR}/*/*"
-    debug "musicfiles: ${#musicfiles}"
-    nr_musicfiles="$(printf "file: \`%s'\n" ${musicfiles} | wc -l)"
-    let double_nr_musicfiles=( ${nr_musicfiles} * 2 )
-    [[ ${double_nr_musicfiles} -gt ${default_length} ]] && \
-	G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${double_nr_musicfiles} || \
-	G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
-else
-    G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
-fi
-debug "G_CLIENTLIMITS_MAXPLAYLISTLENGTH: ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}"
-
-## if empty set G_CLIENTLIMITS_MAXCOMMANDLISTSIZE to 1/8 of
-## G_CLIENTLIMITS_MAXPLAYLISTLENGTH
-debug "G_CLIENTLIMITS_MAXCOMMANDLISTSIZE: ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}"
-[[ -z ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE} ]] && \
-    let G_CLIENTLIMITS_MAXCOMMANDLISTSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 8 )
-debug "G_CLIENTLIMITS_MAXCOMMANDLISTSIZE: ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}"
-
-## if empty, set MAXOUTPUTBUFFERSIZE to 4 times MAXCOMMANDLISTSIZE
-debug "G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE: ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}"
-[[ -z ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE} ]] && \
-    let G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 2 )
-
-debug "G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE: ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}"
-
-## set default zeroconf label
-[[ -z "${G_ZEROCONF_ZEROCONFNAME}" ]] && \
-    G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD through ${CONF_ALSA_AIF_DEVLABEL}}"
-
-## store conf snippets in CONF_CONTENTS
+## store conf snippets in `CONF_CONTENTS`
 header="$(conf_header)"
 footer="$(conf_footer)"
 
@@ -555,7 +616,7 @@ footer="$(conf_footer)"
 CONF_CONTENTS="${header}$(source_enabled_confs)${footer}"
 
 ## displays the contents of CONF_CONTENTS or write them to
-## MPD_CONFFILE if set
+## `MPD_CONFFILE` if set
 [[ -z "${MPD_CONFFILE}" ]] && \
     printf "%s\n" "${CONF_CONTENTS}" ||  \
     write_conffile
