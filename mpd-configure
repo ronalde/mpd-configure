@@ -424,7 +424,7 @@ function perform_automagic() {
 	hostname_string=""
 	if [[ ! "${CONF_MPD_HOST}" =~ "127.0.0" || ! "${CONF_MPD_HOST}" = "0.0.0.0" ]]; then
 	    ## real ip address; try to get fqdn name, fallback to 'short' hostname
-	    hostname="$(hostname --fqdn ${CONF_MPD_HOST})"
+	    hostname="$(hostname --fqdn)"
 	    [[ -z "${hostname}" ]] && \
 		hostname="$(hostname)"
 	fi
