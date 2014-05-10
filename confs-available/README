@@ -66,15 +66,17 @@ Remove the symlink in `./confs-enabled/afile.conf` and rerun the script.
 Adding custom files
 -------------------
 
-Any file placed in `./confs-enabled/afile.conf` will be used by the
-`mpd-configure` script.
+Any file with extension `.conf` placed in `./confs-enabled/` will be
+used by the `mpd-configure` script. This way it is easy to extend the
+scripts functionality and reach by providing additional confguration
+snippet files.
 
-By default, each uncommented and non-empty line in you custom file,
+By default, each uncommented and non-empty line in your custom file
 will be copied to the resulting output, while variables in those files
 will be expanded to their values.
 
 Given a self made file `wildmidi.txt` in your home directory
-(`/home/joe`) with the following contents:
+(`/home/frits`) with the following contents:
 
 ```bash
 decoder {
@@ -102,10 +104,7 @@ Will produce:
 # ... rest of config file
 decoder {
     plugin "wildmidi"
-    config_file "/home/joe/wildmidi.cfg}"
+    config_file "/home/frits/wildmidi.cfg}"
 }
 # ... rest of config file
 ```
-
-
-
