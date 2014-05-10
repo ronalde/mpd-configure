@@ -15,8 +15,8 @@ bash variable in those configuration snippets, will be expanded to
 their calculated values by the script.
 
 
-About the alsa-capabilities script
-----------------------------------
+About the alsa-capabilities helper script
+-----------------------------------------
 
 `alsa-capabilities` may be run from the commandline. It will then
 display each alsa audio output interface with its capabilities, like
@@ -49,9 +49,9 @@ For systems with a fixed configuration --eg a PC with a locally
 installed mpd, connected to some USB DAC-- the script may be
 invoked manually:
 
-    bash mpd-configure > ~/mpd.conf
+    bash mpd-configure > mpd.conf
 
-This will create the file `~/mpd.conf` configured to use the first
+This will create the file `./mpd.conf` configured to use the first
 available audio output interface in bit perfect mode. If more than one
 output interface (or DAC) is found, it will prompt you to specify
 which one to use. As bitperfect mode assumes that `mpd` has exclusive
@@ -63,7 +63,7 @@ If you use a (single) USB Audio Class DAC you may specify the
 file or on the command line, and it will automagically and without
 questions configure mpd to use that DAC:
 
-    LIMIT_INTERFACE_TYPE="usb" ./mpd-configure > ~/mpd.conf
+    LIMIT_INTERFACE_TYPE="usb" bash mpd-configure > ~/mpd.conf
 
 
 After creating such a configuration file, `mpd` can betold to use this
@@ -83,12 +83,11 @@ as a system daemon:
 More complex usage
 ------------------
 
-For debugging or testing purposes one may set the `DRYRUN` and/or
-`DEBUG` parameters through the `mpd-configure.conf` file or on the
-command line, eg:
+For debugging or testing purposes one may set the `INCLUDE_COMMENTS`
+and/or `DEBUG` parameters through the `mpd-configure.conf` file or on
+the command line, eg:
 
-    DEBUG=True ./mpd-configure
-    DRYRUN=True ./mpd-configure
+    DEBUG=True INCLUDE_COMMENTS=True bash mpd-configure
 
 In dynamic environments --for example a network booted ltsp client,
 which hardware may be altered each boot, connected to whatever DAC--
@@ -102,11 +101,13 @@ home directory of the auto logon user specified in
 run the script and start `mpd` using the script generated
 `~/.mpd/mpd.conf`, ie:
 
-    LIMIT_INTERFACE_TYPE="usb" ~/mpd-configure/mpd-configure > ~/.mpd/mpd.conf && mpd ~/.mpd/mpd.conf
+    LIMIT_INTERFACE_TYPE="usb" bash ~/mpd-configure/mpd-configure > ~/.mpd/mpd.conf && \
+    mpd ~/.mpd/mpd.conf
 
 ### Usage from within python
 
 See the [./examples](https://github.com/ronalde/mpd-configure/tree/master/examples) subdirectory.
+
 
 Preferences
 -----------
@@ -124,30 +125,11 @@ debugging. Possible values:
 - `1` (or non-empty): enabled.
 
 
-`DRYRUN`
-Do not actually modify anything, eg. write to configuration
-file. Possible values:
+`INCLUDE_COMMENTS`
+Include commented and empty lines from configuration snippet files in
+the generated mpd configuration file:
 - commentend out: disabled (Default).
 - `1` (or non-empty): enabled
-
-
-### Paths
-
-See `man mpd.conf` for explanation.
-
-`MPD_MUSICDIR`
-The path to the directory where the music is stored. Modifies the
-`mpd.conf` parameter `music_directory`. Possible values:
-- commented out: use `$XDG_MUSIC_DIR` if it exists and specified in
-  `~/.config/user-dirs.dir`, otherwise use `$HOME`.
-- `/some/path`: use the path specified.
-
-`MPD_USERHOMEDIR`
-The path to the directory which holds the mpd configuration and run
-time files. Modifies the `mpd.conf` parameters `playlist_directory`,
-`db_file`, `log_file`, `pid_file` and `state_file`. Possible values:
-- commented out: use `$HOME/.mpd` if it exists (Default).
-- `/some/path`: use the path specified.
 
 
 `MPD_CONFFILE`
@@ -156,7 +138,7 @@ written. Possible values:
 - commented out: don't write to a file (Default). One may redirect the
   output of the script using:
 
-  ./mpd-configure > /path/to/mpd.conf
+  bash mpd-configure > /path/to/mpd.conf
 
 - `/path/to/mpd.conf`: use the path specified.
 
@@ -207,38 +189,9 @@ Default value:
 - commented out (empty): use the first available interface. 
 
 
-### Network parameters
-
-`MPD_HOST`
-The hostname or IP address you want mpd to bind to. Modifies the
-`mpd.conf` parameter `bind_to_address`. Possible values:
-- commented out or `0.0.0.0`: Bind to any IP address currently used by
-  the computer (Default).
-- `192.168.1.5` or `myaudiophilestreamer`: use the value specified.
-
-`ENABLE_LASTFM`
-Use the LASTFM playlist plugin using `LASTFM_USERNAME` and
-`LAST_PASSWORD`. Creates the section `playlist_plugin` and modifies
-the `mpd.conf` parameter `name` in that section. Possible values:
-- commented out: disabled (Default).
-- `1`: enabled.
-
-`ENABLE_ZEROCONF`
-Enable zeroconf configuration using the script generated name
-`$ALSADEVICELABEL through MPD` name for upnp discovery. Modifies the
-`mpd.conf` parameters `zeroconf_enabled` and `zeroconf_name`. Possible
-values:
-- commented out: disabled (Default)
-- `1`: enabled. 
-
-`ZEROCONF_NAME`
-Specify the name with which mpd will publish itself with upnp on the
-local network.
-`$ALSADEVICELABEL through MPD` name for upnp discovery. Modifies the
-`mpd.conf` parameter and `zeroconf_name`. Possible
-values:
-- commented out: `$ALSADEVICELABEL through MPD` (Default)
-- `My MPD` or `Audiplayer`:  use the value specified. 
+See the configuration snippet files and accompanying `README` in
+`./confs-available` for additional parameters and and explanation for
+their functions.
 
 
 Reference
