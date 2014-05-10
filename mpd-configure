@@ -473,6 +473,7 @@ fi
 ## get an array with available alsa hardware addresses
 fetch_alsa_hwaddresses
 
+
 ### paths
 
 if [[ -z ${MPD_MUSICDIR} ]]; then
@@ -510,9 +511,41 @@ check_writeable_path "${MPD_PIDFILE}" "PID file" \
     "start, stop or restart mpd using service daemon"
 CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
 
+### automagic configuration stuff
+### client limits
+## if the directory specified in `CONF_MPD_MUSICDIR` is accessible, calculate the number of audio files and double that.  max_playlist_length
+debug "G_CLIENTLIMITS_MAXPLAYLISTLENGTH: ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}"
+if [[ -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} && -d "${CONF_MPD_MUSICDIR}" ]]; then
+    default_length=16384
+    musicfiles="${CONF_MPD_MUSICDIR}/*/*"
+    debug "musicfiles: ${#musicfiles}"
+    nr_musicfiles="$(printf "file: \`%s'\n" ${musicfiles} | wc -l)"
+    let double_nr_musicfiles=( ${nr_musicfiles} * 2 )
+    [[ ${double_nr_musicfiles} -gt ${default_length} ]] && \
+	G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${double_nr_musicfiles} || \
+	G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
+else
+    G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
+fi
+debug "G_CLIENTLIMITS_MAXPLAYLISTLENGTH: ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}"
+
+## if empty set G_CLIENTLIMITS_MAXCOMMANDLISTSIZE to 1/8 of
+## G_CLIENTLIMITS_MAXPLAYLISTLENGTH
+debug "G_CLIENTLIMITS_MAXCOMMANDLISTSIZE: ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}"
+[[ -z ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE} ]] && \
+    let G_CLIENTLIMITS_MAXCOMMANDLISTSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 8 )
+debug "G_CLIENTLIMITS_MAXCOMMANDLISTSIZE: ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}"
+
+## if empty, set MAXOUTPUTBUFFERSIZE to 4 times MAXCOMMANDLISTSIZE
+debug "G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE: ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}"
+[[ -z ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE} ]] && \
+    let G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 2 )
+
+debug "G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE: ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}"
+
 ## set default zeroconf label
-[[ ! -z "${G_ZEROCONF_ZEROCONFNAME}" ]] && \
-    G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD through ${ALSA_AIF_DEVLABEL}}"
+[[ -z "${G_ZEROCONF_ZEROCONFNAME}" ]] && \
+    G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD through ${CONF_ALSA_AIF_DEVLABEL}}"
 
 ## store conf snippets in CONF_CONTENTS
 header="$(conf_header)"
