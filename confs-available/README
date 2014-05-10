@@ -2,18 +2,18 @@ README for `./confs-available` and `./conf-enabled`
 ===================================================
 
 
-This directory contains "snippet files" files for `mpd-configure`
-containing configuration parameters for mpd grouped by function or
-domain to increase managebility.
+This directory contains *configuration snippet files* for
+`mpd-configure`, which contain configuration directives for mpd
+grouped by function or domain to increase managebility.
 
 
 Modifying (default) settings
 ----------------------------
 
-Make sure the configuration value is specified in an enabled snippet file (see below) and
-and the same time get the appropriate VARIABLE NAME and its default
-value. The value marked with xxx is the default value used by the
-script: `${VARNAME:-xxx}`.
+Make sure the configuration value is specified in an enabled snippet
+file (see below) while looking up the appropriate `VARIABLE
+NAME` and its default value. The value marked with xxx is the default
+value used by the script: `${VARNAME:-xxx}`.
 
 
 ```bash
@@ -45,8 +45,8 @@ preferences.
 Enabling a configuration snippet file
 -------------------------------------
 
-Each file in `./confs-available/` may be enabled by symlinking it to `..confs-enabled/` and
-(re-) running the `mpd-configure` script, eg:
+Each file in `./confs-available/` may be enabled by symlinking it to
+`..confs-enabled/` and (re-)running the `mpd-configure` script, eg:
 
 ```bash
 cd mpd-configure                     # go to the root of the mpd-configure script
@@ -54,7 +54,7 @@ cd confs-enabled/                    # change to the directory with available co
 ln -s ../confs-available/afile.conf  # enable the settings in `somefile.conf`
 cd -                                 # switch back to the 'root'
 bash mpd-configure > mpd.conf        # create `mpd.conf` using all files in `./confs-enabled/*.conf
-
+```
 
 
 Disabling a configuration snippet file
