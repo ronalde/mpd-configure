@@ -376,21 +376,35 @@ function source_enabled_confs() {
 function perform_automagic() {
     ### automagic configuration stuff
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$@'"
 
     ## client limits
-    ## if the directory specified in `CONF_MPD_MUSICDIR` is accessible,
-    ## calculate the number of audio files and double that.
-    ## max_playlist_length
+    ## if the directory specified in `CONF_MPD_MUSICDIR` is
+    ## accessible, calculate the number of audio files and double that
+    ## for `max_playlist_length` parameter.
     
     default_length=16384
+    nr_musicfiles=0
 
     if [[ -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]]; then
 	## setting not configured
 	if [[ -d "${CONF_MPD_MUSICDIR}" ]]; then
 	    ## music dir exists; calculate number of files
-	    musicfiles="${CONF_MPD_MUSICDIR}/*/*/*"
-	    nr_musicfiles="$(printf "file: \`%s'\n" ${musicfiles} | wc -l)"
+	    if [[ ! -z ${CMD_FIND} ]]; then
+		let nr_musicfiles=$(${CMD_FIND} "${CONF_MPD_MUSICDIR}" -type f | wc -l)
+	    else
+		## find not available; use bash wildcards
+		[[ shopt -q globstar ]] && globstar_initial_on=True
+		## turn it on
+		shopt -s globstar
+		musicfiles="${CONF_MPD_MUSICDIR}/**"
+		let nr_musicfiles="$(printf "file: \`%s'\n" ${musicfiles} | wc -l)"
+		## turn it of if needed
+		[[ ! -z ${globstar_initial_on} ]] && shopt -u globstar
+
+	    fi
+
 	    let double_nr_musicfiles=( ${nr_musicfiles} * 2 )
 	    [[ ${double_nr_musicfiles} -gt ${default_length} ]] && \
 		G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${double_nr_musicfiles} || \
@@ -530,8 +544,10 @@ APP_NAME="mpd-configure"
 SCRIPT_DIR=$(dirname $0)
 
 ## check if needed programs are available
-CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+## no problem if xdg-userdir is not found; fail silently
 CMD_XDGUSERDIR=$(which xdg-user-dir)
+## no problem if GNU find is not found; fail silently
+CMD_FIND=$(which find)
 
 ALSA_CAPABILITIES_FILE="alsa-capabilities"
 ALSA_CAPABILITIES_SCRIPT="${SCRIPT_DIR}/${ALSA_CAPABILITIES_FILE}"
