@@ -153,7 +153,7 @@ Possible values:
 - Comment it out (or leave it empty) to prevent filtering.
 
 Default value:
-- (empty) "": do not limit the interfaces that will be found.
+- commented out (or empty ""): do not limit the interfaces that will be found.
 
 
 `LIMIT_INTERFACE_FILTER`
@@ -186,7 +186,32 @@ Possible values:
 - `Some regular expression`: use the (first) interface which matches the regexp.
 
 Default value:
-- commented out (empty): use the first available interface. 
+- commented out (or empty ""): use the first available interface. 
+
+Handling of pulseaudio
+`OPT_DISABLE_PULSEAUDIO`
+Disable pulseaudio by modifyin the current users' `~/.pulseaudio/client.conf`
+
+Possible values:
+- non-empty (`1` or "True") disables pulseaudio.
+- Comment it out (or leave it empty) to prevent disabling of pulseaudio.
+
+
+Default value:
+- commented out (or empty ""): do not disable it.
+
+`OPT_STOP_PULSEAUDIO`
+Temporary disable and stop pulseaudio during detection of alsa
+interfaces. After the script pulseaudio's client configuration and run
+state will restored.
+
+Possible values:
+- non-empty (`1` or "True") temporary disables and stops pulseaudio.
+- Comment it out (or leave it empty) to prevent temporary disabling
+  and stopping of pulseaudio.
+
+Default value:
+- commented out (or empty ""): do not disable it.
 
 
 See the configuration snippet files and accompanying `README` in
