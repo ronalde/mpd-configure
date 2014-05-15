@@ -395,7 +395,8 @@ function perform_automagic() {
 		let nr_musicfiles=$(${CMD_FIND} "${CONF_MPD_MUSICDIR}" -type f | wc -l)
 	    else
 		## find not available; use bash wildcards
-		[[ shopt -q globstar ]] && globstar_initial_on=True
+		globstar_on=$(shopt -q globstar)
+		[[ "$?" = "0" ]] && globstar_initial_on=True
 		## turn it on
 		shopt -s globstar
 		musicfiles="${CONF_MPD_MUSICDIR}/**"
