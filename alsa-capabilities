@@ -508,8 +508,19 @@ function return_alsa_interface() {
     ## parse command line arguments
     analyze_command_line "$@"
 
+    ## stop pulseaudio before detecting
+    if [[ ! -z "${OPT_STOP_PULSE}" ]]; then
+	CMD_PULSEAUDIO=$(which pulseaudio)
+	[[ ! -z "${CMD_PULSEAUDIO}" ]] && stop_pulseaudio
+    fi
+
     ## create a list of alsa audio output interfaces and parse it.
     fetch_alsa_outputinterfaces
+
+
+    ## restore and restart pulseaudio if requested and command available.
+    [[ ! -z "${OPT_STOP_PULSE}" && ! -z "${CMD_PULSEAUDIO}" ]] && \
+	restore_pulseaudio
     
     ## exit with error if no matching output line was found
     if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
@@ -526,9 +537,91 @@ function return_alsa_interface() {
     ## return success if interfaces are found
     return 0
 
+}
+
+
+
+function restore_pulseaudio() {
+    ## restore changes made by script to pulse configuration and
+    ## running status.
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    ## remove temporary client configuration if created by script.
+    if [[ ! -z "${PA_CLIENT_CONF_CREATED}" ]]; then
+	rm "${PA_CLIENT_CONF}"
+	[[ "$?" ="0" && ! -z "${DEBUG}" ]] && \
+	    debug "script generated \`${PA_CLIENT_CONF}' removed"
+    fi
+    
+
+    ## restore backed up client configuration if created by script.
+    if [[ ! -z "${PA_CLIENT_CONF_BACKUP}" ]]; then
+	mv "${PA_CLIENT_CONF_BACKUP}" "${PA_CLIENT_CONF}"
+	[[ "$?" ="0" && ! -z "${DEBUG}" ]] && \
+	    debug "\`${PA_CLIENT_CONF_BACKUP}' restored to \`${PA_CLIENT_CONF}' removed"
+    fi
+
+
+
+    ## (re)start pulseaudio if it was running.
+    if [[ ! -z "${PA_RUNNING}" ]]; then
+	${CMD_PULSEAUDIO}
+	ret="$?"
+	if [[ ! "${ret}" = "0" ]]; then
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "could not restart pulseaudio, failed with error: \`${ret}'"
+	fi
+    fi
+
 
 }
 
+
+function stop_pulseaudio() {
+    ## temporary disable pulseaudio to prevent it from respawning and stop it
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    ## check if its running
+    PA_RUNNING="$(pgrep -u ${USER} pulseaudio)"
+
+    if [[ ! -z "${PA_RUNNING}" ]]; then
+
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "pulseaudio is running; will temporary disable and stop it ..."
+
+        # temporary disable pulseaudio
+
+	if [[ -f "${PA_CLIENT_CONF}" ]] ; then
+	    ## make a backup of the current configuration
+	    formatted_date="$(date -Is)"
+	    PA_CLIENT_CONF_BACKUP="${PA_CLIENT_CONF}.backup-${formatted_date}"
+	    cp -a "${PA_CLIENT_CONF}" "${PA_CLIENT_CONF_BACKUP}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "pulseaudio configuration backed up: \`${PA_CLIENT_CONF_BACKUP}'."
+	fi
+
+	## create or overwrite the pulseaudio configuration file
+	printf "autospawn = no\n" > "${PA_CLIENT_CONF}"
+	PA_CLIENT_CONF_CREATED=True
+
+	## kill pulseaudio
+	${CMD_PULSEAUDIO} --kill
+
+	# check if this succeeded
+	pakillok="$(pgrep -u ${USER} pulseaudio)"
+
+	if [[ ! -z "${pakillok}" ]] ; then
+	    ## pulse is still running
+	    [[ ! -z "${DEBUG}" ]] && debug "could not kill pulseaudio ..."
+	    ## restore to situation before running script
+	    restore_pulseaudio
+
+	fi
+    fi
+
+}
 
 ### global variables
 
@@ -543,6 +636,8 @@ function return_alsa_interface() {
 [[ -z ${ALSA_AIF_UACCLASSES} ]] && declare -a ALSA_AIF_UACCLASSES=()
 [[ -z ${ALSA_AIF_FORMATS} ]] && declare -a ALSA_AIF_FORMATS=()
 [[ -z ${ALSA_AIF_CHARDEVS} ]] && declare -a ALSA_AIF_CHARDEVS=()
+
+PA_CLIENT_CONF=${HOME}/.pulse/client.conf
 
 ## counter for unfiltered interfaces
 NR_AIFS_BEFOREFILTERING=0
@@ -613,6 +708,7 @@ SHORT_OPTS=("l:" "c:" "q" "h")
 [[ ! -z ${OPT_LIMIT_UO} ]] && OPT_LIMIT_UO=${OPT_LIMIT_UO}
 [[ ! -z ${OPT_QUIET} ]] && OPT_QUIET=${OPT_QUIET}
 [[ ! -z ${OPT_FILTER} ]] && OPT_FILTER=${OPT_FILTER}
+
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
