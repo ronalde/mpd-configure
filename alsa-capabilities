@@ -32,9 +32,15 @@
 
 LANG=C
 
+## exit on all errors
+set -e
+
+## exit in case of usage of uninitialized variables
+set -u
+
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
-# DEBUG="true"
+DEBUG="${DEBUG:-}"
 
 
 ### generic functions
@@ -169,7 +175,7 @@ function fetch_alsa_outputinterfaces() {
 	    alsa_if_streamfile="$(return_alsa_streamfile "${alsa_dev_nr}" "${alsa_if_nr}")"
 
 	    if [[ ! "${alsa_if_streamfile}" = "${MSG_PROP_NOTAPPLICABLE}" ]]; then
-		## set interface to u(sb)o(ut)
+		## set interface to usb out
 		alsa_if_type="uo"
 		## uac devices will use the stream file instead of
 		## hwaparams file to monitor
@@ -273,10 +279,10 @@ function alsa_device_busy() {
 	p_id="${lsof_out:1:(${#p_firstline}-2)}"
 	## get second line by filtering lsof_out from (length of p_id+1)
 	p_name="${lsof_out:(${#p_firstline}+1):${#lsof_out}}"
-	printf "in use by \`${p_name}' with pid \`${p_id}'"
+	printf "in use by \`%s' with pid \`%s'" "${p_name}" "${p_id}"
     else
 	## normal user can't access lsof output of system daemons
-	printf "${MSG_RUN_AS_ROOT}"
+	printf "%s" "${MSG_RUN_AS_ROOT}"
     fi
     
 }
@@ -292,6 +298,7 @@ function return_alsa_formats() {
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     alsa_hw_device="$1"
+    format=""
     ALSA_BEFORE_FORMATS="Available formats:"
 
     aplay_out="$(cat /dev/urandom | \
@@ -407,14 +414,17 @@ function analyze_opt_limit() {
         a|analog) 
 	    OPT_LIMIT_AO="True"
 	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_AO set to \`${OPT_LIMIT_AO}'"
+	    return 0
 	    ;;
         u|usb|uac) 
 	    OPT_LIMIT_UO="True"
 	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_UO set to \`${OPT_LIMIT_UO}'"
+	    return 0
 	    ;;
         d|digital)
 	    OPT_LIMIT_DO="True"
 	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_DO set to \`${OPT_LIMIT_DO}'"
+	    return 0
 	    ;;
 	*)
 	    args=$(printf "\"%s\", " "${OPT_LIMIT_ARGS[@]}")
@@ -424,7 +434,7 @@ function analyze_opt_limit() {
 }
 
 
-function usage() {
+function display_usageinfo() {
     ## display syntax and exit
 
     msg=$(cat <<EOF
@@ -464,6 +474,8 @@ EOF
 function analyze_command_line() {
     ## parse command line arguments using bash getopts
 
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
     ## put characters in the array in a string
     shortopts=":${SHORT_OPTS[@]/ /}"
 
@@ -471,34 +483,36 @@ function analyze_command_line() {
         case "$option" in
             l) 
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug "option ${OPTIND}: \`${option}' set to \`${OPTARG}'"
+		    debug "option \`l' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_LIMIT="True"
 		analyze_opt_limit "${OPTARG}"
-
 		;;
             q)
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug "option ${OPTIND}: \`${option}' set to \`${OPTARG}'"
+		    debug "option \`q' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_QUIET=true
 		;;
             c) 
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug "option ${OPTIND}: \`${option}' set to \`${OPTARG}'"
+		    debug "option \`c' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_FILTER="${OPTARG}"
 		;;
            h|\?) 
 		done_opts=true
-		usage
+		display_usageinfo
 		;;
             *) 
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "option \`other' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		done_opts=true
+		display_usageinfo
 		;;
         esac
     done
 }
 
 function return_alsa_interface() {
-    ## main function; see usage()
+    ## main function; see display_usageinfo()
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
@@ -507,10 +521,8 @@ function return_alsa_interface() {
 
     ## parse command line arguments
     analyze_command_line "$@"
-
     ## stop pulseaudio when requested
     pulseaudio_evaluate_stopping
-
     ## create a list of alsa audio output interfaces and parse it.
     fetch_alsa_outputinterfaces
 
@@ -523,7 +535,7 @@ function return_alsa_interface() {
 	##  display information about the number of interfaces before filtering
 	[[ ! ${NR_AIFS_BEFOREFILTERING} == 0 ]] && \
 	    msg=$(printf "${MSG_MATCH_IF_NONE_LIMITED}"  "${NR_AIFS_BEFOREFILTERING}")
-	die "\n${msg}"
+	inform "\n${msg}"
     fi
     
     [[ ! -z "${DEBUG}" ]] && \
@@ -538,6 +550,7 @@ function return_alsa_interface() {
 function pulseaudio_evaluate_stopping() {
     ## evaluate if pulseaudio needs to be stopped.
 
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
     ## check if its installed
     CMD_PULSEAUDIO=$(which pulseaudio)
 
@@ -772,6 +785,8 @@ function pulseaudio_stop() {
 ## indexed arrays to store the details of interfaces of one would
 ## declare such an array in another script, that array would be filled
 ## instead of these.
+set +u 
+
 [[ -z ${ALSA_AIF_HWADDRESSES} ]] && declare -a ALSA_AIF_HWADDRESSES=()
 [[ -z ${ALSA_AIF_DISPLAYTITLES} ]] && declare -a ALSA_AIF_DISPLAYTITLES=()
 [[ -z ${ALSA_AIF_MONITORFILES} ]] && declare -a ALSA_AIF_MONITORFILES=()
@@ -780,6 +795,8 @@ function pulseaudio_stop() {
 [[ -z ${ALSA_AIF_UACCLASSES} ]] && declare -a ALSA_AIF_UACCLASSES=()
 [[ -z ${ALSA_AIF_FORMATS} ]] && declare -a ALSA_AIF_FORMATS=()
 [[ -z ${ALSA_AIF_CHARDEVS} ]] && declare -a ALSA_AIF_CHARDEVS=()
+
+set -u
 
 PA_CLIENT_CONF=${HOME}/.pulse/client.conf
 
@@ -813,8 +830,8 @@ declare -A ALSA_IF_LABELS=()
 ALSA_IF_LABELS+=(["ao"]="Analog ${ALSA_IF_LABEL}")
 ALSA_IF_LABELS+=(["do"]="Digital ${ALSA_IF_LABEL}")
 ALSA_IF_LABELS+=(["uo"]="${UAC} ${ALSA_IF_LABELS[do]}")
-ALSA_NON_DO_IF="Analog ${ALSA_IF_LABEL}"
-ALSA_NON_UO_IF="Non-UAC ${ALSA_DO_IF}"
+ALSA_NON_DO_IF="${ALSA_IF_LABELS[ao]}"
+ALSA_NON_UO_IF="Non-UAC ${ALSA_IF_LABELS[do]}"
 
 ## strings alsa uses for UAC endpoint descriptors.
 UO_EP_ADAPT_FILTER="ADAPTIVE"
@@ -854,11 +871,16 @@ none matched your filter."
 ### optional input parameters, the ones with `:' need an argument
 declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb" "uac")
 SHORT_OPTS=("l:" "c:" "q" "h")
-[[ ! -z ${OPT_LIMIT_AO} ]] && OPT_LIMIT_AO=${OPT_LIMIT_AO}
-[[ ! -z ${OPT_LIMIT_DO} ]] && OPT_LIMIT_DO=${OPT_LIMIT_DO}
-[[ ! -z ${OPT_LIMIT_UO} ]] && OPT_LIMIT_UO=${OPT_LIMIT_UO}
-[[ ! -z ${OPT_QUIET} ]] && OPT_QUIET=${OPT_QUIET}
-[[ ! -z ${OPT_FILTER} ]] && OPT_FILTER=${OPT_FILTER}
+
+OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
+OPT_DISABLE_PULSEAUDIO="${OPT_DISABLE_PULSEAUDIO:-}"
+OPT_FILTER="${OPT_FILTER:-}"
+
+OPT_LIMIT_AO=${OPT_LIMIT_AO:-}
+OPT_LIMIT_DO=${OPT_LIMIT_DO:-}
+OPT_LIMIT_UO=${OPT_LIMIT_UO:-}
+OPT_QUIET=${OPT_QUIET:-}
+OPT_FILTER=${OPT_FILTER:-}
 
 
 ## if the script is not sourced by another script but run within its
