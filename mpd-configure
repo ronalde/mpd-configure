@@ -557,6 +557,10 @@ ALSA_CAPABILITIES_SCRIPT="${SCRIPT_DIR}/${ALSA_CAPABILITIES_FILE}"
     . "${ALSA_CAPABILITIES_SCRIPT}" || \
     die "required script \`${ALSA_CAPABILITIES_SCRIPT}' not found"
 
+## ugly temporary hack; see github issue #8
+set +u
+set +e
+
 ## list of enabled configuration snippet files
 CONFS_ENABLED=${SCRIPT_DIR}/confs-enabled/*.conf
 
