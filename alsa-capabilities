@@ -32,11 +32,12 @@
 
 LANG=C
 
+## ugly temporary hack; see github issue #8
 ## exit on all errors
-set -e
+#set -e
 
 ## exit in case of usage of uninitialized variables
-set -u
+#set -u
 
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
