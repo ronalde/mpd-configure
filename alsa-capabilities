@@ -33,7 +33,6 @@
 
 LANG=C
 
-## ugly temporary hack; see github issue #8
 ## exit on all errors
 set -e
 
