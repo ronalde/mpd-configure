@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
-## This script displays a list with the audio capabilities of each
-## alsa audio output interface and stores them in arrays for use in
-## other scripts.  This functionality is exposed by the
-## `return_alsa_interface' function which is avaliable after sourcing
-## the file. When ran from a shell, it will call that function.
+## This script for linux with bash 4.x displays a list with the audio
+## capabilities of each alsa audio output interface and stores them in
+## arrays for use in other scripts.  This functionality is exposed by
+## the `return_alsa_interface' function which is avaliable after
+## sourcing the file. When ran from a shell, it will call that
+## function.
 ##
 ##  Copyright (C) 2014 Ronald van Engelen <ronalde+github@lacocina.nl>
 ##  This program is free software: you can redistribute it and/or modify
