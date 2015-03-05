@@ -507,7 +507,6 @@ function analyze_command_line() {
 		    debug "option \`other' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		done_opts=true
 		display_usageinfo
-		;;
         esac
     done
 }
