@@ -99,7 +99,11 @@ function fetch_alsa_outputinterfaces() {
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## store the output of `aplay -l`
-    aplay_output="$(${CMD_APLAY} -l)"
+    aplay_output="$(LANG=C ${CMD_APLAY} -l 2>&1)"
+    ## valid output starts with "**** List of PLAYBACK Hardware Devices ****"
+    aplay_list_re="\**.*List.*"
+    [[ "${aplay_output}" =~ ${aplay_list_re} ]] || \
+	die "alsa did not return any sound playback interface."
     declare -a aplay_lines=()
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
