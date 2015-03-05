@@ -96,7 +96,8 @@ function fetch_alsa_outputinterfaces() {
     ## stores its capabilities in the appropriate global indexed
     ## arrays and displays them.
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## store the output of `aplay -l`
     aplay_output="$(LANG=C ${CMD_APLAY} -l 2>&1)"
@@ -533,12 +534,20 @@ function return_alsa_interface() {
     ## parse command line arguments
     analyze_command_line "$@"
     ## stop pulseaudio when requested
-    pulseaudio_evaluate_stopping
+    CMD_PULSEAUDIO=$(which pulseaudio)
+    ## check if pulseaudio is installed
+    if [[ ! -z "${CMD_PULSEAUDIO}" ]]; then
+	res="$(pulseaudio_starthandler)"
+    fi
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "returned to \`${FUNCNAME}'."
+    
     ## create a list of alsa audio output interfaces and parse it.
-    fetch_alsa_outputinterfaces
+    res="$(fetch_alsa_outputinterfaces)"
 
     ## restore and restart pulseaudio if requested and command available.
-    pulseaudio_evaluate_restoring
+    #pulseaudio_evaluate_restoring
 
     ## exit with error if no matching output line was found
     if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
@@ -558,50 +567,153 @@ function return_alsa_interface() {
 }
 
 
-function pulseaudio_evaluate_stopping() {
-    ## evaluate if pulseaudio needs to be stopped.
+function pulseaudio_starthandler() {
+    ## evaluate if pulseaudio needs to be stopped and/or disabled.
+    ## flow:
+    ## 1. if non-empty OPT_DISABLE_PULSEAUDIO; set PULSEAUDIO_DISABLE_PERMANENT and pa_create_newconf
+    ## 2. if client.conf exists;  back it up
+    ## 3. if non-empty OPT_STOP_PULSEAUDIO; set pa_create_newconf
+    ## 4. if non-empty pa_create_newconf; create a new client.conf
+    ## 5. if pulse is running; stop it
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    pa_create_newconf=""
+    pa_stop="${OPT_STOP_PULSEAUDIO}"
+    PULSEAUDIO_DISABLE_PERMANENT="${OPT_DISABLE_PULSEAUDIO}"
+
+    ## 1. check if pulseaudio should be disabled permanently
+    if [[ ! -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
+	PULSEAUDIO_DISABLE_PERMANENT=True
+	pa_create_newconf=True
+	pa_stop=True
+    fi
+
+    ## if client.conf exists;  back it up
+    msg_nobackup="\`${PA_CLIENT_CONF}' not found; no need to back it up."
+    [[ -f ${PA_CLIENT_CONF} ]] && \
+	res="$(pulseaudio_backup_clientconf)" || \
+	    [[ ! -z "${DEBUG}" ]] && debug "${msg_nobackup}"
+    
+    ## if non-empty OPT_STOP_PULSEAUDIO; set pa_create_newconf
+    if [[ ! -z "${OPT_STOP_PULSEAUDIO}" ]]; then
+	pa_create_newconf=True
+	pa_stop=True
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "\`pa_create_newconf' and \`pa_stop are set'."
+	
+    else
+	msg_nostop="\`OPT_STOP_PULSEAUDIO' not initialized."
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "${msg_nostop}"
+    fi
+    
+    ## if non-empty pa_create_newconf; create a new client.conf
+    msg_createnew="will create \`${PA_CLIENT_CONF}' to keep pulseaudio from respawning."
+    msg_nocreatenew="no need to create \`${PA_CLIENT_CONF}'."
+    if [[ -z "${pa_create_newconf}" ]]; then
+	[[ ! -z "${DEBUG}" ]] && debug "${msg_nocreatenew}"
+    else
+	[[ ! -z "${DEBUG}" ]] && debug "${msg_createnew}"
+	res="$(pulseaudio_disable_respawn)"
+    fi
+    
+    ## if needed stop pulseaudio
+    [[ ! -z "${pa_stop}" ]] && res="$(pulseaudio_stop)" || printf "%s" "ok"
+    
+}
+
+function pulseaudio_backup_clientconf() {
+    ## backs up existing pulseaudio client.conf file
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+	
+    PA_CLIENT_CONF_EXISTED=True
+    msg_action="backing up ${MSG_PULSEAUDIO_CLIENTCONF} to"
+    ## construct unique name 
+    formatted_date="$(date +'%Y%m%d%k%M%S')"
+    PA_CLIENT_CONF_BACKUP="${PA_CLIENT_CONF}.ac-${formatted_date}"
+    msg_action="${msg_action} \`${PA_CLIENT_CONF_BACKUP}'"
+    ## copy the file
+    res=$(cp "${PA_CLIENT_CONF}" "${PA_CLIENT_CONF_BACKUP}")
+    if [[ "$?" = "0" ]]; then
+	[[ ! -z "${DEBUG}" ]] && debug "${msg_action} succeeded."
+	res=0
+    else
+	die "${msg_action} failed with error: \`${res}'. Backup of the original is in \`${PA_CLIENT_CONF_BACKUP}'."
+    fi
+
+}
+
+function pulseaudio_disable_respawn() {
+    ## disables spawning of pulseaudio through the client.conf file
+    ## assumes backup of existing file is made
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    ## try to create the directory for it
+    PA_CLIENT_CONFDIR="$(dirname "${PA_CLIENT_CONF}")"
+    [[ -d "${PA_CLIENT_CONFDIR}" ]] || \
+	( mkdir -p "${PA_CLIENT_CONFDIR}" || die "could not create \`${PA_CLIENT_CONFDIR}'." )
+    res=$(printf "autospawn = no\n" > "${PA_CLIENT_CONF}")
+    if [[ "$?" = "0" ]]; then
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "respawning disabled by ${msg_action} \`${PA_CLIENT_CONF}'."
+    else
+	die "${msg_action} \`${PA_CLIENT_CONF}' failed with error: \`${res}'."	
+    fi
+
+}
+
+function pulseaudio_stop() {
+    ## kill pulseaudio
+    ## assumes client.conf is modified to keep it from respawning
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-    ## check if its installed
-    CMD_PULSEAUDIO=$(which pulseaudio)
-
-    if [[ ! -z "${CMD_PULSEAUDIO}" ]]; then
-	## it is installed
-
-	## check if pulseaudio stopping is requested
-	if [[ ! -z "${OPT_STOP_PULSEAUDIO}" ||  ! -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
-
-	    ## stopping is requested
-	    ## check if it should be permanently disabled
-	    if [[ -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
-		# no disabling should be temporary
-		inform " * temporary disabling of pulseaudio requested."
-		## check if there's an existing client.conf
-		if [[ -f ${PA_CLIENT_CONF} ]]; then
-		    ## there is
-		    PA_CLIENT_CONF_EXISTED=True
-		    ## back it up
-		    pulseaudio_backup_clientconf
-		fi
-		if [[ ! -z "$(pulseaudio_is_running)" ]]; then
-		    PA_CLIENT_WAS_RUNNING=True
-		fi
-		
-	    else
-		## disabling should be permanent
-		inform " * permanent disabling of pulseaudio requested."
-	    fi
-	    
-	    ## disable respawn by modifying client.conf
-	    pulseaudio_disable_respawn
-	    
-	    ## stop it
-	    pulseaudio_stop
-	    
+    
+    ## check if pulseaudio is running
+    pa_running="$(pulseaudio_is_running)"
+    pa_pid="${pa_running}"
+    if [[ ! -z "${pa_running}" ]]; then
+	## it is; try to kill it
+	res=$(${CMD_PULSEAUDIO} --kill)
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "returned to \`${FUNCNAME}' with arguments \`$*'"	
+	## check if that worked
+	pa_running="$(pulseaudio_is_running)"
+	if [[ -z "${pa_running}" ]]; then
+	    msg_pa_stop="succesfully killed pulseaudio with pid \`${pa_pid}'."
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "${msg_pa_stop}"
+	    printf "%s" "${msg_pa_stop}"
+	else
+	    die "could not kill pulseaudio, error: \`${res}'."
 	fi
     else
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "no pulseaudio command found in path."
+	[[ ! -z "${DEBUG}" ]] && \	
+	debug "no need to stop pulseaudio; it wasn't running."
+    fi
+
+}
+
+
+function pulseaudio_is_running() {
+    ## returns pid of pulseaudio if running, otherwise empty
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    
+    pa_running="$(pgrep -u ${USER} pulseaudio)"
+    if [[ -z "${pa_running}" ]] ; then
+	## it's not running
+	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is not running"
+	printf ""
+    else
+	## it is running; return its pid
+	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is running with pid \`${pa_running}'"
+	printf "%s" "${pa_running}"
 	
     fi
 
@@ -611,43 +723,35 @@ function pulseaudio_evaluate_stopping() {
 function pulseaudio_evaluate_restoring() {
     ## evaluate if pulseaudio needs to be restored
 
-    if [[ ! -z "${CMD_PULSEAUDIO}" ]]; then
+    ## check if restoring of conf and/or running state is required
+    if [[ ! -z "${PA_CLIENT_CONF_EXISTED}" || ! -z "${PA_CLIENT_WAS_RUNNING}" ]]; then
 
-
-	## check if restoring is required
-	if [[ ! -z "${OPT_STOP_PULSEAUDIO}" && -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
-	    ## it is
+	## check if it was temporary stopped or disabled
+	#if [[ ! -z "${OPT_STOP_PULSEAUDIO}" && -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
+	if [[ ! -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
+	    ## disabled; restore the backed up conf file
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "restoring of pulseaudio requested."
+		debug "recover from pulseaudio disabling."
 	    
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "\`OPT_DISABLE_PULSEAUDIO' not set, will restore pulseaudio."
-	    if [[  -z "${PA_CLIENT_CONF_EXISTED}" ]]; then
-		## client.conf is generated by script, remove it
-		rm "${PA_CLIENT_CONF}"
-	    else
-		## restore original
 		pulseaudio_restore_clientconf
-	    fi
+	fi
+	if [[ ! -z "${PA_CLIENT_WAS_RUNNING}" ]]; then
 	    
-	    if [[ ! -z "${PA_CLIENT_WAS_RUNNING}" ]]; then
-		## restart it
-		[[ ! -z "${DEBUG}" ]] && \
-		    debug "pulseaudio was running: restart it."
-		
-		pulseaudio_start
-	    else
-		[[ ! -z "${DEBUG}" ]] && \
-		    debug "pulseaudio was not running before: don't restart it."
-		
-	    fi
+	    ## restart it
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "pulseaudio was running: restart it."
+	    
+	    pulseaudio_start
+	else
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "pulseaudio was not running before: don't restart it."
 	    
 	fi
-
+	    
     else
 	[[ ! -z "${DEBUG}" ]] && \
-	    debug "no pulseaudio command found in path."
-	
+	    debug "pulseaudio restore not needed."
+
     fi
     
 }
@@ -658,49 +762,32 @@ function pulseaudio_restore_clientconf() {
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
+    msg_backup="backup of pulseaudio configuration file \`${PA_CLIENT_CONF_BACKUP}'"
     cp -av "${PA_CLIENT_CONF_BACKUP}" "${PA_CLIENT_CONF}"
     res="$?"
     if [[ "${res}" = "0" ]]; then
 	## succesfully copied back to client.conf
 	[[ ! -z "${DEBUG}" ]] && \
-	    debug "\`${PA_CLIENT_CONF_BACKUP}' restored to \`${PA_CLIENT_CONF}'."
+	    debug "${msg_backup} restored to \`${PA_CLIENT_CONF}'."
 	## remove the backup
 	rm "${PA_CLIENT_CONF_BACKUP}"
 	rmres="$?"
 	if [[ "$?" = "0" ]]; then
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "backup conf \`${PA_CLIENT_CONF_BACKUP}' removed."
+		debug "${msg_backup} removed."
 	else
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "removal of \`${PA_CLIENT_CONF_BACKUP}' failed with error: \`${rmres}'."
+		die "removal of ${msg_backup} failed with error: \`${rmres}'."
 	fi
 	
     else
 	## error restoring
 	[[ ! -z "${DEBUG}" ]] && \
-	    debug "copying \`${PA_CLIENT_CONF_BACKUP}' to \`${PA_CLIENT_CONF}' \
-failed with error \`${res}'"
+	    die "${msg_fail} \`${res}'"
     fi
    
 }
 
-
-function pulseaudio_is_running() {
-    ## returns pid of pulseaudio if running, otherwise empty
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-    
-
-    pa_running="$(pgrep -u ${USER} pulseaudio)"
-    ## return its pid
-    if [[ ! -z "${pa_running}" ]] ; then
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is running: \`${pa_running}'"
-	printf "%s" "${pa_running}"
-    else
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is not running"
-    fi
-
-}
 
 function pulseaudio_start() {
     ## start pulseaudio
@@ -716,75 +803,9 @@ function pulseaudio_start() {
 	res=$(${CMD_PULSEAUDIO} --start)
 	if [[ ! -z "$(pulseaudio_is_running)" ]]; then	
 	    [[ ! -z "${DEBUG}" ]] && debug "pulseaudio started."
+	    res=0
 	else
-	    [[ ! -z "${DEBUG}" ]] && debug "pulseaudio could not be started."
-	fi
-    fi
-
-}
-
-function pulseaudio_disable_respawn() {
-    ## disables spawning of pulseaudio
-
-    ## create or overwrite the pulseaudio configuration file
-    res=$(printf "autospawn = no\n" > "${PA_CLIENT_CONF}")
-    if [[ "$?" = "0" ]]; then
-	[[ ! -z "${DEBUG}" ]] && debug "respawning disabled by modifying \`${PA_CLIENT_CONF}'."
-	## return true
-	printf "0"
-    else
-	[[ ! -z "${DEBUG}" ]] && debug "modifying \`${PA_CLIENT_CONF}' failed with error: \`${res}'."	
-    fi
-
-}
-
-
-function pulseaudio_backup_clientconf() {
-    ## backes up client.conf
-
-    if [[ -f "${PA_CLIENT_CONF}" ]] ; then    
-	formatted_date="$(date +'%Y%m%d%k%M%S')"
-	PA_CLIENT_CONF_BACKUP="${HOME}/.pulse/client.conf.backup-${formatted_date}"
-	res=$(cp "${PA_CLIENT_CONF}" "${PA_CLIENT_CONF_BACKUP}")
-	if [[ "$?" = "0" ]]; then
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "pulseaudio configuration backed up to \`${PA_CLIENT_CONF_BACKUP}'."
-	    printf "0"
-	else
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "could not copy \`${PA_CLIENT_CONF}' to \`${PA_CLIENT_CONF_BACKUP}. \
-failed with error: \`${res}'."
-	fi
-
-    fi
-
-}
-
-
-function pulseaudio_stop() {
-    ## temporary keep pulseaudio from respawning and stop it
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
-    ## check if its running
-    pa_running="$(pulseaudio_is_running)"
-    if [[ -z "${pa_running}" ]]; then
-	## it isn't
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is not running."
-    else
-	## it is
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is running."
-
-	## kill pulseaudio
-	res=$(${CMD_PULSEAUDIO} --kill)
-
-	## check if that worked
-	if [[ -z "$(pulseaudio_is_running)" ]]; then
-	    [[ ! -z "${DEBUG}" ]] && debug "pulseaudio killed."
-	else
-	    [[ ! -z "${DEBUG}" ]] && debug "could not kill pulseaudio, error: \`${res}'."
-		## restore to situation before running script
-		pulseaudio_restore
+	    inform "pulseaudio could not be started."
 	fi
     fi
 
@@ -810,6 +831,7 @@ set +u
 set -u
 
 PA_CLIENT_CONF=${HOME}/.pulse/client.conf
+PA_CLIENT_CONF_BACKUP=""
 
 ## counter for unfiltered interfaces
 NR_AIFS_BEFOREFILTERING=0
@@ -877,6 +899,8 @@ MSG_MARGIN="${MSG_TAB//\*/ }"
 MSG_MATCH_IF_NONE_UNLIMITED="${MSG_TAB}No ${ALSA_IF_LABEL}s found."
 MSG_MATCH_IF_NONE_LIMITED="${MSG_TAB}From the %s available ${ALSA_IF_LABEL}s, \
 none matched your filter."
+MSG_PULSEAUDIO_CLIENTCONF="pulseaudio client configuration file \`${PA_CLIENT_CONF}'"
+
 
 ## command line options
 ### optional input parameters, the ones with `:' need an argument
