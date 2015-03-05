@@ -71,11 +71,16 @@ function command_not_found() {
 
     command="$1"
     package="$2"
-    instructions="$3"
-    msg="Error: command \`${command}' not found. "
+    instructions="${3:-}"
+    msg="required command \`${command}' not found.\n\n"
     if [[ -z "${instructions}" ]]; then
-	msg+="Users of Debian (or deratives, like Ubuntu) can install it with:\n"
-	msg+=" sudo apt-get install ${package}"
+	msg+="This may be installed as follows.\n\n"
+	msg+="On platforms with \`apt-get' (like Debian and Ubuntu):\n"
+	msg+=" sudo apt-get install ${package}\n\n"
+	msg+="On platforms with \`pacman' (like Arch):\n"
+	msg+=" sudo pacman -S ${package}\n\n"
+	msg+="On platforms with \`yum' (like Fedora and Red Hat):\n"
+	msg+=" sudo yum install ${package}\n\n"
     else
 	msg+="${instructions}"
     fi
@@ -515,10 +520,12 @@ function analyze_command_line() {
 function return_alsa_interface() {
     ## main function; see display_usageinfo()
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## check if needed commands are available
-    CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+    CMD_APLAY=$(which aplay || \
+		       command_not_found "aplay" "alsa-utils")
 
     ## parse command line arguments
     analyze_command_line "$@"
