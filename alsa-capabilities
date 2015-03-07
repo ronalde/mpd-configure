@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+## exit in case of usage of uninitialized variables
+set -u
+## exit on all errors
+set -e
 
 ## This script for linux with bash 4.x displays a list with the audio
 ## capabilities of each alsa audio output interface and stores them in
@@ -32,12 +36,6 @@
 ## - `uo' > usb audio class digital outputs
 
 LANG=C
-
-## exit on all errors
-set -e
-
-## exit in case of usage of uninitialized variables
-set -u
 
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
@@ -102,20 +100,21 @@ function fetch_alsa_outputinterfaces() {
     ## store the output of `aplay -l`
     aplay_output="$(LANG=C ${CMD_APLAY} -l 2>&1)"
     ## valid output starts with "**** List of PLAYBACK Hardware Devices ****"
-    aplay_list_re="\**.*List.*"
-    [[ "${aplay_output}" =~ ${aplay_list_re} ]] || \
+    [[ "${aplay_output}" =~ "**** List".* ]] || \
 	die "alsa did not return any sound playback interface."
     declare -a aplay_lines=()
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
 
-    ## iterate each line of aplay output
+    ## iterate each line of aplay output to create an array containing
+    ## the lines that describe an interface
     while read -r line ; do 
 	## filter for `^card' and then for `OPT_FILTER' to get matching
 	## lines from aplay and store them in an array
 	if [[ "${line}" =~ "card "[0-99]":" ]]; then
 
-	    [[ ! -z "${DEBUG}" ]] && debug  "Inspecting interface: ${line}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug  "Inspecting interface: ${line}"
 
 	    ## raise the counter for interfaces without filtering
 	    let NR_AIFS_BEFOREFILTERING+=1
@@ -123,14 +122,15 @@ function fetch_alsa_outputinterfaces() {
 	    ## check if line matches `OPT_FILTER'
 	    if [[ -z "${OPT_FILTER}"  || \
 		"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
-		[[ ! -z "${DEBUG}" ]] && debug  "               match: ${line}"
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug  "               match: ${line}"
 		## store the line in an array
 		aplay_lines+=("${line}")
 	    fi
 	fi
     done <<< "${aplay_output}"
 
-    ## loop through each item in the array
+    ## iterate each item in the aaray to parse the properties of each interface
     for line in "${aplay_lines[@]}"; do 
 	## set if type to default (ie analog)
 	alsa_if_type="ao"
@@ -215,15 +215,18 @@ function fetch_alsa_outputinterfaces() {
 	case "${alsa_if_type}" in
 	    "ao")
 		## only if neither `OPT_LIMIT_DO' and `OPT_LIMIT_UO' are set
-		[[ ! -z ${OPT_LIMIT_DO} || ! -z ${OPT_LIMIT_UO} ]] && continue || match="true"
+		[[ ! -z ${OPT_LIMIT_DO} || ! -z ${OPT_LIMIT_UO} ]] && \
+		    continue || match="true"
 		;;
 	    "do")
 		## only if neither `OPT_LIMIT_AO' and `OPT_LIMIT_UO' are set
-		[[ ! -z ${OPT_LIMIT_AO} || ! -z ${OPT_LIMIT_UO} ]] && continue || match="true"
+		[[ ! -z ${OPT_LIMIT_AO} || ! -z ${OPT_LIMIT_UO} ]] && \
+		    continue || match="true"
 		;;
 	    "uo")
 		## only if `OPT_LIMIT_AO' is not set
-		[[ ! -z ${OPT_LIMIT_AO} ]] && continue || match="true"
+		[[ ! -z ${OPT_LIMIT_AO} ]] && \
+		    continue || match="true"
 	esac
 
 	if [[ ! -z "${match}" ]]; then
@@ -235,7 +238,14 @@ function fetch_alsa_outputinterfaces() {
 		"${#ALSA_AIF_HWADDRESSES[@]}" "${alsa_if_title_label}" "${alsa_if_hwaddress}")
 
 	    ## store the details of the current interface in global arrays
-	    ALSA_AIF_HWADDRESSES+=("${alsa_if_hwaddress}")
+	    if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
+		inform "fetch: first time"
+		ALSA_AIF_HWADDRESSES=( "${alsa_if_hwaddress}" ) 
+		else
+		inform "fetch: conseq. time"
+		ALSA_AIF_HWADDRESSES+=("${alsa_if_hwaddress}")
+	    fi
+	    inform "count in fetch: ${#ALSA_AIF_HWADDRESSES[@]}"
 	    ALSA_AIF_MONITORFILES+=("${alsa_if_monitorfile}")
 	    ALSA_AIF_DISPLAYTITLES+=("${alsa_if_display_title}")
 	    ALSA_AIF_DEVLABELS+=("${alsa_dev_label}")
@@ -261,11 +271,11 @@ EOF
 ) 
 	    ## echo it to std_err
 	    inform "${alsa_details_output}"
-
 	fi
 
     done
-
+    # return lenght of the aifs array
+    printf "%s" "${#ALSA_AIF_HWADDRESSES[@]}"
 }
 
 
@@ -424,17 +434,20 @@ function analyze_opt_limit() {
     case ${opt_limit} in
         a|analog) 
 	    OPT_LIMIT_AO="True"
-	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_AO set to \`${OPT_LIMIT_AO}'"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "OPT_LIMIT_AO set to \`${OPT_LIMIT_AO}'"
 	    return 0
 	    ;;
         u|usb|uac) 
 	    OPT_LIMIT_UO="True"
-	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_UO set to \`${OPT_LIMIT_UO}'"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "OPT_LIMIT_UO set to \`${OPT_LIMIT_UO}'"
 	    return 0
 	    ;;
         d|digital)
 	    OPT_LIMIT_DO="True"
-	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_DO set to \`${OPT_LIMIT_DO}'"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "OPT_LIMIT_DO set to \`${OPT_LIMIT_DO}'"
 	    return 0
 	    ;;
 	*)
@@ -548,9 +561,11 @@ function return_alsa_interface() {
 
     ## restore and restart pulseaudio if requested and command available.
     #pulseaudio_evaluate_restoring
-
+    inform "return: res=\`${res}'"
     ## exit with error if no matching output line was found
-    if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
+    inform "count in return: ${#ALSA_AIF_HWADDRESSES[@]}"
+    inform "contents in return: ${ALSA_AIF_HWADDRESSES[@]}"
+    if [[ "${res}" = "0" ]]; then
 	msg="\n${MSG_MATCH_IF_NONE_UNLIMITED}"
 	##  display information about the number of interfaces before filtering
 	[[ ! ${NR_AIFS_BEFOREFILTERING} == 0 ]] && \
@@ -559,7 +574,7 @@ function return_alsa_interface() {
     fi
     
     [[ ! -z "${DEBUG}" ]] && \
-	debug "Number of audio interfaces after filtering: ${#ALSA_AIF_HWADDRESSES[@]}"
+	debug "Number of audio interfaces after filtering: ${res}"
 
     ## return success if interfaces are found
     return 0
@@ -811,24 +826,45 @@ function pulseaudio_start() {
 
 }
 
+function clean_up() {
+
+    # restore pulse
+    res=0
+}
 
 ### global variables
 
 ## indexed arrays to store the details of interfaces of one would
 ## declare such an array in another script, that array would be filled
 ## instead of these.
-set +u 
+#set +u 
 
-[[ -z ${ALSA_AIF_HWADDRESSES} ]] && declare -a ALSA_AIF_HWADDRESSES=()
-[[ -z ${ALSA_AIF_DISPLAYTITLES} ]] && declare -a ALSA_AIF_DISPLAYTITLES=()
-[[ -z ${ALSA_AIF_MONITORFILES} ]] && declare -a ALSA_AIF_MONITORFILES=()
-[[ -z ${ALSA_AIF_DEVLABELS} ]] && declare -a ALSA_AIF_DEVLABELS=()
-[[ -z ${ALSA_AIF_LABELS} ]] && declare -a ALSA_AIF_LABELS=()
-[[ -z ${ALSA_AIF_UACCLASSES} ]] && declare -a ALSA_AIF_UACCLASSES=()
-[[ -z ${ALSA_AIF_FORMATS} ]] && declare -a ALSA_AIF_FORMATS=()
-[[ -z ${ALSA_AIF_CHARDEVS} ]] && declare -a ALSA_AIF_CHARDEVS=()
+#ALSA_AIF_HWADDRESSES=${ALSA_AIF_HWADDRESSES[@]:-}
+
+[[ -z "${ALSA_AIF_HWADDRESSES[@]:+${ALSA_AIF_HWADDRESSES[@]}}" ]] && \
+#    ( debug "empty array" && declare -a ALSA_AIF_HWADDRESSES=() )
+    debug "empty but working? : \`${ALSA_AIF_HWADDRESSES[@]:+${ALSA_AIF_HWADDRESSES[@]}}' " || \
+	debug "still empty? : \`${#ALSA_AIF_HWADDRESSES[@]}' "
+
+set +u
+[[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]] && declare -a ALSA_AIF_HWADDRESSES=()
+#[[ -z ${ALSA_AIF_DISPLAYTITLES} ]] && declare -a ALSA_AIF_DISPLAYTITLES=()
+#[[ -z ${ALSA_AIF_MONITORFILES} ]] && declare -a ALSA_AIF_MONITORFILES=()
+#[[ -z ${ALSA_AIF_DEVLABELS} ]] && declare -a ALSA_AIF_DEVLABELS=()
+#[[ -z ${ALSA_AIF_LABELS} ]] && declare -a ALSA_AIF_LABELS=()
+#[[ -z ${ALSA_AIF_UACCLASSES} ]] && declare -a ALSA_AIF_UACCLASSES=()
+#[[ -z ${ALSA_AIF_FORMATS} ]] && declare -a ALSA_AIF_FORMATS=()
+#[[ -z ${ALSA_AIF_CHARDEVS} ]] && declare -a ALSA_AIF_CHARDEVS=()
+
+#trap clean_up EXIT
 
 set -u
+
+if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
+    inform "fetch: first time"
+    ALSA_AIF_HWADDRESSES=( "0" )
+fi
+
 
 PA_CLIENT_CONF=${HOME}/.pulse/client.conf
 PA_CLIENT_CONF_BACKUP=""
@@ -920,5 +956,15 @@ OPT_FILTER=${OPT_FILTER:-}
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
-[[ "${BASH_SOURCE[0]}" != "${0}" ]] || return_alsa_interface "$@"
+if [[ "${BASH_SOURCE[0]}" = "${0}" ]]; then
+
+    #[[ ! -z "${DEBUG}" ]] && \
+    debug "started as own script; initialize arrays."
+    
+    return_alsa_interface "$@"
+else
+    #[[ ! -z "${DEBUG}" ]] && \
+	debug "sourced; do not initialize arrays."
+    
+fi
 
