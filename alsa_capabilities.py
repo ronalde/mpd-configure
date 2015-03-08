@@ -41,9 +41,9 @@ class class_alsa_interface:
         self.uacclass = "(not yet implemented)"
         self.electrical = ""
         if re.search('.*[Aa][Nn][Aa][Ll][Oo][Gg].*', self.displaylabel):
-            self.electrical = "Digital"
-        else:
             self.electrical = "Analog"
+        else:
+            self.electrical = "Digital"
         self.interfacetype = "{} audio output interface (direct access)".format(self.electrical)
 
         self.streamfile = os.path.join('/', 'proc', 'asound', 'card{0}'.format(self.cardnr), 'pcm{0}p'.format(self.devicenr), 'sub0', 'hw_params')
