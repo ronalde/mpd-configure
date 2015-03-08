@@ -70,8 +70,6 @@ class class_alsa_interface:
         self.chardev_accessible = ( len(self.sampleformats_error) == 0 )
 
             
-        self.printlist()
-
     def printlist(self):
         msg_chardev_accessible="in use"
         if self.chardev_accessible:
@@ -184,6 +182,7 @@ def main():
         if re.split(r' ', line.decode())[0] == "card":
             #print("Main: interface line found")
             aif = class_alsa_interface(line)
+            aif.printlist()
         
 
 main()
