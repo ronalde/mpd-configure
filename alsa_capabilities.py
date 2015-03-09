@@ -45,8 +45,10 @@ class class_alsa_interface:
         self.chardev = os.path.join('/', 'dev', 'snd', "pcmC{0}D{1}p".format(self.cardnr, self.devicenr))
 
         uac_kernel_driver="snd_usb_audio"
-        self.uac_class = self.get_uac_class()
-        self.uac_driver_nrpacks = self.get_kernel_parameter(uac_kernel_driver, "nrpacks")        
+        self.uac_class = ""
+        self.is_uac = self.get_uac_class()
+        if self.is_uac:
+            self.uac_driver_nrpacks = self.get_kernel_parameter(uac_kernel_driver, "nrpacks")        
         
         self.electrical_interface = ""
         self.get_electrical_interface()
@@ -195,6 +197,8 @@ USB"""
     def get_uac_class(self):
         # returns a list containing class ID and description
 
+        uac_result=False
+        uac_result_msg=""
         msg_uac_iso="isochronous"
         usbout_classes={}
         usbout_classes["ADAPTIVE"] = [1, "{} adaptive".format(msg_uac_iso) ]
@@ -208,11 +212,19 @@ USB"""
             with open (streamfile_path, "r") as streamfile_file:
                 uac_streamfile_contents=streamfile_file.read().strip()
                 uac_synctype_raw = re.split('.*Endpoint.*\((.*)\)', uac_streamfile_contents)[1]
-                uac_result=usbout_classes[uac_synctype_raw]
-        except:
-            uac_result=["unable to determine", "could not open `{}' for reading".format(streamfile_path)]
+                uac_result=True
+                uac_result_msg='{}: {}'.format(str(usbout_classes[uac_synctype_raw][0]), usbout_classes[uac_synctype_raw][1])
 
-        return "{} ({})".format(uac_result[0], uac_result[1])
+        except IOError, e:
+            ## device is not uac
+            uac_result_msg="(not applicable: {} / {})".format(e, str(e.errno))
+        #except:
+            ## TODO: other files than 'stream0'?
+         #   uac_result=True            
+          #  uac_result="unable to determine, could not open `{}' for reading".format(streamfile_path)
+
+        self.uac_class=uac_result_msg
+        return uac_result
 
         
 
