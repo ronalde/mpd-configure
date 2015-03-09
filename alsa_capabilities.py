@@ -215,9 +215,9 @@ USB"""
                 uac_result=True
                 uac_result_msg='{}: {}'.format(str(usbout_classes[uac_synctype_raw][0]), usbout_classes[uac_synctype_raw][1])
 
-        except IOError, e:
+        except IOError as err:
             ## device is not uac
-            uac_result_msg="(not applicable: {} / {})".format(e, str(e.errno))
+            uac_result_msg="(not applicable: {} / {})".format(err, str(err.errno))
         #except:
             ## TODO: other files than 'stream0'?
          #   uac_result=True            
