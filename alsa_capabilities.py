@@ -1,12 +1,12 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os, stat
 import sys
-import shutil
+#import shutil
 import subprocess
-import tempfile
-import errno
+#import tempfile
+#import errno
 import re
 import socket # for getting the hostname
 from signal import signal, SIGPIPE, SIG_DFL
@@ -19,88 +19,124 @@ class class_alsa_interface:
     `card 0: MID [HDA Intel MID], device 0: ALC888 Analog [ALC888 Analog]'."""
 
     def __init__(self, rawoutputline):
-        #, monitor, device_label, label, uacclass, audioformat, chardev):
+        #, monitor, device_label, label, uac_class, audioformat, chardev):
         self.rawoutputline = rawoutputline.decode().split(',')
         self.cardfull = self.rawoutputline[0].strip()
         self.cardarray = self.cardfull.strip().split(':')
         self.cardnr = self.cardarray[0].strip().split(' ')[1].strip()
-        self.cardname = re.split(r'[\[\]]', self.cardarray[1])[1].strip()
+        self.cardname_raw = re.split(r'[\[\]]', self.cardarray[1])
+        self.cardname_system = self.cardname_raw[0].strip()        
+        self.cardname_label = self.cardname_raw[1].strip()
         
         self.devicefull = self.rawoutputline[1].strip()
         self.devicearray = self.devicefull.strip().split(':')
         self.devicenr = self.devicearray[0].strip().split(' ')[1].strip()
-        self.devicename = re.split(r'[\[\]]', self.devicearray[1])[1].strip()
+        self.devicename_raw = re.split(r'[\[\]]', self.devicearray[1])
+        self.devicename_system = self.devicename_raw[0].strip()
+        self.devicename_label = self.devicename_raw[1].strip()
+
 
         
         self.address = "hw:{0},{1}".format(self.cardnr, self.devicenr)
 
-        self.displaylabel = "`{}' output of sound device `{}' on host `{}'".format(self.devicename, self.cardname, socket.gethostname())
+        self.displaylabel = "`{}' output of sound device `{}' on host `{}'".format(self.devicename_label, self.cardname_label, socket.gethostname())
+
 
         self.chardev = os.path.join('/', 'dev', 'snd', "pcmC{0}D{1}p".format(self.cardnr, self.devicenr))
 
-        self.uacclass = "(not yet implemented)"
-        self.electrical = ""
-        if re.search('.*[Aa][Nn][Aa][Ll][Oo][Gg].*', self.displaylabel):
-            self.electrical = "Analog"
-        else:
-            self.electrical = "Digital"
-        self.interfacetype = "{} audio output interface (direct access)".format(self.electrical)
+        uac_kernel_driver="snd_usb_audio"
+        self.uac_class = self.get_uac_class()
+        self.uac_driver_nrpacks = self.get_kernel_parameter(uac_kernel_driver, "nrpacks")        
+        
+        self.electrical_interface = ""
+        self.get_electrical_interface()
+        
+        #self.interfacetype = "{}".format(self.electrical_interface)
 
-        self.streamfile = os.path.join('/', 'proc', 'asound', 'card{0}'.format(self.cardnr), 'pcm{0}p'.format(self.devicenr), 'sub0', 'hw_params')
+        self.monitorfile = os.path.join('/', 'proc', 'asound', 'card{0}'.format(self.cardnr), 'pcm{0}p'.format(self.devicenr), 'sub0', 'hw_params')
+        self.streamfile = self.monitorfile
         try:
-            self.streamfile_accessible=stat.S_ISCHR(os.stat(self.streamfile).st_mode)
-            self.streamfile_accessible=True
+            self.monitorfile_accessible=stat.S_ISCHR(os.stat(self.monitorfile).st_mode)
+            self.monitorfile_accessible=True
             try: 
-                with open (self.streamfile, "r") as hw_params:
+                with open (self.monitorfile, "r") as hw_params:
                     data=hw_params.read().replace('\n', '')
                     if data == "closed":
-                        self.streamfile_status="closed"
+                        self.monitorfile_status="closed"
                     else:
-                        self.streamfile_status="opened"
+                        self.monitorfile_status="opened"
             except:
-                self.streamfile_accessible=False
-                self.streamfile_status="(unknown)"
+                self.monitorfile_accessible=False
+                self.monitorfile_status="(unknown)"
         except:
-            self.streamfile_accessible=False
-            self.streamfile_status="(unknown)"
+            self.monitorfile_accessible=False
+            self.monitorfile_status="(unknown)"
             
         self.sampleformats_error = ""
         self.sampleformats = self.get_sampleformats()
         
         self.chardev_accessible = ( len(self.sampleformats_error) == 0 )
 
-            
+    def get_electrical_interface(self):
+        found_digital  = False
+        eif_suffix="audio output interface"
+        filter_digital="""ADAT
+AES
+EBU
+AES/EBU
+Digital
+DSD
+HDMI
+i2s
+iec958
+SPDIF
+s/pdif
+Toslink
+UAC
+USB"""
+        for line in iter(filter_digital.splitlines()):
+            if re.search(line, self.displaylabel, re.IGNORECASE):
+                #print("found: {}".format(line))
+                if line == "Digital":
+                    self.electrical_interface = "Digital {}".format(eif_suffix)
+                else:
+                    self.electrical_interface = "Digital ({}) {}".format(line, eif_suffix)                  
+                found_digital = True
+                break
+        
+        if not found_digital:
+            if re.search("analog", self.displaylabel, re.IGNORECASE):
+                self.electrical_interface = "Analog {}".format(eif_suffix)
+            else:
+                self.electrical_interface = "Unknown"
+
+        
     def printlist(self):
         msg_chardev_accessible="in use"
         if self.chardev_accessible:
             msg_chardev_accessible="not {}".format(msg_chardev_accessible)
 
-        msg_streamfile_accessible="accessible"
-        if not self.streamfile_accessible:
-            msg_streamfile_accessible="not {}".format(msg_streamfile_accessible)
+        msg_monitorfile_accessible="accessible"
+        if not self.monitorfile_accessible:
+            msg_monitorfile_accessible="not {}".format(msg_monitorfile_accessible)
 
            
         print("* {}".format(self.displaylabel))
         print("  - hardware address  = {}".format(self.address))
-
-        print("  - sample formats    = {}".format(', '.join(self.sampleformats)))
-        print("  - usb audio class   = {}".format(self.uacclass))
+        print("  - electrical        = {}".format(self.electrical_interface))        
         print("  - character device  = {} ({})".format(self.chardev, msg_chardev_accessible))
-        print("  - stream file       = {} ({}, {})".format(self.streamfile, msg_streamfile_accessible, self.streamfile_status))
+        print("  - monitor file      = {} ({}, {})".format(self.monitorfile, msg_monitorfile_accessible, self.monitorfile_status))
+        print("  - usb audio class   = {}".format(self.uac_class))
+        print("  - sample formats    = {}".format(', '.join(self.sampleformats)))        
         
-        print("  - device type       = {}".format(self.interfacetype))
         #print("  - sound device            = {}".format(self.cardname))
-        #print("  - output interface        = {}".format(self.devicename))
         print("")
         
-        #self.monitor = self.getprop('monitor')
-        #self.device_label = '' # device_label
-        #self.label = label
-        #self.uacclass = self.get_uacclass
-        #self.audioformat = audioformat
 
     def inspect_chardev(self):
         processes = []
+        pname = ""
+        pid=""
         cmd_lsof_chardev='/usr/bin/sudo /usr/bin/lsof -F c /dev/snd/pcmC{0}D{1}p 2>/dev/null'.format(self.cardnr, self.devicenr)
         #print(cmd_lsof_chardev)
         proc = subprocess.Popen(cmd_lsof_chardev.encode(),
@@ -111,7 +147,14 @@ class class_alsa_interface:
         stdout_value, stderr_value = proc.communicate(b'bla')
         #print("stdout: {}".format(stdout_value))
         #print("stderr: {}".format(stderr_value))
-        
+        for line in stdout_value.decode().splitlines():
+            match = re.match(r'^(?P<key>[cp])(?P<value>.*)',line)
+            if match:
+                if match.group('key') == "p": pid=match.group('value')
+                if match.group('key') == "c": pname=match.group('value')
+                result = "process `{}' with pid `{}'".format(pname, pid)
+
+        return result
         
         
     def get_sampleformats(self):
@@ -127,25 +170,89 @@ class class_alsa_interface:
         stdout_value, stderr_value = proc.communicate(b'bla')
         #print("stdout: {}".format(stdout_value))
         #print("stderr: {}".format(stderr_value))
-        if re.search('.*[Ee]rror.*', stderr_value.decode()):
+        sampleformats=[]
+        if re.search('Available formats.*', stderr_value.decode()):
+      
+            ## the lines in stderr starting with `- ' (after "Available formats:") 
+            ## contain the available sample formats
+            subscript_raw_output=stderr_value.decode().splitlines()
+
+            for line in subscript_raw_output:
+                match = re.match('- (.*)',line)
+                if match:
+                    sampleformats.append(match.group(1))
+        else:
             ## aplay reported an error for this card
             ## errors are reported after the linenumber;
             ## use that to extract the message
             self.sampleformats_error = re.split('[0-9]:',stderr_value.decode())[1].strip()
-            sampleformats=['(device is in use, can\'t detect)']
-            self.inspect_chardev()
-            
-        else:
-            ## the lines in stderr after the third one ("Available formats:")
-            ## contains the avaliable sample formats
-            subscript_output=stderr_value.decode().splitlines()[3:]
-            #print(subscript_output)
-            ## extract the real values (each line contains "- SOMEFORMAT")
-            ## and store them in a list
-            sampleformats=[l.split('- ')[1] for l in subscript_output]
+            pname=self.inspect_chardev()
+            sampleformats=['can\'t detect, device is in use by {})'.format(pname)]
+
             
         return sampleformats
+
+    def get_uac_class(self):
+        # returns a list containing class ID and description
+
+        msg_uac_iso="isochronous"
+        usbout_classes={}
+        usbout_classes["ADAPTIVE"] = [1, "{} adaptive".format(msg_uac_iso) ]
+        usbout_classes["ASYNC"] = [2, "{} asynchronous".format(msg_uac_iso) ]
+        streamfile_path = os.path.join("/","proc","asound","card{0}".format(self.cardnr), "stream0")
         
+        self.uac_transfertype = "" # isochronous (| bulk)
+        self.uac_synchtype = ""    # adaptive | asynchronous
+
+        try: 
+            with open (streamfile_path, "r") as streamfile_file:
+                uac_streamfile_contents=streamfile_file.read().strip()
+                uac_synctype_raw = re.split('.*Endpoint.*\((.*)\)', uac_streamfile_contents)[1]
+                uac_result=usbout_classes[uac_synctype_raw]
+        except:
+            uac_result=["unable to determine", "could not open `{}' for reading".format(streamfile_path)]
+
+        return "{} ({})".format(uac_result[0], uac_result[1])
+
+        
+
+        
+    def get_kernel_parameter(self, driver, parameter):
+        ## returns the value of a parameter for a specific driver from sys
+      
+        parameter_path = os.path.join("/", "sys", "module", driver, "parameters", parameter)
+        try: 
+            with open (parameter_path, "r") as parameter_file:
+                result=parameter_file.read().strip()
+        except:
+            result="could not open `{}' for reading".format(parameter_path)
+
+        return result
+                
+          
+    
+    def iterate_fds(pid):
+        # source: http://stackoverflow.com/questions/11114492/check-if-a-file-is-not-open-not-used-by-other-process-in-python/11115521#11115521
+        dir = '/proc/'+str(pid)+'/fd'
+        if not os.access(dir,os.R_OK|os.X_OK): return
+
+        for fds in os.listdir(dir):
+            for fd in fds:
+                full_name = os.path.join(dir, fd)
+                try:
+                    file = os.readlink(full_name)
+                    if file == '/dev/null' or \
+                       re.match(r'pipe:\[\d+\]',file) or \
+                       re.match(r'socket:\[\d+\]',file):
+                        file = None
+                except OSError as err:
+                    if err.errno == 2:     
+                        file = None
+                    else:
+                        raise(err)
+                    
+                yield (fd,file)        
+
     
 class class_alsa_system:
     """A class to hold information about a system running alsa."""
@@ -160,9 +267,9 @@ class class_alsa_system:
         filecounter = 0
         
 
-    def list_interfaces(self):
-        for i in self.interfaces:
-            sys.stderr.write("'%s' > '%s'\n" % (i.index, i.address))
+    #def list_interfaces(self):
+        #for i in self.interfaces:
+            #sys.stderr.write("'%s' > '%s'\n" % (i.index, i.address))
 
 
 def main():            
