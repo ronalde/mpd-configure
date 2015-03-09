@@ -6,7 +6,7 @@ import sys
 #import shutil
 import subprocess
 #import tempfile
-#import errno
+import errno
 import re
 import socket # for getting the hostname
 from signal import signal, SIGPIPE, SIG_DFL
@@ -217,11 +217,12 @@ USB"""
 
         except IOError as err:
             ## device is not uac
-            uac_result_msg="(not applicable: {} / {})".format(err, str(err.errno))
-        #except:
-            ## TODO: other files than 'stream0'?
-         #   uac_result=True            
-          #  uac_result="unable to determine, could not open `{}' for reading".format(streamfile_path)
+            if err.errno == 2:     
+                file = None
+                uac_result_msg="(not applicable)"
+            else:
+                uac_result_msg="unable to determine. Error number {} ({}) while opening `{}' for reading".format(str(errno), err, streamfile_path)
+            
 
         self.uac_class=uac_result_msg
         return uac_result
