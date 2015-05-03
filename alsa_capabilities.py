@@ -317,6 +317,17 @@ def main():
                         nargs='?', 
                         default=sys.stdout)
 
+    ## todo: add shorthand options, eg. `-l u'
+    parser.add_argument('--limit','-l',
+                        choices=['a', 'analog', 'u', 'usb', 'uac', 'd', 'digital'],
+                        default='',
+                        type = str.lower,
+                        help="""limit the output to that specified
+                        with the limit of the interface type; a =
+                        analog, u = usb or uac, d = digital (including
+                        usb/uac).""",
+                        nargs=1)
+    
     parser.add_argument('--interface','-i', 
                         type=str, 
                         default='', 
@@ -329,8 +340,17 @@ def main():
                         type=str, 
                         default='', 
                         help="""limit the output to interfaces
-                        matching the filter.""",
+                        matching the simple filter specified, ie.
+                        -f 'Intel' matches cards with exact string \`Intel'.""",
                         nargs=1)  
+    parser.add_argument('--regex', '-c', 
+                        type=str, 
+                        default='', 
+                        help="""limit the output to interfaces
+                        matching the regex filter specified, ie.
+                        -f '[iI]ntel' matches cards with the strings \`Intel' and \`intel'.""",
+                        nargs=1)  
+
     parser.add_argument('--debug', '-d', 
                         action="store_true", 
                         help="print status messages to stderr")
@@ -340,10 +360,9 @@ def main():
                         version=appversion,
                         help="print version of the script")
 
-
-    
     args = parser.parse_args()
-    #DEBUG = parser.parse_args().debug
+
+    ## check if extensive information should be stored
     DEBUG=vars(args)['debug']
     if DEBUG:
         print_debug("main() started with options:")
@@ -351,6 +370,9 @@ def main():
             print_debug(" %s: %s" % (key, vars(args)[key]))
 
 
+        if vars(args)['limit']:
+            print("limit set to: %s" % vars(args)['limit'][0])
+    
     aplay_raw_output = get_raw_aplay_output()
     ## create an empty list for holding interfaces with pairs of `('hw:a,b', 'Interface X on Y')'
     interfaces_list = []
