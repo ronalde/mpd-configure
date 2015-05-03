@@ -10,8 +10,10 @@ import errno
 import re
 import socket # for getting the hostname
 from signal import signal, SIGPIPE, SIG_DFL
+import argparse
 
-from optparse import OptionParser
+appname="alsacapabilities"
+appversion="0.0.1"
 
 class class_alsa_interface:
     """A custom class to hold information about an alsa audio output interface.
@@ -284,20 +286,77 @@ class class_alsa_system:
         #for i in self.interfaces:
             #sys.stderr.write("'%s' > '%s'\n" % (i.index, i.address))
 
+def print_debug(debugmessage):
+    sys.stderr.write(" Debug: %s\n" % debugmessage)
+
+def get_raw_aplay_output():
+    """returns the raw output of `aplay -l'"""
+    cmd_aplay_list="LANG=C aplay -l 2>&1"
+    try:
+        script_output = subprocess.check_output(cmd_aplay_list, 
+                                                shell=True, \
+                                                stderr=None, \
+                                                preexec_fn = lambda: signal(SIGPIPE, SIG_DFL))
+    except:
+        print("error running \`%s'" % cmd_aplay_list) 
+
+    return script_output
 
 def main():            
     ## main
-    cmd_aplay_list="LANG=C aplay -l 2>&1"    
-    script_output = subprocess.check_output(cmd_aplay_list, 
-                                            shell=True, \
-                                            stderr=None, \
-                                            preexec_fn = lambda: signal(SIGPIPE, SIG_DFL))
+    global aplay_raw_output
+    parser = argparse.ArgumentParser(prog=appname,
+                                     description="""Display the
+                                     details of alsa audio output
+                                     interfaces on the host running
+                                     this program.""")
+    
+    parser.add_argument('--output', '-o', 
+                        type=argparse.FileType('w'), 
+                        help='Write the output to the file specified.', 
+                        nargs='?', 
+                        default=sys.stdout)
 
+    parser.add_argument('--interface','-i', 
+                        type=str, 
+                        default='', 
+                        help="""limit the output to that specified
+                        with a hardware address in alsa style,
+                        eg. `hw:x,y'.""",
+                        nargs=1)
+    
+    parser.add_argument('--filter', '-f', 
+                        type=str, 
+                        default='', 
+                        help="""limit the output to interfaces
+                        matching the filter.""",
+                        nargs=1)  
+    parser.add_argument('--debug', '-d', 
+                        action="store_true", 
+                        help="print status messages to stderr")
+
+    parser.add_argument('--version', 
+                        action="version",
+                        version=appversion,
+                        help="print version of the script")
+
+
+    
+    args = parser.parse_args()
+    #DEBUG = parser.parse_args().debug
+    DEBUG=vars(args)['debug']
+    if DEBUG:
+        print_debug("main() started with options:")
+        for key in vars(args):
+            print_debug(" %s: %s" % (key, vars(args)[key]))
+
+
+    aplay_raw_output = get_raw_aplay_output()
     ## create an empty list for holding interfaces with pairs of `('hw:a,b', 'Interface X on Y')'
     interfaces_list = []
     #print("script output: {}".format(script_output))
     #print("main iterating lines of output")
-    for line in script_output.splitlines():
+    for line in aplay_raw_output.splitlines():
         #print("line: {}".format(line))
         if re.split(r' ', line.decode())[0] == "card":
             #print("Main: interface line found")
