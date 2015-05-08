@@ -274,15 +274,20 @@ function fetch_alsa_outputinterfaces() {
 		alsa_if_monitorfile="${alsa_if_streamfile}"
 
 		## get the type of uac endpoint
-		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
-
-		## lookup the uac class in the array for this type of endpoint (EP)
-		## (for readability)
-		alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
-		## get the uac class number (ie `1' or `2')
-		alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
-		## get the uac label (ie everything after `x: ')
-		alsa_if_uac_class_label="${alsa_if_uac_class:4}"
+		res="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
+		if [[ $? -eq 1 ]]; then
+		    ##
+		    alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+		else
+		    alsa_if_uac_ep="${res}"
+		    ## lookup the uac class in the array for this type of endpoint (EP)
+		    ## (for readability)
+		    alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
+		    ## get the uac class number (ie `1' or `2')
+		    alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
+		    ## get the uac label (ie everything after `x: ')
+		    alsa_if_uac_class_label="${alsa_if_uac_class:4}"
+		fi
 	    fi
 	fi
 
@@ -480,23 +485,28 @@ function return_alsa_uac_ep() {
 
     alsa_streamfile_path="$1"
 
-    ## store the contents of the stream file in an array
-    mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
-    ## expand the array 
-    alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+    if [[ ! -f "${alsa_streamfile_path}" ]]; then
+	## alsa_streamfile_path is not accessible
+	return 1
+    else
+	## store the contents of the stream file in an array
+	mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
+	## expand the array 
+	alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+	
+	## part of begin of the protion of the line we're looking for (re)
+	ep_base="Endpoint: [3,5] OUT ("
+	## the end of that portion
+	ep_end=")"
+	
+	## the portion we need ending with ep_end
+	ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
+	## the portion without ep_end
+	ep_mode="${ep_matched_portion/)*/}"
 
-    ## part of begin of the protion of the line we're looking for (re)
-    ep_base="Endpoint: [3,5] OUT ("
-    ## the end of that portion
-    ep_end=")"
-
-    ## the portion we need ending with ep_end
-    ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
-    ## the portion without ep_end
-    ep_mode="${ep_matched_portion/)*/}"
-
-    ## return the filtered endpoint type
-    printf "%s" "${ep_mode}"
+	## return the filtered endpoint type
+	printf "%s" "${ep_mode}"
+    fi
 }
 
 
