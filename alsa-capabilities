@@ -356,7 +356,7 @@ function get_locking_process() {
 	    debug "${FUNCNAME}: \`${chardev_path}' is accessible"
 	## is in use, run again without v to get the pid
 	## fetch the process name
-	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path}))
+	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path} 2>/dev/null))
 	[[ ! -z ${DEBUG} ]] && \
 	    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
 	
@@ -370,13 +370,10 @@ function get_locking_process() {
 		    
 	    pname=${pnamepid// *} # return anything before the space
 	    ## store first line by stripping out second line starting with c
-	    printf "character device is in use by \`%s' with pid \`%s'" "$(basename ${pname})" "${pid}"
+	    printf "character device is in use by \`%s' with pid \`%s'" "$(basename ${pname})" "$(${CMD_FUSER} ${chardev_path} 2>/dev/null)"
 	fi
     else
-	if [[ -z "${res}" ]]; then
-	    ## is not in use
-	    printf ""
-	else
+	if [[ ! -z "${res}" ]]; then
 	    ## real error; return error to calling function
 	    return 1
 	fi
@@ -395,15 +392,25 @@ function return_alsa_formats() {
 
     alsa_hw_device="$1"
     format=""
+    randomdev=/dev/urandom
     ALSA_BEFORE_FORMATS="Available formats:"
     ## can't assume existence of /dev/urandom
-    if [[ ! -c /dev/urandom ]]; then
-	## see raspberrypi bug: https://www.raspberrypi.org/forums/viewtopic.php?f=53&t=32407
+    if [[ ! -c ${randomdev} ]] && [[ ! -c /dev/random ]]; then
+	## no random device available; exit with error
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: no random device available"
 	return 1
     else
-	aplay_out="$(cat /dev/urandom | \
-LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
+	if [[ ! -c ${randomdev} ]]; then
+	    randomdev=/dev/random
+	fi
 
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: using random device \`${randomdev}'"
+
+	aplay_out="$(cat ${randomdev} | \
+LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
+	
 	while read -r line; do 
 	    format="${format}, ${line/- /}"
 	done <<< "${aplay_out}"
@@ -411,7 +418,9 @@ LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
 	[[ ! -z "${formats}" ]] && \
 	    printf "${formats}" || \
 		printf "${MSG_DEVICE_BUSY}"
+	
     fi
+    
 }
 
 function check_alsa_chardev() {
