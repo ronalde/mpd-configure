@@ -3,7 +3,7 @@
 
 import os, stat
 import sys
-#import shutil
+import shutil
 import subprocess
 #import tempfile
 import errno
@@ -50,8 +50,7 @@ class class_alsa_interface:
         self.uac_class = ""
         self.is_uac = self.get_uac_class()
         if self.is_uac:
-            self.uac_driver_nrpacks = self.get_kernel_parameter(uac_kernel_driver, "nrpacks")        
-        
+            self.uac_driver_nrpacks = self.get_kernel_parameter(uac_kernel_driver, "nrpacks")           
         self.electrical_interface = ""
         self.get_electrical_interface()
         
@@ -123,7 +122,6 @@ USB"""
         msg_monitorfile_accessible="accessible"
         if not self.monitorfile_accessible:
             msg_monitorfile_accessible="not {}".format(msg_monitorfile_accessible)
-
            
         print("* {}".format(self.displaylabel))
         print("  - hardware address  = {}".format(self.address))
@@ -138,7 +136,12 @@ USB"""
         
 
     def inspect_chardev(self):
+        """uses lsof to detect which processes are using specified chardev
+        TODO: implement shutil.which() to see if lsof and sudo are available
+        TODO: check if users has proper rights; if not, maybe try sudo
+        """
         processes = []
+        result = ""
         pname = ""
         pid=""
         cmd_lsof_chardev='/usr/bin/sudo /usr/bin/lsof -F c /dev/snd/pcmC{0}D{1}p 2>/dev/null'.format(self.cardnr, self.devicenr)
@@ -159,40 +162,65 @@ USB"""
                 result = "process `{}' with pid `{}'".format(pname, pid)
 
         return result
-        
+
+    def iterate_fds(self, pid):
+        # source: http://stackoverflow.com/questions/11114492/check-if-a-file-is-not-open-not-used-by-other-process-in-python/11115521#11115521
+        dir = '/proc/'+str(pid)+'/fd'
+        if not os.access(dir,os.R_OK|os.X_OK): return
+
+        for fds in os.listdir(dir):
+            for fd in fds:
+                full_name = os.path.join(dir, fd)
+                try:
+                    file = os.readlink(full_name)
+                    if file == '/dev/null' or \
+                       re.match(r'pipe:\[\d+\]',file) or \
+                       re.match(r'socket:\[\d+\]',file):
+                        file = None
+                except OSError as err:
+                    if err.errno == 2:     
+                        file = None
+                    else:
+                        raise(err)
+                    
+                yield (fd,file)        
+    
         
     def get_sampleformats(self):
 
         sampleformats = []
         cmd_aplay_urandom='cat /dev/urandom | LANG=C aplay -D "{}" >/dev/null'.format(self.address)
         #print(cmd_aplay_urandom)
-        proc = subprocess.Popen(cmd_aplay_urandom.encode(),
-                        shell=True,
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE)
-        stdout_value, stderr_value = proc.communicate(b'bla')
-        #print("stdout: {}".format(stdout_value))
-        #print("stderr: {}".format(stderr_value))
-        sampleformats=[]
-        if re.search('Available formats.*', stderr_value.decode()):
+        try:
+            proc = subprocess.Popen(cmd_aplay_urandom.encode(),
+                                    shell=True,
+                                    stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            stdout_value, stderr_value = proc.communicate(b'bla')
+            #print("stdout: {}".format(stdout_value))
+            #print("stderr: {}".format(stderr_value))
+            sampleformats=[]
+            if re.search('Available formats.*', stderr_value.decode()):
       
-            ## the lines in stderr starting with `- ' (after "Available formats:") 
-            ## contain the available sample formats
-            subscript_raw_output=stderr_value.decode().splitlines()
+                ## the lines in stderr starting with `- ' (after "Available formats:") 
+                ## contain the available sample formats
+                subscript_raw_output=stderr_value.decode().splitlines()
 
-            for line in subscript_raw_output:
-                match = re.match('- (.*)',line)
-                if match:
-                    sampleformats.append(match.group(1))
-        else:
-            ## aplay reported an error for this card
-            ## errors are reported after the linenumber;
-            ## use that to extract the message
-            self.sampleformats_error = re.split('[0-9]:',stderr_value.decode())[1].strip()
-            pname=self.inspect_chardev()
-            sampleformats=['can\'t detect, device is in use by {})'.format(pname)]
-
+                for line in subscript_raw_output:
+                    match = re.match('- (.*)',line)
+                    if match:
+                        sampleformats.append(match.group(1))
+            else:
+                ## aplay reported an error for this card
+                ## errors are reported after the linenumber;
+                ## use that to extract the message
+                self.sampleformats_error = re.split('[0-9]:',stderr_value.decode())[1].strip()
+                pname=self.inspect_chardev()
+                sampleformats=['can\'t detect, device is in use by {})'.format(pname)]
+        except:
+            ## subprocess failed
+            sampleformats=['can\'t determine formats (error opening).'.format(pname)]
             
         return sampleformats
 
@@ -224,12 +252,9 @@ USB"""
                 uac_result_msg="(not applicable)"
             else:
                 uac_result_msg="unable to determine. Error number {} ({}) while opening `{}' for reading".format(str(errno), err, streamfile_path)
-            
 
         self.uac_class=uac_result_msg
-        return uac_result
-
-        
+        return uac_result      
 
         
     def get_kernel_parameter(self, driver, parameter):
@@ -239,34 +264,15 @@ USB"""
         try: 
             with open (parameter_path, "r") as parameter_file:
                 result=parameter_file.read().strip()
-        except:
-            result="could not open `{}' for reading".format(parameter_path)
+        except IOError as err:
+            ## device is not uac
+            if err.errno == 2:     
+                result = None
+                print_debug("could not open {} for reading".format(parameter_path))
 
         return result
-                
-          
+         
     
-    def iterate_fds(pid):
-        # source: http://stackoverflow.com/questions/11114492/check-if-a-file-is-not-open-not-used-by-other-process-in-python/11115521#11115521
-        dir = '/proc/'+str(pid)+'/fd'
-        if not os.access(dir,os.R_OK|os.X_OK): return
-
-        for fds in os.listdir(dir):
-            for fd in fds:
-                full_name = os.path.join(dir, fd)
-                try:
-                    file = os.readlink(full_name)
-                    if file == '/dev/null' or \
-                       re.match(r'pipe:\[\d+\]',file) or \
-                       re.match(r'socket:\[\d+\]',file):
-                        file = None
-                except OSError as err:
-                    if err.errno == 2:     
-                        file = None
-                    else:
-                        raise(err)
-                    
-                yield (fd,file)        
 
     
 class class_alsa_system:
@@ -280,15 +286,15 @@ class class_alsa_system:
         """Returns a list containing class_alsa_interface objects."""
         interfaceslist = []
         filecounter = 0
+
+
+def die(errormessage):
+    sys.exit("Error:{}\n".format(errormessage))
         
-
-    #def list_interfaces(self):
-        #for i in self.interfaces:
-            #sys.stderr.write("'%s' > '%s'\n" % (i.index, i.address))
-
 def print_debug(debugmessage):
-    sys.stderr.write(" Debug: %s\n" % debugmessage)
+    sys.stderr.write(" Debug: {}\n".format(debugmessage))
 
+    
 def get_raw_aplay_output():
     """returns the raw output of `aplay -l'"""
     cmd_aplay_list="LANG=C aplay -l 2>&1"
@@ -298,9 +304,10 @@ def get_raw_aplay_output():
                                                 stderr=None, \
                                                 preexec_fn = lambda: signal(SIGPIPE, SIG_DFL))
     except:
-        print("error running \`%s'" % cmd_aplay_list) 
+        die("error running \`{}'".format(cmd_aplay_list))
 
     return script_output
+
 
 def main():            
     ## main
@@ -367,11 +374,10 @@ def main():
     if DEBUG:
         print_debug("main() started with options:")
         for key in vars(args):
-            print_debug(" %s: %s" % (key, vars(args)[key]))
-
+            print_debug(" {}: {}".format(key, vars(args)[key]))
 
         if vars(args)['limit']:
-            print("limit set to: %s" % vars(args)['limit'][0])
+            print_debug("limit set to: \`{}'".format(vars(args)['limit'][0]))
     
     aplay_raw_output = get_raw_aplay_output()
     ## create an empty list for holding interfaces with pairs of `('hw:a,b', 'Interface X on Y')'
