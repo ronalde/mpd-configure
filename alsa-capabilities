@@ -203,20 +203,22 @@ function fetch_alsa_outputinterfaces() {
 		alsa_if_monitorfile="${alsa_if_hwparamsfile} (error: not accessible)"
 	    else
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug "check_alsa_chardev returned no error: \`${res}'"
+		    debug "${FUNCNAME}: check_alsa_chardev returned no error: \`${res}'"
 		## chardev exists, check if it is in use
 		res="$(get_locking_process "${alsa_if_chardev}")"
 		if [[ $? -ne 0 ]]; then
 		    ## can't determine
 		    [[ ! -z "${DEBUG}" ]] && \
-			debug "get_locking_process returned error: \`${res}'"
+			debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
 		    
 		    alsa_if_chardev="${alsa_if_chardev} (error: no access; run the script as root or using sudo"
 		    alsa_if_formats="(error: can't determine)"
 		else
 		    [[ ! -z "${DEBUG}" ]] && \
-			debug "get_locking_process returned no error: \`${res}'"
-				    
+			debug "${FUNCNAME}: get_locking_process returned no error: \`${res}'"
+		    if [[ ! -z "${res}" ]]; then
+			alsa_if_chardev="${alsa_if_chardev} (in use by ``${res}')"
+		    fi
 		    ## can determine; 
     		    ## get the formats the interface natively handles or
 		    ## return the process id and name blocking the interface
@@ -226,7 +228,7 @@ function fetch_alsa_outputinterfaces() {
 			alsa_if_formats="(error accessing /dev/[u]random)"
 		    else
 			if [[ "${alsa_if_formats}" = "${MSG_DEVICE_BUSY}" ]]; then
-			    alsa_if_formats="(error: can't determine because busy device)"
+			    alsa_if_formats="(error: can't determine because device is in use)"
 			fi
 		    fi
 		fi
@@ -357,20 +359,26 @@ function get_locking_process() {
 	## is in use, run again without v to get the pid
 	## fetch the process name
 	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path} 2>/dev/null))
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
-	
-	if [[ $? -eq 0 ]]; then
-	    ## process not found
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: chardev \`${chardev_path}' is not in use"
+	#[[ ! -z ${DEBUG} ]] && \
+	#    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
+	res="$?"
+	if [[ ${res} -eq 0 ]]; then
+	    if [[ -z ${pnamepid} ]]; then
+		## process not found
+		[[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME}: ps returned no error and no processes"
+	    else
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "${FUNCNAME}: ps returned \`${pnamepid}'"
+		## return the process name
+		printf "%s" "${pnamepid// *}"
+	    fi
+	    #pname=${pnamepid// *} # return anything before the space
+	    ## store first line by stripping out second line starting with c
+	    #printf "character device is in use by \`%s' with pid \`%s'" "$(basename ${pname})" "$(${CMD_FUSER} ${chardev_path} 2>/dev/null)"
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: chardev \`${chardev_path}' is in use: output of ps: \`${pnamepid}'"
-		    
-	    pname=${pnamepid// *} # return anything before the space
-	    ## store first line by stripping out second line starting with c
-	    printf "character device is in use by \`%s' with pid \`%s'" "$(basename ${pname})" "$(${CMD_FUSER} ${chardev_path} 2>/dev/null)"
+		debug "${FUNCNAME}: ps returned an error: \`${res}'"
 	fi
     else
 	if [[ ! -z "${res}" ]]; then
