@@ -410,6 +410,8 @@ function perform_automagic() {
 		## TODO: add permission errors to errorlog
 		let nr_musicfiles=$(${CMD_FIND} "${CONF_MPD_MUSICDIR}" -type f 2>/dev/null| wc -l)
 	    else
+		## find not found, will using bash globbing. 
+		## note: this takes four times as long as find on my nfs mounted music dir.
 		if [[ ! -z ${DEBUG} ]]; then
 		    debug_configure "CMD_XDGUSERDIR not found in path."
 		    debug_configure "Using bash wildcards to count the number of files in CONF_MPD_MUSICDIR \`${CONF_MPD_MUSICDIR}':"
@@ -420,7 +422,7 @@ function perform_automagic() {
 		## turn it on
 		shopt -s globstar
 		musicfiles="${CONF_MPD_MUSICDIR}/**"
-		let nr_musicfiles=$(printf "file: \`%s'\n" "$(echo ${musicfiles} | wc -l)")
+		let nr_musicfiles="$(printf "%s\n" ${musicfiles} | wc -l)"
 		## turn globstar of if needed
 		[[ ! -z ${globstar_initial_on} ]] && shopt -u globstar
 	    fi
