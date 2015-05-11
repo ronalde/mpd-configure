@@ -401,31 +401,10 @@ function perform_automagic() {
 	## setting not configured
 	if [[ -d "${CONF_MPD_MUSICDIR}" ]]; then
 	    ## music dir exists; calculate number of files
-	    CMD_FIND=$(which find)
-	    if [[ $? -eq 0 ]]; then
-		if [[ ! -z ${DEBUG} ]]; then
-		    debug_configure "CMD_FIND found in path: \`${CMD_FIND}'."
-		    debug_configure "Using ${CMD_FIND} to count the number of files in CONF_MPD_MUSICDIR \`${CONF_MPD_MUSICDIR}':"
-		fi
-		## TODO: add permission errors to errorlog
-		let nr_musicfiles=$(${CMD_FIND} "${CONF_MPD_MUSICDIR}" -type f 2>/dev/null| wc -l)
-	    else
-		## find not found, will using bash globbing. 
-		## note: this takes four times as long as find on my nfs mounted music dir.
-		if [[ ! -z ${DEBUG} ]]; then
-		    debug_configure "CMD_XDGUSERDIR not found in path."
-		    debug_configure "Using bash wildcards to count the number of files in CONF_MPD_MUSICDIR \`${CONF_MPD_MUSICDIR}':"
-		fi
-		## find not available; use bash wildcards
-		globstar_on=$(shopt -q globstar)
-		[[ "$?" = "0" ]] && globstar_initial_on=True
-		## turn it on
-		shopt -s globstar
-		musicfiles="${CONF_MPD_MUSICDIR}/**"
-		let nr_musicfiles="$(printf "%s\n" ${musicfiles} | wc -l)"
-		## turn globstar of if needed
-		[[ ! -z ${globstar_initial_on} ]] && shopt -u globstar
-	    fi
+	    ## TODO: add permission errors to errorlog
+    	    ## ls without stat() calls is much faster than find or bash globbing, thanks 
+	    ## http://stackoverflow.com/questions/1427032/fast-linux-file-count-for-a-large-number-of-files
+	    let nr_musicfiles=$(ls -fR  "${CONF_MPD_MUSICDIR}" 2>/dev/null| wc -l)
 
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "Done counting, nr of files found: \`${nr_musicfiles}'"
