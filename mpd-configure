@@ -450,7 +450,9 @@ function perform_automagic() {
 	    debug_configure "G_ZEROCONF_ZEROCONFNAME not set  ..."
 	
 	hostname_string=""
-	if [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "127.0.0" ]] || [[ "${CONF_MPD_NETWORK_ADRESS}" != "0.0.0.0" ]]; then
+	## only try to get hostname if it isn't link local
+	if [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "127" ]] || [[ "${CONF_MPD_NETWORK_ADRESS}" != "0.0.0.0" ]] || \
+	    [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "*::*"  ]]; then
 	    ## mpd is configured to use a 'real' ip address; try to get fqdn name
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "mpd is configured to use a 'real' ip address ..."
