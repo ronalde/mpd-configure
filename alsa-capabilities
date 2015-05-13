@@ -43,6 +43,7 @@ LANG=C
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
 DEBUG="${DEBUG:-}"
+TESTFILE="${TESTFILE:-}"
 
 
 ### generic functions
@@ -93,9 +94,27 @@ function fetch_alsa_outputinterfaces() {
     ## arrays and displays them.
 
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
-    ## store the output of `aplay -l`
-    aplay_output="$(${CMD_APLAY} -l)"
+    res=""
+    aplay_output=""
+    
+    ## to see how the script behaves with a certain output of aplay -l
+    ## on a particular host, store it's output in a file and supply
+    ## the file path as the value of TESTFILE, eg: `bash-capabilities
+    ## /path/to/output-of-aplay-l'. Of course all hardware and device
+    ## test will fail, hopefully with some grace.
+    if [[ -z "${TESTFILE}" ]]; then
+	## store the output of `aplay -l`
+	aplay_output="$(${CMD_APLAY} -l)"
+    else
+	if [[ -f "${TESTFILE}" ]]; then
+	    ## get the output from a file for testing purposes
+	    inform "NOTICE: not using real aplay output but contents of TESTFILE \`${TESTFILE}'"
+	    aplay_output="$(< "${TESTFILE}")"
+	else
+	    die "TESTFILE needs an existing file"
+	fi
+    fi
+	
     declare -a aplay_lines=()
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
@@ -121,6 +140,7 @@ function fetch_alsa_outputinterfaces() {
 	fi
     done <<< "${aplay_output}"
 
+    errors=()
     ## loop through each item in the array
     for line in "${aplay_lines[@]}"; do 
 	## set if type to default (ie analog)
@@ -134,33 +154,101 @@ function fetch_alsa_outputinterfaces() {
 	## put together
 	brm_template="${brm_dev},${brm_if}"
 
-	## start matching
+	unset errors
+	errors=()
+	## start matching and collect errors in array
 	if [[ "${line}" =~ ${brm_template} ]]; then
-	    alsa_dev_nr="${BASH_REMATCH[1]}"
-	    alsa_dev_name="${BASH_REMATCH[2]}"
-	    alsa_dev_label="${BASH_REMATCH[3]}"
-	    alsa_if_nr="${BASH_REMATCH[4]}"
-	    alsa_if_name="${BASH_REMATCH[5]}"
-	    alsa_if_label="${BASH_REMATCH[6]}"
-	    alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
-	    alsa_if_hwparamsfile="$(return_alsa_hwparamsfile "${alsa_dev_nr}" "${alsa_if_nr}")"
-	    alsa_if_monitorfile="${alsa_if_hwparamsfile}"
-
-	    ## get the character device for the interface (ie `/dev/snd/xxx')
-	    alsa_if_chardev="$(return_alsa_chardev "${alsa_dev_nr}" "${alsa_if_nr}")"
-
-	    ## get the formats the interface natively handles or
-	    ## return the process id and name blocking the interface
-	    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
-	    if [[ "${alsa_if_formats}" = "${MSG_DEVICE_BUSY}" ]]; then
-		msg_in_use="$(alsa_device_busy "${alsa_if_chardev}")"
-		alsa_if_formats="(${MSG_DEVICE_BUSY}: ${msg_in_use})"
+	    [[ ! -z "${BASH_REMATCH[1]}" ]] && \
+		alsa_dev_nr="${BASH_REMATCH[1]}" || \
+		    errors+=("could not fetch device number")
+	    [[ ! -z "${BASH_REMATCH[2]}" ]] && \
+		alsa_dev_name="${BASH_REMATCH[2]}" || \
+		    errors+=("could not fetch device name")
+	    [[ ! -z "${BASH_REMATCH[3]}" ]] && \
+		alsa_dev_label="${BASH_REMATCH[3]}" || \
+		    errors+=("could not fetch device label")
+	    [[ ! -z "${BASH_REMATCH[4]}" ]] && \
+		alsa_if_nr="${BASH_REMATCH[4]}" || \
+		    errors+=("could not fetch interface number")
+	    [[ ! -z "${BASH_REMATCH[5]}" ]] && \
+		alsa_if_name="${BASH_REMATCH[5]}" || \
+		    errors+=("could not fetch interface name")
+	    [[ ! -z "${BASH_REMATCH[6]}" ]] && \
+		alsa_if_label="${BASH_REMATCH[6]}" || \
+		    errors+=("could not fetch interface label")
+	    ## consider empty numbers and names of devices and interfaces fatal
+	    if [[ -z ${alsa_dev_nr} ]] || [[ -z ${alsa_dev_name} ]] || [[ -z ${alsa_if_nr} ]] || [[ -z ${alsa_if_name} ]]; then
+		die "$(prinf "%s\n" "${errors[@]}")"
+		break
 	    fi
+
+	    if [[ ! -z "${DEBUG}" ]] && [[ "${#errors[@]}" -ne 0 ]]; then
+		debug "$(printf "errors: %s\n" "${errors[@]}")"
+	    fi
+
+		alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
+	    ## construct the path to the character device for the
+	    ## interface (ie `/dev/snd/xxx')
+	    alsa_if_chardev="/dev/snd/pcmC${alsa_dev_nr}D${alsa_if_nr}p"
+	    ## construct the path to the hwparams file
+	    alsa_if_hwparamsfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/hw_params"
+	    ## check if the chardev exists
+	    res="$(check_alsa_chardev "${alsa_if_chardev}")"
+	    if [[ $? -ne 0 ]] ;then
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "check_alsa_chardev returned error: \`${res}'"
+		#die "cannot get hwparamsfile"
+		alsa_if_chardev="${alsa_if_chardev} (error: not accessible)"
+		alsa_if_formats="(can't determine: character device error)"
+		alsa_if_monitorfile="${alsa_if_hwparamsfile} (error: not accessible)"
+	    else
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "${FUNCNAME}: check_alsa_chardev returned no error: \`${res}'"
+		## chardev exists, check if it is in use
+		res="$(get_locking_process "${alsa_if_chardev}")"
+		if [[ $? -ne 0 ]]; then
+		    ## can't determine
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
+		    
+		    alsa_if_chardev="${alsa_if_chardev} (error: no access; run the script as root or using sudo"
+		    alsa_if_formats="(error: can't determine)"
+		else
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug "${FUNCNAME}: get_locking_process returned no error: \`${res}'"
+		    if [[ ! -z "${res}" ]]; then
+			pname="${res// *}"
+			pid="${res//* }"
+			alsa_if_chardev="${alsa_if_chardev} (in use by \`${pname}' with process id \`${pid}')"
+		    fi
+		    ## can determine; 
+    		    ## get the formats the interface natively handles or
+		    ## return the process id and name blocking the interface
+		    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
+		    if [[ $? -ne 0 ]]; then
+			## no random device available or other error accessing it
+			alsa_if_formats="(error accessing /dev/[u]random)"
+		    else
+			if [[ "${alsa_if_formats}" = "${MSG_DEVICE_BUSY}" ]]; then
+			    alsa_if_formats="(error: can't determine because device is in use)"
+			fi
+		    fi
+		fi
+	    fi
+
+	    ## check if the hwparams file exists
+	    res=$(check_alsa_hwparamsfile "${alsa_if_hwparamsfile}")
+	    if [[ $? -ne 0 ]] ;then
+		    alsa_if_hwparamsfile="${alsa_if_hwparamsfile} (error: not accessible)"
+	    fi
+
+	    ## before determining whether this is a usb device, assume
+	    ## the monitor file is the hwparams file
+	    alsa_if_monitorfile="${alsa_if_hwparamsfile}"
 
 	    ## check if the interface name matches one of the strings
 	    ## in the digital filter array
 	    for filter in "${DO_INTERFACE_FILTER[@]}"; do
-
 		## `,,' downcases the string, while `*var*' does a wildcard match
 		if [[ "${alsa_if_name,,}" == *"${filter}"* ]]; then
 		    [[ ! -z "${DEBUG}" ]] && debug "match = ${alsa_if_name,,}: ${filter}"
@@ -173,10 +261,14 @@ function fetch_alsa_outputinterfaces() {
 
 	    ## try to get the stream file for the interface (ie
 	    ## `/proc/asound/cardX/streamY'); such determines whether
-	    ## its a uac device and if so, which class
-	    alsa_if_streamfile="$(return_alsa_streamfile "${alsa_dev_nr}" "${alsa_if_nr}")"
-
-	    if [[ ! "${alsa_if_streamfile}" = "${MSG_PROP_NOTAPPLICABLE}" ]]; then
+	    ## its a uac device, and if so, which class it is
+	    alsa_if_streamfile="/proc/asound/card${alsa_dev_nr}/stream${alsa_if_nr}"
+	    res="$(check_alsa_streamfile "${alsa_if_streamfile}")"
+	    if [[ $? -ne 0 ]] ;then
+		alsa_if_streamfile="${alsa_if_hwparamsfile} (error: not accessible )"
+		## no uac interface
+		alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+	    else
 		## set interface to usb out
 		alsa_if_type="uo"
 		## uac devices will use the stream file instead of
@@ -184,19 +276,20 @@ function fetch_alsa_outputinterfaces() {
 		alsa_if_monitorfile="${alsa_if_streamfile}"
 
 		## get the type of uac endpoint
-		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
-
-		## lookup the uac class in the array for this type of endpoint (EP)
-		## (for readability)
-		alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
-		## get the uac class number (ie `1' or `2')
-		alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
-		## get the uac label (ie everything after `x: ')
-		alsa_if_uac_class_label="${alsa_if_uac_class:4}"
-		
-	    else
-		## no uac interface
-		alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+		res="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
+		if [[ $? -eq 1 ]]; then
+		    ##
+		    alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+		else
+		    alsa_if_uac_ep="${res}"
+		    ## lookup the uac class in the array for this type of endpoint (EP)
+		    ## (for readability)
+		    alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
+		    ## get the uac class number (ie `1' or `2')
+		    alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
+		    ## get the uac label (ie everything after `x: ')
+		    alsa_if_uac_class_label="${alsa_if_uac_class:4}"
+		fi
 	    fi
 	fi
 
@@ -245,8 +338,8 @@ ${alsa_if_display_title}
     - card/device name       =  ${alsa_dev_label}
     - interface name         =  ${alsa_if_label}
     - usb audio class        =  ${alsa_if_uac_class}
-    - digital formats        =  ${alsa_if_formats}
     - character device       =  ${alsa_if_chardev}
+    - digital formats        =  ${alsa_if_formats}
     - monitor file           =  ${alsa_if_monitorfile}
 EOF
 ) 
@@ -259,34 +352,47 @@ EOF
 
 }
 
-
-function alsa_device_busy() {
-    ## looks for and returns processes that have exclusive access to
-    ## chardev $1
-
+function get_locking_process() {
+    ## get the pid and name of the process accessing chardev $1, which
+    ## may be a file or a socket. Returns a descriptive string, nothing or an error.
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
-    alsa_chardev="$1"
-
-    ## try lsof while hiding/redirecting errors
-    lsof_out="$(lsof -F c ${alsa_chardev} 2>/dev/null)"
-    if [[ "$?" == 0 ]]; then
-	## user may inspect lsof output. lsof out consist of:
-	## pXXX  (XXX = numeric process id)
-	## cYYY  (YYY = process name)
-	## store first line by stripping out second line starting with c
-	p_firstline="${lsof_out%c*}"
-	## store first line/strip output of lsof by starting after first character (p) 
-	## and stopping before newline character (=length of p_firstline string)
-	p_id="${lsof_out:1:(${#p_firstline}-2)}"
-	## get second line by filtering lsof_out from (length of p_id+1)
-	p_name="${lsof_out:(${#p_firstline}+1):${#lsof_out}}"
-	printf "in use by \`%s' with pid \`%s'" "${p_name}" "${p_id}"
+    chardev_path="$1"
+    ## try fuser which returns the pid in std_out.
+    res="$(${CMD_FUSER} -v ${chardev_path} 2>&1)"
+    if [[ $? -eq 0 ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: \`${chardev_path}' is accessible"
+	## is in use, run again without v to get the pid
+	## fetch the process name
+	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path} 2>/dev/null))
+	#[[ ! -z ${DEBUG} ]] && \
+	#    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
+	res="$?"
+	if [[ ${res} -eq 0 ]]; then
+	    if [[ -z ${pnamepid} ]]; then
+		## process not found
+		[[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME}: ps returned no error and no processes"
+	    else
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "${FUNCNAME}: ps returned \`${pnamepid}'"
+		## return the whole string (`/path/to/command $pid')
+		printf "%s"
+	    fi
+	    #pname=${pnamepid// *} # return anything before the space
+	    ## store first line by stripping out second line starting with c
+	    #printf "character device is in use by \`%s' with pid \`%s'" "$(basename ${pname})" "$(${CMD_FUSER} ${chardev_path} 2>/dev/null)"
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME}: ps returned an error: \`${res}'"
+	fi
     else
-	## normal user can't access lsof output of system daemons
-	printf "%s" "${MSG_RUN_AS_ROOT}"
+	if [[ ! -z "${res}" ]]; then
+	    ## real error; return error to calling function
+	    return 1
+	fi
     fi
-    
 }
 
 function return_alsa_formats() {
@@ -301,76 +407,73 @@ function return_alsa_formats() {
 
     alsa_hw_device="$1"
     format=""
+    randomdev=/dev/urandom
     ALSA_BEFORE_FORMATS="Available formats:"
+    ## can't assume existence of /dev/urandom
+    if [[ ! -c ${randomdev} ]] && [[ ! -c /dev/random ]]; then
+	## no random device available; exit with error
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: no random device available"
+	return 1
+    else
+	if [[ ! -c ${randomdev} ]]; then
+	    randomdev=/dev/random
+	fi
 
-    aplay_out="$(cat /dev/urandom | \
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: using random device \`${randomdev}'"
+
+	aplay_out="$(cat ${randomdev} | \
 LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
-
-    while read -r line; do 
-	format="${format}, ${line/- /}"
-    done <<< "${aplay_out}"
-    formats="${format#, }"
-    [[ ! -z "${formats}" ]] && \
-	printf "${formats}" || \
-	printf "${MSG_DEVICE_BUSY}"
-
-}
-
-function return_alsa_chardev() {
-    ## constructs, tests and returns the path to node in /dev.
-    ## 
-    ## needs devnr ($1) and ifnr ($2) as arguments
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
-    devnr="$1"
-    ifnr="$2"
-    chardev="/dev/snd/pcmC${devnr}D${ifnr}p"
-
-    ## test if its a character device or exit with error
-    [[ -c "${chardev}" ]] && \
-	printf "${chardev}" || \
-	die "${MSG_NO_DEVICE}: \`${chardev}'"
+	
+	while read -r line; do 
+	    format="${format}, ${line/- /}"
+	done <<< "${aplay_out}"
+	formats="${format#, }"
+	[[ ! -z "${formats}" ]] && \
+	    printf "${formats}" || \
+		printf "${MSG_DEVICE_BUSY}"
+	
+    fi
     
-
 }
 
-function return_alsa_hwparamsfile() {
-    ## constructs, tests and returns the path to the hw_params file in
-    ## /proc
-    ##
-    ## needs devnr ($1) and ifnr ($2) as arguments
-
+function check_alsa_chardev() {
+    ## check to see whether character device $1 exists/is accessible
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    
+    chardev_path="$1"
+    if [[ -c "${chardev_path}" ]]; then
+	printf "${chardev_path}"
+    else
+	return 1
+    fi
+}
 
-    devnr="$1"
-    ifnr="$2"
-    hwparamsfile="/proc/asound/card${devnr}/pcm${ifnr}p/sub0/hw_params"
-
-    ## test if its a file or exit with error
-    [[ -f "${hwparamsfile}" ]] && \
-	printf "${hwparamsfile}" || \
-	die "${MSG_NO_FILE}: \`${hwparamsfile}'"
+function check_alsa_hwparamsfile() {
+    ## check to see whether hwparams file $1 exists/is accessible
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    
+    hwparams_path="$1"
+    if [[ -f "${hwparams_path}" ]]; then
+	printf "${hwparams_path}"
+    else
+	exit 1
+    fi
 
 }
 
 
-function return_alsa_streamfile() {
-    ## constructs, tests and returns the path to the stream file in
-    ## /proc to fill the ALSA_UO_INTERFACES array.
-    ## 
-    ## needs devnr ($1) and ifnr ($2) as arguments
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'\n"
-
-    devnr="$1"
-    ifnr="$2"
-    streamfile="/proc/asound/card${devnr}/stream${ifnr}"
-
-    ## test if streamfile exist and is accessable and return it or return fixed string
-    [[ -f "${streamfile}" ]] && \
-	printf "${streamfile}" || \
-	printf "${MSG_PROP_NOTAPPLICABLE}"
+function check_alsa_streamfile() {
+    ## check to see whether stream file $1 exists/is accessible
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    
+    streamfile_path="$1"
+    if [[ -f "${streamfile_path}" ]]; then
+	printf "${streamfile_path}"
+    else
+	exit 1
+    fi
 
 }
 
@@ -384,23 +487,28 @@ function return_alsa_uac_ep() {
 
     alsa_streamfile_path="$1"
 
-    ## store the contents of the stream file in an array
-    mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
-    ## expand the array 
-    alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+    if [[ ! -f "${alsa_streamfile_path}" ]]; then
+	## alsa_streamfile_path is not accessible
+	return 1
+    else
+	## store the contents of the stream file in an array
+	mapfile < "${alsa_streamfile_path}" alsa_streamfile_contents
+	## expand the array 
+	alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+	
+	## part of begin of the protion of the line we're looking for (re)
+	ep_base="Endpoint: [3,5] OUT ("
+	## the end of that portion
+	ep_end=")"
+	
+	## the portion we need ending with ep_end
+	ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
+	## the portion without ep_end
+	ep_mode="${ep_matched_portion/)*/}"
 
-    ## part of begin of the protion of the line we're looking for (re)
-    ep_base="Endpoint: [3,5] OUT ("
-    ## the end of that portion
-    ep_end=")"
-
-    ## the portion we need ending with ep_end
-    ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
-    ## the portion without ep_end
-    ep_mode="${ep_matched_portion/)*/}"
-
-    ## return the filtered endpoint type
-    printf "%s" "${ep_mode}"
+	## return the filtered endpoint type
+	printf "%s" "${ep_mode}"
+    fi
 }
 
 
@@ -519,6 +627,7 @@ function return_alsa_interface() {
 
     ## check if needed commands are available
     CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+    CMD_FUSER=$(which fuser || command_not_found "fuser" "psmisc")
 
     ## parse command line arguments
     analyze_command_line "$@"
