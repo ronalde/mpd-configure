@@ -72,7 +72,7 @@ function command_not_found() {
 
     command="$1"
     package="$2"
-    instructions="$3"
+    instructions="${3-}"
     msg="Error: command \`${command}' not found. "
     if [[ -z "${instructions}" ]]; then
 	msg+="Users of Debian (or deratives, like Ubuntu) can install it with:\n"
