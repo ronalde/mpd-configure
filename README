@@ -32,6 +32,10 @@ the script with the `-h` help option, eg:
 
     bash alsa-capabilities -h
 
+or
+
+    bash < (wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/alsa-capabilities")
+
 
 Background
 ----------
