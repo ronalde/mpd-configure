@@ -109,7 +109,7 @@ function fetch_alsa_outputinterfaces() {
 	if [[ $? -ne 0 ]]; then
 	    die "cannot continue, because alsa reported the following error:\n\`${res}'\n"
 	fi
-	if [[ "${res}" ~= aplay_msg_nosoundcards_re ]]; then
+	if [[ "${res}" =~ ${aplay_msg_nosoundcards_re} ]]; then
 	    die "cannot continue, because alsa found no soundcards in your system."
 	fi
 	## run it again without std_err
