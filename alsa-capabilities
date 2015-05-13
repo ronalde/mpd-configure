@@ -625,6 +625,9 @@ function return_alsa_interface() {
 
     ## check if needed commands are available
     CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+    if [[ $? -ne 0 ]]; then
+	die "This script depends on aplay."
+    fi
     CMD_FUSER=$(which fuser || command_not_found "fuser" "psmisc")
 
     ## parse command line arguments
