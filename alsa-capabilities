@@ -228,7 +228,7 @@ function fetch_alsa_outputinterfaces() {
 		    [[ ! -z "${DEBUG}" ]] && \
 			debug "${FUNCNAME}: get_locking_process returned no error: \`${res}'"
 		    if [[ ! -z "${res}" ]]; then
-			alsa_if_chardev="${alsa_if_chardev} (in use by ``${res}')"
+			alsa_if_chardev="${alsa_if_chardev} (in use by ${res})"
 		    fi
 		    ## can determine; 
     		    ## get the formats the interface natively handles or
