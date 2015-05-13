@@ -228,7 +228,7 @@ function fetch_alsa_outputinterfaces() {
 		    [[ ! -z "${DEBUG}" ]] && \
 			debug "${FUNCNAME}: get_locking_process returned no error: \`${res}'"
 		    if [[ ! -z "${res}" ]]; then
-			alsa_if_chardev="${alsa_if_chardev} (in use by ${res})"
+			alsa_if_chardev="${alsa_if_chardev} ${res}"
 		    fi
 		    ## can determine; 
     		    ## get the formats the interface natively handles or
@@ -398,7 +398,7 @@ function get_locking_process() {
 		pname="${pnamepid// *}" # return anything before the space
 		pid="${pnamepid//* }"
 		## return the formatted string
-		printf "\`%s' with pid \`%s'" "$(basename ${pname})" "${pid}"
+		printf "(in use by \`%s' with pid \`%s')" "$(basename ${pname})" "${pid}"
 	    fi
 	fi
 
