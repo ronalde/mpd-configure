@@ -369,7 +369,12 @@ function get_locking_process() {
     chardev_path="$1"
     ## try fuser which returns the pid in std_out.
     res="$(${CMD_FUSER} -v ${chardev_path} 2>&1)"
-    if [[ $? -eq 0 ]]; then
+    if [[ $? -ne 0 ]]; then
+	if [[ ! -z "${res}" ]]; then
+	    ## real error; return it to calling function
+	    return 1
+	fi
+    else   
 	[[ ! -z ${DEBUG} ]] && \
 	    debug "${FUNCNAME}: \`${chardev_path}' is accessible"
 	## is in use, run again without v to get the pid
@@ -396,11 +401,7 @@ function get_locking_process() {
 		printf "\`%s' with pid \`%s'" "$(basename ${pname})" "${pid}"
 	    fi
 	fi
-    else
-	if [[ ! -z "${res}" ]]; then
-	    ## real error; return error to calling function
-	    return 1
-	fi
+
     fi
 }
 
