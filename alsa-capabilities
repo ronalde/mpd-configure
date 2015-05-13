@@ -1008,5 +1008,5 @@ OPT_FILTER=${OPT_FILTER:-}
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
-[[ "${BASH_SOURCE[0]}" != "${0}" ]] || return_alsa_interface "$@"
+[[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || return_alsa_interface "$@"
 
