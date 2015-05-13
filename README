@@ -34,7 +34,7 @@ the script with the `-h` help option, eg:
 
 or
 
-    bash < (wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/alsa-capabilities")
+    bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/alsa-capabilities")
 
 
 Background
