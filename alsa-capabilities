@@ -105,6 +105,9 @@ function fetch_alsa_outputinterfaces() {
     if [[ -z "${TESTFILE}" ]]; then
 	## store the output of `aplay -l`
 	aplay_output="$(${CMD_APLAY} -l)"
+	if [[ $? -ne 0 ]] || [[ -z "${aplay_output}" ]]; then
+	    die "cannot continue, because alsa found no soundcards in your system."
+	fi
     else
 	if [[ -f "${TESTFILE}" ]]; then
 	    ## get the output from a file for testing purposes
