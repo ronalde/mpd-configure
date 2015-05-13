@@ -379,7 +379,10 @@ function get_locking_process() {
 	[[ ! -z ${DEBUG} ]] && \
 	    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
 
-	if [[ ${res} -eq 0 ]]; then
+	if [[ ${res} -ne 0 ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME}: ps returned an error: \`${res}'"
+	else
 	    if [[ -z ${pnamepid} ]]; then
 		## process not found
 		[[ ! -z ${DEBUG} ]] && \
@@ -392,10 +395,6 @@ function get_locking_process() {
 		## return the formatted string
 		printf "\`%s' with pid \`%s'" "$(basename ${pname})" "${pid}"
 	    fi
-	    
-	else
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: ps returned an error: \`${res}'"
 	fi
     else
 	if [[ ! -z "${res}" ]]; then
