@@ -110,6 +110,7 @@ function fetch_alsa_outputinterfaces() {
 	if [[ $? -ne 0 ]]; then
 	    die "cannot continue, because alsa reported the following error:\n\`${res}'\n"
 	fi
+	## check for no soundcards
 	if [[ "${res}" =~ ${aplay_msg_nosoundcards_re} ]]; then
 	    die "cannot continue, because alsa found no soundcards in your system."
 	fi
@@ -374,23 +375,24 @@ function get_locking_process() {
 	## is in use, run again without v to get the pid
 	## fetch the process name
 	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path} 2>/dev/null))
-	#[[ ! -z ${DEBUG} ]] && \
-	#    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
 	res="$?"
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
+
 	if [[ ${res} -eq 0 ]]; then
 	    if [[ -z ${pnamepid} ]]; then
 		## process not found
 		[[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: ps returned no error and no processes"
+		    debug "${FUNCNAME}: ps returned no error and no processes"
 	    else
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "${FUNCNAME}: ps returned \`${pnamepid}'"
-		## return the whole string (`/path/to/command $pid')
-		printf "%s"
+		pname="${pnamepid// *}" # return anything before the space
+		pid="${pnamepid//* }"
+		## return the formatted string
+		printf "\`%s' with pid \`%s'" "$(basename ${pname})" "${pid}"
 	    fi
-	    #pname=${pnamepid// *} # return anything before the space
-	    ## store first line by stripping out second line starting with c
-	    #printf "character device is in use by \`%s' with pid \`%s'" "$(basename ${pname})" "$(${CMD_FUSER} ${chardev_path} 2>/dev/null)"
+	    
 	else
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "${FUNCNAME}: ps returned an error: \`${res}'"
