@@ -104,8 +104,9 @@ function fetch_alsa_outputinterfaces() {
     ## /path/to/output-of-aplay-l'. Of course all hardware and device
     ## test will fail, hopefully with some grace.
     if [[ -z "${TESTFILE}" ]]; then
-	## store the output of `aplay -l`
+	## run aplay to check for alsa errors
 	res="$(${CMD_APLAY} -l 2>&1)"
+	## check for alsa errors
 	if [[ $? -ne 0 ]]; then
 	    die "cannot continue, because alsa reported the following error:\n\`${res}'\n"
 	fi
