@@ -273,11 +273,16 @@ function fetch_alsa_outputinterfaces() {
 	    ## its a uac device, and if so, which class it is
 	    alsa_if_streamfile="/proc/asound/card${alsa_dev_nr}/stream${alsa_if_nr}"
 	    res="$(check_alsa_streamfile "${alsa_if_streamfile}")"
+
 	    if [[ $? -ne 0 ]] ;then
-		## streamfile not available; no uac interface
-		alsa_if_streamfile="${alsa_if_hwparamsfile} (error: not accessible )"
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "check_alsa_streamfile returned error: \`${res}'."
+		## no uac interface
 		alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
 	    else
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "check_alsa_streamfile returned success: \`${res}'."
+		
 		## set interface to usb out
 		alsa_if_type="uo"
 		## uac devices will use the stream file instead of
@@ -285,37 +290,28 @@ function fetch_alsa_outputinterfaces() {
 		alsa_if_monitorfile="${alsa_if_streamfile}"
 
 		## get the type of uac endpoint
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "alsa_if_streamfile: \`${alsa_if_streamfile}'."
+		
 		res="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
+		
 		if [[ $? -eq 1 ]]; then
-		    ##
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "return_alsa_uac_ep returned error: \`${res}'."
 		    alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+
 		else
-		    if [[ -z "${res}" ]]; then
-			## do some double checking
-			[[ ! -z "${DEBUG}" ]] && \
-			    debug "${FUNCNAME}: \`return_alsa_uac_ep' \
-			    returned an empty string (this should not \
-			    happen)"
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "return_alsa_uac_ep returned success: \`${res}'."		    
+		    alsa_if_uac_ep="${res}"
+		    ## lookup the uac class in the array for this type of endpoint (EP)
 
-			alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
-		    else 
-			alsa_if_uac_ep="${res}"
-			## lookup the uac class in the array for this type of endpoint (EP)
-			## (for readability)
-			for uac_class_label in "${UO_EP_LABELS[@]}" ; do
-			    uac_class=${uac_class_label%%:*}
-			    uac_label=${uac_class_label#*:}
-			    if [[ "${alsa_if_uac_ep}" = "${uac_class}" ]]; then 
-				alsa_if_uac_class="${uac_class}"
-				## get the uac class number (ie `1' or `2')
-				alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
-				## get the uac label (ie everything after `x: ')
-				alsa_if_uac_class_label="${alsa_if_uac_class:4}"
-			    fi 
-			done
-			
-
-		    fi
+		    ## (for readability)
+		    alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
+		    ## get the uac class number (ie `1' or `2')
+		    alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
+		    ## get the uac label (ie everything after `x: ')
+		    alsa_if_uac_class_label="${alsa_if_uac_class:4}"
 		fi
 	    fi
 	fi
@@ -509,56 +505,41 @@ function check_alsa_streamfile() {
 function return_alsa_uac_ep() {
     ## returns/echoes the usb audio class endpoint as a fixed string
     ## (ie `ADAPTIVE' or `ASYNC'.
-    ## needs path to existing stream file as single argument ($1)
+    ## needs path to stream file as single argument ($1)
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+  
     alsa_streamfile_path="$1"
-    counter=0
 
-    ## store the contents of the stream file in an array
-    ## (not using mapfile because of bad portability)
+    ep_mode=""
+    ep_regexp="[[:space:]]*Endpoint:[[:space:]]([0-9,]*)[[:space:]]OUT[[:space:]]\(([A-Z]*)\)"
+
+    ## iterate the contents of the streamfile
     while read -r line; do
-	alsa_streamfile_contents[counter]="$(printf '%s\n' "${line}")"
-	let counter=( ${counter} + 1 )
-    done < "${alsa_streamfile_path}"
-    ## expand the array 
-    alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
-	
-    ## part of begin of the portion of the line we're looking for (re)
-    ep_base="Endpoint: [3,5] OUT ("
-    ## the end of that portion
-    ep_end=")"
-	
-    ## the portion we need ending with ep_end
-    ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
-    if [[ -z "${ep_matched_portion}" ]]; then
-	## mo match; unable to extract ep_mode
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "${FUNCNAME}: can't extract \`ep_matched_portion' from \`alsa_streamfile_expanded'"
-
-	return 1
-    else
-	## the portion without ep_end
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "${FUNCNAME}: ep_matched_portion=\`${ep_matched_portion}'"
-	
-	ep_mode="${ep_matched_portion/)*/}"
-
-	if [[ -z "${ep_mode}" ]]; then
-	    ## mo match; unable to extract ep_mode
+	if [[ "${line}" =~ ${ep_regexp} ]]; then
+	    ep_mode="${BASH_REMATCH[2]}"
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "${FUNCNAME}: can't extract \`ep_mod' from \`ep_matched_portion'"
-	    
-	    return 1
-	else
-	    ## return the filtered endpoint type
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "${FUNCNAME}: ep_mod=\`${ep_mode}'"
-	    printf "%s" "${ep_mode}"	
+		debug "match using ep_regexp in line \`$line': \`ep_mode'."		
 	fi
-    fi
+    done<"${alsa_streamfile_path}"
     
+	    ## expand the array 
+#	alsa_streamfile_expanded=$(printf "%s" "${alsa_streamfile_contents[@]}")
+	
+	## part of begin of the portion of the line we're looking for (re)
+	
+#	ep_base="Endpoint: .* OUT ("
+	## the end of that portion
+#	ep_end=")"
+	
+	## the portion we need ending with ep_end
+#	ep_matched_portion="${alsa_streamfile_expanded#*${ep_base}}"
+	## the portion without ep_end
+#	ep_mode="${ep_matched_portion/)*/}"
+
+	## return the filtered endpoint type
+    printf "%s" "${ep_mode}"
 
 }
 
@@ -847,10 +828,12 @@ function pulseaudio_is_running() {
     pa_running="$(pgrep -u ${USER} pulseaudio)"
     ## return its pid
     if [[ ! -z "${pa_running}" ]] ; then
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is running: \`${pa_running}'"
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "pulseaudio is running: \`${pa_running}'"
 	printf "%s" "${pa_running}"
     else
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is not running"
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "pulseaudio is not running"
     fi
 
 }
@@ -915,32 +898,40 @@ failed with error: \`${res}'."
 
 
 function pulseaudio_stop() {
+
     ## temporary keep pulseaudio from respawning and stop it
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## check if its running
     pa_running="$(pulseaudio_is_running)"
+    
+    echo_stderr "pa_running: $?"
+    
     if [[ -z "${pa_running}" ]]; then
 	## it isn't
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is not running."
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "pulseaudio is not running."
     else
-	## it is
-	[[ ! -z "${DEBUG}" ]] && debug "pulseaudio is running."
-
+	
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "pulseaudio is running."
+	
 	## kill pulseaudio
 	res=$(${CMD_PULSEAUDIO} --kill)
-
+	
 	## check if that worked
 	if [[ -z "$(pulseaudio_is_running)" ]]; then
-	    [[ ! -z "${DEBUG}" ]] && debug "pulseaudio killed."
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "pulseaudio killed."
 	else
 	    [[ ! -z "${DEBUG}" ]] && debug "could not kill pulseaudio, error: \`${res}'."
-		## restore to situation before running script
-		pulseaudio_restore
+	    ## restore to situation before running script
+	    pulseaudio_restore
 	fi
     fi
-
+    
 }
 
 
@@ -1004,11 +995,6 @@ UO_EP_ASYNC_FILTER="ASYNC"
 UO_EP_ADAPT_LABEL="1 - isochronous adaptive"
 UO_EP_ASYNC_LABEL="2 - isochronous asynchronous"
 
-## declarative array holding the available UAC classes with
-## description
-UO_EP_LABELS=( "${UO_EP_ADAPT_FILTER}:${UO_EP_ADAPT_LABEL}" 
-	"${UO_EP_ASYNC_FILTER}:${UO_EP_ASYNC_LABEL}" )
-
 ## strings for pulseaudio handling
 CMD_PULSEAUDIO=""
 PULSEAUDIO_CLIENT_CONF="${HOME}/.pulse/client.conf"
@@ -1016,6 +1002,12 @@ PULSEAUDIO_CONF_MODIFIED=""
 PA_CLIENT_CONF_EXISTED=""
 PA_CLIENT_WAS_RUNNING=""
 
+## declarative array holding the available UAC classes with
+## description
+declare -A UO_EP_LABELS=( \
+	["${UO_EP_ADAPT_FILTER}"]="${UO_EP_ADAPT_LABEL}" \
+	["${UO_EP_ASYNC_FILTER}"]="${UO_EP_ASYNC_LABEL}" \
+	)
 
 ## system messages
 MSG_PROP_NOTAPPLICABLE="(n/a)"
