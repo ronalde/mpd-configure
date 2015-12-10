@@ -203,7 +203,10 @@ function fetch_alsa_outputinterfaces() {
 		alsa_if_label="${BASH_REMATCH[6]}" || \
 		    errors+=("could not fetch interface label")
 	    ## consider empty numbers and names of devices and interfaces fatal
-	    if [[ -z ${alsa_dev_nr} ]] || [[ -z ${alsa_dev_name} ]] || [[ -z ${alsa_if_nr} ]] || [[ -z ${alsa_if_name} ]]; then
+	    if [[ -z ${alsa_dev_nr} ]] || \
+		   [[ -z ${alsa_dev_name} ]] || \
+		   [[ -z ${alsa_if_nr} ]] || \
+		   [[ -z ${alsa_if_name} ]]; then
 		die "$(prinf "%s\n" "${errors[@]}")"
 		break
 	    fi
@@ -212,7 +215,7 @@ function fetch_alsa_outputinterfaces() {
 		debug "$(printf "errors: %s\n" "${errors[@]}")"
 	    fi
 
-		alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
+	    alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
 	    ## construct the path to the character device for the
 	    ## interface (ie `/dev/snd/xxx')
 	    alsa_if_chardev="/dev/snd/pcmC${alsa_dev_nr}D${alsa_if_nr}p"
