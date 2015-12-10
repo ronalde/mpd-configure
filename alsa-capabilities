@@ -134,9 +134,11 @@ function fetch_alsa_outputinterfaces() {
 
     ## modify the filter for aplay -l when OPT_HWFILTER is set
     if [[ ! -z "${OPT_HWFILTER}" ]]; then
-	alsa_card_int="${OPT_HWFILTER#hw:*}"
-	alsa_card="${alsa_card_int%%,*}"
-	aplay_card_regexp="card ${alsa_card}:"	
+	# the portion without `hw:', eg 0,1 
+	alsa_filtered_hwaddr="${OPT_HWFILTER#hw:*}" 
+	alsa_filtered_cardnr="${alsa_filtered_hwaddr%%,*}"
+	alsa_filtered_devicenr="${alsa_filtered_hwaddr##*,}"
+	aplay_card_regexp="card ${alsa_filtered_cardnr}:.* device ${alsa_filtered_devicenr}:"	
     fi
 
     ## iterate each line of aplay output
