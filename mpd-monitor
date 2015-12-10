@@ -332,33 +332,6 @@ function get_alsa_streamfile() {
     
 }
 
-function weg() {
-
-    ## use local or remote alsa-capabilities script to get the stream file
-    if [[ ! -x "${CMD_ALSACAPS}" ]]; then
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "\`alsa-capabilities' not available, download it."
-	tmpdir="$(mktemp -d "mpd-configure.XXXX")"
-	res="$(wget -q -O "${tmpdir}/${CMD_ALSACAPS}" "${REMOTEURL}/${CMD_ALSACAPS}")"
-	if [[ $? -ne 0 ]]; then
-	    die "Could not download "${REMOTEURL}/${CMD_ALSACAPS}""
-	else
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "alsa-capabilities downloaded to \`${tmpdir}/${CMD_ALSACAPS}'"
-	    CMD_ALSACAPS="${tmpdir}/${CMD_ALSACAPS}"
-	fi
-    fi
-
-    source "${CMD_ALSACAPS}"
-    #-a "${alsa_hwaddress}")"
-    
-    jaap="$(OPT_HWFILTER="${alsa_hwaddress}" return_alsa_interface)"
-    printf "contents of jaap:\n" 1>&2;
-    printf "%s\n" "${jaap}" 1>&2;
-    alsa_if_hwparamsfile=""
-
-    }
-
 
 check_commands || exit 1
 
