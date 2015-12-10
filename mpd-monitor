@@ -1,0 +1,298 @@
+#!/usr/bin/env bash
+
+## This script for linux with bash 4.x displays the properties of a
+## digital audio file, and the way it is decoded by alsa, when played
+## by music player daemon.
+##
+##  Copyright (C) 2015 Ronald van Engelen <ronalde+github@lacocina.nl>
+##  This program is free software: you can redistribute it and/or modify
+##  it under the terms of the GNU General Public License as published by
+##  the Free Software Foundation, either version 3 of the License, or
+##  (at your option) any later version.
+##
+##  This program is distributed in the hope that it will be useful,
+##  but WITHOUT ANY WARRANTY; without even the implied warranty of
+##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+##  GNU General Public License for more details.
+##
+##  You should have received a copy of the GNU General Public License
+##  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##
+## Source:    https://github.com/ronalde/mpd-configure
+## See also:  http://lacocina.nl/detect-alsa-output-capabilities
+
+
+LANG=C
+
+DEBUG=True
+REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/master"
+CMD_ALSACAPS="alsa-capabilities"
+ALSACAPS_OUTPUT=""
+
+file_samplerate=""
+file_sampleencoding=""
+
+alsa_samplerate=""
+alsa_sampleencoding=""
+
+### generic functions
+
+function echo_stderr() {
+    printf "$@\n" 1>&2; 
+}
+
+function die() {
+    echo_stderr "\nError: $@"
+    exit 1
+}
+
+function inform() {
+    echo_stderr "$@\n"
+}
+
+function debug() {
+    echo_stderr "DEBUG *** $@"
+}
+
+function command_not_found() {
+    ## give installation instructions for package $2 when command $1
+    ## is not available, optional with non default instructions $3
+    ## and exit with error
+
+    command="$1"
+    package="$2"
+    instructions="${3:-}"
+    msg="command \`${command}' not found. "
+    if [[ -z "${instructions}" ]]; then
+	msg+="Users of Debian and Ubuntu can install it with:\n"
+	msg+=" sudo apt-get install ${package}\n"
+	msg+="while Arch users can use:\n"
+	msg+=" sudo pacman -S ${package}"
+    else
+	msg+="${instructions}"
+    fi
+    die "${msg}"
+
+}
+
+
+check_commands() {
+
+    CMD_MPC="$(which mpc || command_not_found "mpc" "mpc")"
+    CMD_SOXI="$(which soxi || command_not_found "soxi" "sox")"
+
+    if [[ -z "${CMD_MPC}" ]] || [[ -z  "${CMD_SOXI}" ]]; then
+	die "One or more needed commands are missing."
+    fi
+}
+
+
+get_mpdconf() {
+    
+    ## check each available mpd configuration file in order.
+    ## Return full path to the file or empty string on error.
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+    
+    
+    for file in $XDG_CONFIG_HOME/mpd/mpd.conf \
+		    ~/.mpdconf \
+		    ~/.mpd/mpd.conf \
+		    /etc/mpd.conf; do
+	if [[ -f "${file}" ]]; then
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "will use mpd conf file: \`${file}'."
+	    printf "%s" "${file}"
+	    break
+	fi
+    done
+
+}
+
+function get_mpdconf_parameter() {
+
+    ## look up a parameter in the mpd configuration file and return
+    ## its value or an empy string.
+    
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+
+    parameter="$1"
+
+    value="$(grep "${parameter}" "${mpdconf}" | \
+awk '{ print $2}' | \
+sed 's/\"//g')"
+
+    if [[ $? -ne 0 ]]; then 
+	die "could not extract \`${parameter}' \
+from mpd configuration file "${mpdconf}""
+    else
+	## return it 
+	printf "%s" "${value}"
+    fi
+    
+    
+}
+
+		      
+
+get_mpd_musicdir() {
+
+    ## extract music_directory from mpd configuration file, and return
+    ## it if it's accessible.
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+
+    msg=""
+    mpdconf_parameter="music_directory"
+    mpd_musicdir="$(get_mpdconf_parameter "${mpdconf_parameter}")"
+
+    if [[ $? -eq 0 ]]; then 
+	msg="trying ${mpdconf_parameter}: \`${mpd_musicdir}' ... "
+	if [[ ! -d "${mpd_musicdir}" ]]; then
+	    msg+="not accessible."
+	    die "${msg}"
+	else
+	    msg+="done."
+	    [[ ! -z "${DEBUG}" ]] && debug "${msg}"
+	    
+	    ## return it 
+	    printf "%s" "${mpd_musicdir}"
+	fi
+    fi
+}
+
+get_mpd_device() {
+
+    ## extract device from mpd configuration file, and return
+    ## it.
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+
+    msg=""
+    mpdconf_parameter="device"
+    mpd_device="$(get_mpdconf_parameter "${mpdconf_parameter}")"
+    
+    if [[ $? -eq 0 ]]; then
+	[[ ! -z "${DEBUG}" ]] && debug "will use mpd device \`${mpd_device}'"
+	printf "%s" "${mpd_device}"
+    fi
+}
+
+
+get_file_props() {
+
+    ## get the properties of the file currently played by mpd using soxi
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"  
+    
+    sr_regexp="Sample Rate[[:space:]]*:[[:space:]]([0-9]*)" # Sample Rate    : 44100
+    se_regexp="Sample Encoding[[:space:]]*:[[:space:]]([0-9]*)-bit.*" # Sample Encoding: 16-bit FLAC
+    #or use Precision      : 16-bit
+    
+    while read -r line; do 
+
+	if [[ "${line}" =~ ${sr_regexp} ]]; then
+	    file_samplerate="${BASH_REMATCH[1]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "file_samplerate: \`${file_samplerate}'."
+	    
+	elif [[ "${line}" =~ ${se_regexp} ]]; then 
+	    file_sampleencoding="${BASH_REMATCH[1]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "file_sampleencoding: \`${file_sampleencoding}'."
+
+	fi
+    done<<<"$(${CMD_SOXI} "${currentfile_fullpath}")"
+
+    
+}
+
+get_alsa_props() {
+
+    ## get the properties of the file currently played by mpd using alsa
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+     
+    # Sample rate: Momentary freq = 95999 Hz (0xb.fff8)
+    sr_regexp="Momentary freq[[:space:]]=[[:space:]]([0-9]*)[[:space:]]Hz[[:space:]].*"
+    # Encoding format: Format: S32_LE
+    se_regexp="Format:[[:space:]]([A-Z_0-9]*)" 
+    
+    while read -r line; do 
+	
+	if [[ "${line}" =~ ${sr_regexp} ]]; then
+	    alsa_samplerate="${BASH_REMATCH[1]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "alsa_samplerate: \`${alsa_samplerate}'."
+	    
+	elif [[ "${line}" =~ ${se_regexp} ]]; then 
+	    alsa_sampleencoding="${BASH_REMATCH[1]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "alsa_sampleencoding: \`${alsa_sampleencoding}'."
+
+	fi
+    done<"${alsa_streamfile}"
+    
+    
+}
+
+function get_alsa_streamfile() {
+    ## use alsa-capabilities to get the stream file for the (hardware
+    ## address of the) alsa interface specified in the mpd
+    ## configuration file (needed for `get_alsa_props').
+
+    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    #monitor file           =  /proc/asound/card1/stream0
+    alsa_streamfile_regexp="monitor[[:space:]]file[[:space:]]*=[[:space:]]*(.*)"
+    alsa_hwaddress="$(get_mpd_device)"
+    
+    if [[ -x "${CMD_ALSACAPS}" ]]; then 
+	ALSACAPS_OUTPUT="$(bash ${CMD_ALSACAPS} -a "${alsa_hwaddress}")"
+    else
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "no local copy of \`alsa-capabilities', will fetch it from github."
+	
+	ALSACAPS_OUTPUT="$(bash <(wget -q -O - "${REMOTEURL}/${CMD_ALSACAPS}") -a "${alsa_hwaddress}")"
+	
+    fi
+    
+    while read -r line; do 
+	if [[ "${line}" =~ ${alsa_streamfile_regexp} ]]; then
+	    alsa_streamfile="${BASH_REMATCH[1]}"
+	fi
+    done<<<"${ALSACAPS_OUTPUT}"
+
+    if [[ ! -f "${alsa_streamfile}" ]]; then
+	die "alsa streamfile \`${alsa_streamfile}' is not found or not accessible."
+    else
+	printf "%s" "${alsa_streamfile}"
+    fi
+    
+}
+
+check_commands || exit 1
+
+mpdconf="$(get_mpdconf)"
+mpd_musicdir="$(get_mpd_musicdir)"
+alsa_streamfile="$(get_alsa_streamfile)"
+
+currentfile_relpath="$(${CMD_MPC} -f "%file%" current)"
+[[ ! -z "${DEBUG}" ]] && \
+    debug "mpc returned relative path: \`${currentfile_relpath}'."
+
+currentfile_fullpath="${mpd_musicdir}/${currentfile_relpath}"
+if [[ ! -f "${currentfile_fullpath}" ]]; then
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "specified path \`${currentfile_fullpath}' is not a file or is not accessible."
+    die "can't continue."
+else
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "checking file: \`${currentfile_fullpath}'."
+fi
+
+get_file_props
+
+get_alsa_props
+
+#get_alsa_streamfile

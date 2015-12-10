@@ -97,13 +97,23 @@ function fetch_alsa_outputinterfaces() {
     res=""
     aplay_output=""
     aplay_msg_nosoundcards_re="no[[:space:]]soundcards"
+    aplay_card_regexp="card [0-99]:"
     
     ## to see how the script behaves with a certain output of aplay -l
     ## on a particular host, store it's output in a file and supply
     ## the file path as the value of TESTFILE, eg: `bash-capabilities
     ## /path/to/output-of-aplay-l'. Of course all hardware and device
-    ## test will fail, hopefully with some grace.
-    if [[ -z "${TESTFILE}" ]]; then
+    ## tests will fail (hopefully with some grace).
+    if [[ ! -z "${TESTFILE}" ]]; then
+	if [[ -f "${TESTFILE}" ]]; then
+	    ## get the output from a file for testing purposes
+	    inform "NOTICE: not using real aplay output but contents of TESTFILE \`${TESTFILE}'"
+	    aplay_output="$(< "${TESTFILE}")"
+	else
+	    die "Specified TESTFILE \'${TESTFILE}' does not exist."
+	fi
+    else
+    
 	## run aplay to check for alsa errors
 	res="$(${CMD_APLAY} -l 2>&1)"
 	## check for alsa errors
@@ -116,27 +126,29 @@ function fetch_alsa_outputinterfaces() {
 	fi
 	## run it again without std_err
 	aplay_output="$(${CMD_APLAY} -l)"
-    else
-	if [[ -f "${TESTFILE}" ]]; then
-	    ## get the output from a file for testing purposes
-	    inform "NOTICE: not using real aplay output but contents of TESTFILE \`${TESTFILE}'"
-	    aplay_output="$(< "${TESTFILE}")"
-	else
-	    die "TESTFILE needs an existing file"
-	fi
     fi
 	
     declare -a aplay_lines=()
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
 
+    ## modify the filter for aplay -l when OPT_HWFILTER is set
+    if [[ ! -z "${OPT_HWFILTER}" ]]; then
+	alsa_card_int="${OPT_HWFILTER#hw:*}"
+	alsa_card="${alsa_card_int%%,*}"
+	aplay_card_regexp="card ${alsa_card}:"	
+    fi
+
     ## iterate each line of aplay output
     while read -r line ; do 
 	## filter for `^card' and then for `OPT_FILTER' to get matching
 	## lines from aplay and store them in an array
-	if [[ "${line}" =~ "card "[0-99]":" ]]; then
 
-	    [[ ! -z "${DEBUG}" ]] && debug  "Inspecting interface: ${line}"
+	
+	if [[ "${line}" =~ ${aplay_card_regexp} ]]; then
+
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug  "Inspecting interface: ${line}"
 
 	    ## raise the counter for interfaces without filtering
 	    let NR_AIFS_BEFOREFILTERING+=1
@@ -144,7 +156,8 @@ function fetch_alsa_outputinterfaces() {
 	    ## check if line matches `OPT_FILTER'
 	    if [[ -z "${OPT_FILTER}"  || \
 		"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
-		[[ ! -z "${DEBUG}" ]] && debug  "               match: ${line}"
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug  "               match: ${line}"
 		## store the line in an array
 		aplay_lines+=("${line}")
 	    fi
@@ -581,7 +594,7 @@ function display_usageinfo() {
 
     msg=$(cat <<EOF
 Usage:
-$0 [ -l a|d|u ]  [ -c <filter> ] [ -q ]
+$0 [ -l a|d|u ]  [ -c <filter> ] [-a <hwaddress>] [ -q ]
 
 Displays a list of alsa audio output interfaces with their details and
 ends with the hardware address (\`hw:x,y') for the first available
@@ -594,6 +607,9 @@ argument, either \`a' (or \`analog'), \`d' (or \`digital') or \`u' (or
 addition, a custom filter may be specified as an argument for the \`c'
 option.
 
+The \`a' option is for usage in scripts, and expects a valid alsa
+hardware address (eg. hw:0,1).
+
 Returns 0 if an interface is available or 1 in case of no matches.
 
   -l a | analog     Limit the interfaces to analog ones.
@@ -603,6 +619,8 @@ Returns 0 if an interface is available or 1 in case of no matches.
                     a static (and arbitrary) filter.
   -c <regexp>       Limit the available interfaces further to match
                     \`<regexp>'.
+  -a <hwaddress>    Limit the returned interface to the one specified with 
+                    \`<hwaddress>', eg. hw:0,1
   -q, --quiet       Surpress listing each interface with its details,
                     ie only store the details of each card in the
                     appropriate arrays.
@@ -638,6 +656,11 @@ function analyze_command_line() {
 		[[ ! -z "${DEBUG}" ]] && \
 		    debug "option \`c' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_FILTER="${OPTARG}"
+		;;
+            a) 
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "option \`a' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
+		OPT_HWFILTER="${OPTARG}"
 		;;
            h|\?) 
 		done_opts=true
@@ -1025,17 +1048,19 @@ none matched your filter."
 ## command line options
 ### optional input parameters, the ones with `:' need an argument
 declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb" "uac")
-SHORT_OPTS=("l:" "c:" "q" "h")
+SHORT_OPTS=("l:" "c:" "a:" "q" "h")
 
 OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
 OPT_DISABLE_PULSEAUDIO="${OPT_DISABLE_PULSEAUDIO:-}"
 OPT_FILTER="${OPT_FILTER:-}"
+OPT_HWFILTER="${OPT_HWFILTER:-}"
 
 OPT_LIMIT_AO=${OPT_LIMIT_AO:-}
 OPT_LIMIT_DO=${OPT_LIMIT_DO:-}
 OPT_LIMIT_UO=${OPT_LIMIT_UO:-}
 OPT_QUIET=${OPT_QUIET:-}
 OPT_FILTER=${OPT_FILTER:-}
+OPT_HWFILTER=${OPT_HWFILTER:-}
 
 
 ## if the script is not sourced by another script but run within its
