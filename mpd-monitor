@@ -25,7 +25,7 @@
 LANG=C
 
 DEBUG=True
-REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/master"
+REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/mpd-monitor"
 CMD_ALSACAPS="alsa-capabilities"
 ALSACAPS_OUTPUT=""
 
