@@ -110,7 +110,8 @@ function is_mpd_local() {
 	    debug "MPD_HOST is set to \`${MPD_HOST}'" 
 
 	## environment variable is set
-	if [[ "${MPD_HOST}" =~ ${loopback_regexp} ]] || [[  "${MPD_HOST}" = "localhost" ]] ; then
+	if [[ "${MPD_HOST}" =~ ${loopback_regexp} ]] || \
+	       [[  "${MPD_HOST}" = "localhost" ]] ; then
 	    ## points to a loopback address
 	    return 0
 	else
