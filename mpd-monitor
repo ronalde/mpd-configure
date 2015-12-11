@@ -23,6 +23,7 @@
 
 LANG=C
 
+## TODO: handle non-local mpd
 MPD_HOST="${MPD_HOST:-localhost}"
 MPD_PORT="${MPD_PORT:-6600}"
 
@@ -82,7 +83,9 @@ function command_not_found() {
 }
 
 
-check_commands() {
+function check_commands() {
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 
     CMD_SOXI="$(which soxi || command_not_found "soxi" "sox")"
 
@@ -92,7 +95,44 @@ check_commands() {
 }
 
 
-get_mpdconf_filepath() {
+function is_mpd_local() {
+    ## determine if mpd is running local, otherwise exit gracefully.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+
+    loopback_regexp="^127."
+    local_ipaddress=""
+
+    if [[ -z "${MPD_HOST}" ]]; then
+	return 0
+    else
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "MPD_HOST is set to \`${MPD_HOST}'" 
+
+	## environment variable is set
+	if [[ "${MPD_HOST}" =~ ${loopback_regexp} ]] || [[  "${MPD_HOST}" = "localhost" ]] ; then
+	    ## points to a loopback address
+	    return 0
+	else
+ 	    local_ipaddress="$(hostname --ip-addresses)"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "local ip address \`${local_ipaddress}'" 
+	    
+	    if [[ "${MPD_HOST}" = $(printf "%s" ${local_ipaddress}) ]]; then
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "mpd is running local" 
+
+		return 0
+	    else
+		## assume it is not local
+		return 1
+	    fi
+	fi
+    fi
+   
+}
+
+function get_mpdconf_filepath() {
     ## check availability if each possible mpd configuration file in
     ## order.  Return full path to the file or empty string on error.
     [[ ! -z "${DEBUG}" ]] && \
@@ -134,7 +174,7 @@ from mpd configuration file "${MPD_CONFIGURATIONFILE}""
 }
 
 
-get_mpd_musicdir() {
+function get_mpd_musicdir() {
     ## extract music_directory from mpd configuration file, and return
     ## it if it's accessible.
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'" 
@@ -157,7 +197,7 @@ get_mpd_musicdir() {
     fi
 }
 
-get_mpd_device() {
+function get_mpd_device() {
     ## extract device from mpd configuration file, and return
     ## it.
     [[ ! -z "${DEBUG}" ]] && \
@@ -185,7 +225,7 @@ get_mpd_device() {
 }
 
 
-get_file_samplerate() {
+function get_file_samplerate() {
     ## get the sample rate of the file currently played by mpd using soxi
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}'"  
@@ -205,7 +245,8 @@ get_file_samplerate() {
     done<<<"${soxi_output}"
 }
 
-get_file_sampleencoding() {
+
+function get_file_sampleencoding() {
     ## get the sample encoding of the file currently played by mpd using soxi
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}'"  
@@ -227,7 +268,8 @@ get_file_sampleencoding() {
     done<<<"${soxi_output}"
 }
 
-get_alsa_samplerate() {
+
+function get_alsa_samplerate() {
     ## get the properties of the file currently played by mpd using alsa
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
@@ -252,7 +294,7 @@ get_alsa_samplerate() {
 }
 
 
-get_alsa_sampleencoding() {
+function get_alsa_sampleencoding() {
     ## get the properties of the file currently played by mpd using alsa
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
@@ -472,7 +514,14 @@ mpd_samplerate=""
 mpd_bitdepth=""
 mpd_channels=""
 
+msg_remote_intro="Currently the script only functions when mpd runs locally."
+msg_remote_next="It may be run on a remote host running mpd using ssh, eg"
+msg_remote_ssh="ssh \$username@\$remotehost 'bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/mpd-monitor")'"
 
+
+msg_remote="$(printf "%s\n%s\n%s\n" \
+"${msg_remote_intro}" "${msg_remote_next}" "${msg_remote_ssh}")"
+is_mpd_local || die "${msg_remote}"
 ## return the results of mpd's `status' command 
 mpd_status="$(remote_mpd_command status)"
 
