@@ -15,6 +15,9 @@ them to the `./confs-enabled/` directory, they will be included by the
 bash variable in those configuration snippets, will be expanded to
 their calculated values by the script.
 
+About the mpd-monitor helper script
+-----------------------------------
+
 The actual configuration of the system may be inspected/monitored by
 the helper script `mpd-monitor`, which can be executed as follows:
 
