@@ -3,9 +3,10 @@ README for mpd-configure
 
 The `mpd-configure` bash script creates a valid
 [mpd](http://www.musicpd.org/) configuration file, optimised for bit
-perfect playback of high resolution digital audio files. It relies on
-the accompanying bash script `alsa-capabilities` for getting
-information about the available interfaces from alsa.
+perfect playback of any digital audio file, including those of high
+resolution. It relies on the accompanying bash script
+`alsa-capabilities` for getting information about the available
+interfaces from alsa.
 
 All configuration parameters for mpd are available in configuration
 snippet files in the `./confs-available/` directory. By symlinking
@@ -13,6 +14,15 @@ them to the `./confs-enabled/` directory, they will be included by the
 `mpd-configure` script in the resulting mpd configuration file. Any
 bash variable in those configuration snippets, will be expanded to
 their calculated values by the script.
+
+The actual configuration of the system may be inspected/monitored by
+the helper script `mpd-monitor`, which can be executed as follows:
+
+    bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/mpd-monitor")
+
+Or, when mpd is running on a remote host to which you have (key based) ssh access, execute:
+
+    ssh ${username}@${remotehost} "bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/mpd-monitor")"
 
 
 About the alsa-capabilities helper script
