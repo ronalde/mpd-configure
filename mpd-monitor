@@ -36,6 +36,8 @@ REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/mpd-monitor"
 CMD_ALSACAPS="alsa-capabilities"
 ALSACAPS_OUTPUT=""
 
+TMPCONFS_TEMPLATE="$(mktemp -u mpdconf.XXXX)"
+
 file_samplerate=""
 file_sampleencoding=""
 
@@ -178,7 +180,8 @@ from mpd configuration file "${MPD_CONFIGURATIONFILE}""
 function get_mpd_musicdir() {
     ## extract music_directory from mpd configuration file, and return
     ## it if it's accessible.
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 
     msg=""
     mpdconf_parameter="music_directory"
@@ -198,17 +201,134 @@ function get_mpd_musicdir() {
     fi
 }
 
+function get_mpd_alsa_audio_outputs() {
+    ## store configuration snippets for each alsa audio_output defined
+    ## in the mpd configuration.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+    
+    audio_output_started_regexp="audio_output"
+    audio_output_ended_regexp="}"
+    output_started=""
+    audio_output_alsa_type_regexp="(type)[[:space:]]*(alsa)"
+    alsa_output_started=""
+    output_counter=0
+       
+    while read -r line; do
+
+	if [[ ! -z "${output_started}" ]]; then 
+	    ## inside output?
+	    if [[ "${line}" =~ ${audio_output_ended_regexp} ]]; then
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "end of audio_output section."
+		output_started=""
+		continue
+	    else
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "inside output: \`${line}'."
+		## store the line in the temporary config file
+		printf "%s\n" "${line}" >> "${tmpconf}"
+	    fi
+	else   
+	    if [[ "${line}" =~ ${audio_output_started_regexp} ]]; then
+ 		output_started="True"
+		## raise the counter and (mis)use the tmpfile
+		((output_counter++))
+		tmpconf="/tmp/${TMPCONFS_TEMPLATE}.${output_counter}"
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "start of audio_output section."
+		continue
+	    fi
+	fi
+	
+    done < ${MPD_CONFIGURATIONFILE}
+    
+    if [[ ${output_counter} -gt 0 ]]; then
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "${output_counter} alsa output(s) found."
+	printf "%s" "${output_counter}"
+    else
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "no alsa outputs found."
+	return 1
+    fi
+
+}
+
+
 function get_mpd_device() {
-    ## extract device from mpd configuration file, and return
-    ## it.
+    ## extract alsa output device from mpd configuration file, and
+    ## return it.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
+    alsa_outputs="$(get_mpd_alsa_audio_outputs)"
+    if [[ ${alsa_outputs} -lt 1 ]]; then 
+	die "no alsa outputs found in the mpd configuration file"
+    else 
+	for f in /tmp/${TMPCONFS_TEMPLATE}*; do
+	    echo "$f:" >&2;
+	    while read -r line; do
+		printf "%s\n" "${line}" >&2;
+	    done < "${f}" 
+	done
+    fi
+		 
+    printf "%s\n" 
+    outputcounter=0
+    type_found=""
+    alsa_type_found=""
+    declare -A tmpconf
+    
     ## count the number of audio_outputs in mpd configuration
     mpdconf_parameter="audio_output"
     mapfile -t mpd_audio_output < <(get_mpdconf_parameter "${mpdconf_parameter}")
     if [[ ${#mpd_audio_output[@]} -gt 1 ]]; then
-	inform "multiple mpd audio outputs found, will use first device only."
+	inform "multiple mpd audio outputs found, will use first device."
+	while read -r line; do
+	    if [[ ! -z "${alsa_type_found}" ]]; then
+		## lines til `}' belong to type
+		if [[ "${line}" =~ "}" ]]; then
+		    ## end of audio_output
+		    type_found=""
+		    alsa_type_found=""
+		    continue
+		else
+		    ## part of audio_output, store it in tmpconf
+		    echo "${line}" >> "${tmpconf}"
+
+		fi
+	    else 
+		if [[ ! -z "${type_found}" ]]; then 
+		    if [[ "${line}" =~ "audio_output" ]]; then
+			outputcounter=$(( ${outputcounter} + 1 ))
+			tmpconf="$(mktemp mpdconf.${outputcounter}.XXXX)"
+			type_found=""   
+			continue
+		    fi
+		    if [[ "${line}" =~ type[[:space:]](.*)$ ]]; then
+			type_found="True"
+			type="${BASH_REMATCH[1]}"
+			if [[ "${type}" =~ alsa ]]; then
+			    ## alsa output device found
+			    debug "alsa output device found: \`${type}'"
+			    alsa_type_found="True"
+			    continue
+			else
+			    ## non-alsa output device found;
+			    debug "non-alsa output device found: \`${type}'"
+			fi
+		    fi
+		fi
+	    fi
+	done <<< "${MPD_CONFIGURATIONFILE}"
+	mpdconf_parameter="audio_output"
+	get_mpdconf_parameter "${mpdconf_parameter}"
+	
+	tmpconf+=()
+    else
+	## only a single output, check if its `type' is `alsa'
+	bla=""
     fi
 	
 
