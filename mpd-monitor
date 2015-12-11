@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
 ## This script for linux with bash 4.x displays the properties of a
-## digital audio file, and the way it is decoded by alsa, when played
-## by music player daemon.
+## digital audio file as stored, transferred by mpd and decoded by alsa.
 ##
 ##  Copyright (C) 2015 Ronald van Engelen <ronalde+github@lacocina.nl>
 ##  This program is free software: you can redistribute it and/or modify
