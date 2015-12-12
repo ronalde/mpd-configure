@@ -36,8 +36,11 @@ REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/mpd-monitor"
 CMD_ALSACAPS="alsa-capabilities"
 ALSACAPS_OUTPUT=""
 
+declare MPD_OUTPUTS
+
 TMPCONFS_TEMPLATE="$(mktemp -u mpdconf.XXXX)"
 
+MSG_MPDCONF="mpd configuration file"
 file_samplerate=""
 file_sampleencoding=""
 
@@ -98,12 +101,19 @@ function check_commands() {
 
 
 function is_mpd_local() {
-    ## determine if mpd is running local, otherwise exit gracefully.
+    ## determine if mpd is running local, otherwise exit with notice.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 
     loopback_regexp="^127."
     local_ipaddress=""
+
+    msg_remote_intro="Currently the script only functions when mpd runs locally."
+    msg_remote_next="It may be run on the specified remote mpd host \`${MPD_HOST}' using ssh, eg"
+    msg_remote_ssh="   ssh \${username}@${MPD_HOST} \"bash <(wget -q -O - \"${REMOTEURL}\")\""
+    msg_remote_post="(replacing \`\${username}' with the a valid one)"
+    msg_remote="$(printf "%s\n%s\n%s\n%s\n" \
+"${msg_remote_intro}" "${msg_remote_next}" "${msg_remote_ssh}" "${msg_remote_post}")"
 
     if [[ -z "${MPD_HOST}" ]]; then
 	return 0
@@ -124,10 +134,10 @@ function is_mpd_local() {
 	    if [[ "${MPD_HOST}" = $(printf "%s" ${local_ipaddress}) ]]; then
 		[[ ! -z "${DEBUG}" ]] && \
 		    debug "mpd is running local" 
-
 		return 0
 	    else
 		## assume it is not local
+		printf "%s\n" "${msg_remote}"
 		return 1
 	    fi
 	fi
@@ -147,7 +157,7 @@ function get_mpdconf_filepath() {
 		    /etc/mpd.conf; do
 	if [[ -f "${file}" ]]; then
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "will use mpd conf file: \`${file}'."
+		debug "will use ${MSG_MPDCONF}: \`${file}'."
 	    printf "%s" "${file}"
 	    break
 	fi
@@ -164,13 +174,12 @@ function get_mpdconf_parameter() {
 
     parameter="$1"
     mpdconf_file="${2:-}"
-    msg="mpd configuration file"
     conf_filter_regexp=""
     
     if [[ -z "${mpdconf_file}" ]]; then
 	mpdconf_file="${MPD_CONFIGURATIONFILE}"
     else
-	msg="${msg} snippet"    
+	msg="${MSG_MPDCONF} snippet"    
     fi
     
     if [[ ! -f "${mpdconf_file}" ]]; then
@@ -203,7 +212,59 @@ from ${msg} \`${mpdconf_file}'."
 }
 
 
-function get_mpd_musicdir() {
+function does_mpd_haveoutputs() {
+    ## get the defined audio outputs for mpd using the mpd protocol.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    outputname_regexp="outputname:[[:space:]](.*)"
+    outputenabled_regexp="outputenabled:[[:space:]]([0-1])"
+    mpd_outputs_result="$(execute_mpd_command "outputs")"
+    named_output=""
+
+    #debug "${mpd_outputs_result}"
+    if [[ $? -ne 0 ]]; then
+	printf "%s\n" "error getting outputs from mpd."
+	return 1 
+    else
+	## check if their enabled
+	while read -r line; do
+	    if [[ -z "${named_output}" ]]; then 
+		if [[ "${line}" =~ ${outputname_regexp} ]]; then
+		    ## named output found
+		    named_output="${BASH_REMATCH[1]}"
+		fi
+	    else
+		## line should indicate if output is enabled
+		if [[ ${line} =~ ${outputenabled_regexp} ]]; then
+		    if [[ ${BASH_REMATCH[1]} -eq 1 ]]; then
+			[[ ! -z ${DEBUG} ]] && \
+			    debug "enabled output found: \`${named_output}'."
+			## add its name to the array
+			MPD_OUTPUTS+=("${named_output}")
+		    fi
+		    ## reset the loop
+		    named_output=""
+		    output_found=""
+		fi
+	    fi
+	done<<< "${mpd_outputs_result}"
+
+	if [[ ${#MPD_OUTPUTS[@]} -lt 1 ]]; then 
+	    printf "no outputs found"
+	    return 1
+	else
+	    msg="$(printf "\`%s' " "${MPD_OUTPUTS[@]}")"
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "using outputs: ${msg}"
+	    return 0
+	fi
+
+    fi
+    
+}
+
+function get_mpdconf_musicdir() {
     ## extract music_directory from mpd configuration file, and return
     ## it if it's accessible.
     [[ ! -z "${DEBUG}" ]] && \
@@ -281,6 +342,16 @@ function get_mpd_alsa_audio_outputs() {
 
 }
 
+function mpd_handle_staticfilter() {
+    ## gracefully handle the case of a static filter in an alsa output
+    ## device inside as mpd configuration file.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    mpd_device="$1"
+    inform "the alsa output device \`${mpd_device}' is configured for a static format in the ${MSG_MPDCONF}."
+    
+}
 
 function get_mpd_device() {
     ## extract alsa output device from the temporary configuration
@@ -289,13 +360,19 @@ function get_mpd_device() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
+    mpd_device=""
+    mpd_filter=""
+    mpd_fixed_samplerate=""
+    mpd_fixed_channelcount=""
+    mpd_fixed_sampleencoding=""
+    
     alsa_outputs="$(get_mpd_alsa_audio_outputs)"
     if [[ ${alsa_outputs} -lt 1 ]]; then 
-	die "no alsa outputs found in the mpd configuration file"
+	die "no alsa outputs found in the ${MSG_MPDCONF}"
     else 
 	for f in /tmp/${TMPCONFS_TEMPLATE}*; do
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "reading mpd configuration file snippet \`$f'."
+		debug "reading ${MSG_MPDCONF} snippet \`$f'."
 	    while read -r line; do
 		[[ ! -z "${DEBUG}" ]] && \
 		    debug "line: \`${line}'"
@@ -314,11 +391,19 @@ function get_mpd_device() {
 	mpd_device="$(get_mpdconf_parameter "${mpdconf_parameter}" "${f}")"
 	## TODO: handle multiple outputs.
 	## for now just stop after the first one.
-	break
+	if [[ $? -eq 0 ]]; then
+	    ## check for a `filter' parameter
+	    mpdconf_parameter="filter"
+	    mpd_filter="$(get_mpdconf_parameter "${mpdconf_parameter}" "${f}")"
+	    if [[ $? -eq 0 ]]; then
+		mpd_handle_staticfilter "${mpd_device}"
+	    fi
+	    break
+	fi
     done 
     
     if [[ -z "${mpd_device}" ]]; then
-	die "Could not get alsa device from the mpd configuration file."
+	die "Could not get alsa device from the ${MSG_MPDCONF}."
     else
 	[[ ! -z "${DEBUG}" ]] && \
 	    debug "using mpd device \`${mpd_device}'"
@@ -459,7 +544,7 @@ function get_alsa_streamfile() {
     fi
 }
 
-function remote_mpd_command() {
+function execute_mpd_command() {
     ## execute a command using the mpd protocol on a pseudo device
     ## file pointing at a mpd host
     [[ ! -z "${DEBUG}" ]] && \
@@ -502,7 +587,7 @@ function get_mpd_currentsong() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
-    mpd_currentsong_output="$(remote_mpd_command currentsong)"
+    mpd_currentsong_output="$(execute_mpd_command currentsong)"
     ## file: some/relative/path/song.wav
     mpd_currentsong_regexp="^file:[[:space:]](.*)$"
     while read -r line; do
@@ -569,21 +654,23 @@ function get_mpd_bitdepth() {
 }
 
 function is_mpd_playing() {
-
-    mpd_status="$@"
+    ## check if mpd is running and playing a file.
+    
+    mpd_status="$(execute_mpd_command status)"
     
     ## state: stop|play
-    mpd_status_state_regexp="state:[[:space:]]([a-z]*)"
+    state_regexp="state:[[:space:]]([a-z]*)"
 
     while read -r line; do
 	
-	if [[ "${line}" =~ ${mpd_status_state_regexp} ]]; then
+	if [[ "${line}" =~ ${state_regexp} ]]; then
 	    mpd_state="${BASH_REMATCH[1]}"
 	    
 	    if [[ "${mpd_state}" =~ "stop" ]]; then
 		[[ ! -z "${DEBUG}" ]] && \
 		    debug "mpd_state: \`${mpd_state}'"
 		## exit when state is stopped
+		printf "mpd on %s is not playing a file.\n" "${MPD_PHONY_URL}"
 		return 1
 		break
 	    else
@@ -613,28 +700,37 @@ is not a file or is not accessible. Can't continue."
 
 }
 
+msg_samplerate="sample rate"
+msg_sampleencoding="sample encoding"
+msg_source="file on storage"       ## file on storage             < soxi
+msg_transfer="transfer by mpd"    ## file as transferred         < mpd
+msg_playback="playback by alsa"    ## file as converted to analog < alsa
 
 mpd_state=""
 mpd_samplerate=""
 mpd_bitdepth=""
 mpd_channels=""
 
-msg_remote_intro="Currently the script only functions when mpd runs locally."
-msg_remote_next="It may be run on a remote host running mpd using ssh, eg"
-msg_remote_ssh="ssh \$username@\$remotehost 'bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/mpd-monitor")'"
+## sanity checks
 
+[[ ! -z "${DEBUG}" ]] && \
+    debug "start checking sanity ..."
 
-msg_remote="$(printf "%s\n%s\n%s\n" \
-"${msg_remote_intro}" "${msg_remote_next}" "${msg_remote_ssh}")"
-is_mpd_local || die "${msg_remote}"
-## return the results of mpd's `status' command 
-mpd_status="$(remote_mpd_command status)"
-
-ret="$(is_mpd_playing "${mpd_status}")"
+## check if mpd is running local, or exit gracefully
+msg_remote="$(is_mpd_local)"
+[[ $? -eq 0 ]] || die "${msg_remote}"
 
 ## exit when mpd is not playing a file
-[[ $? -ne 0 ]] && \
-    die "mpd on ${MPD_PHONY_URL} is not playing a file."
+msg_notplaying="$(is_mpd_playing)"
+[[ $? -eq 0 ]] || die "${msg_notplaying}"
+
+## check for audio outputs
+msg_nooutputs="$(does_mpd_haveoutputs)"
+[[ $? -eq 0 ]] || die "${msg_nooutputs}"
+
+[[ ! -z "${DEBUG}" ]] && \
+    debug "... done checking sanity."
+
 
 mpd_currentsong="$(get_mpd_currentsong)"
 
@@ -656,13 +752,7 @@ alsa_streamfile="$(get_alsa_streamfile)"
 
 ## get the path to the (parent) music directory from the mpd
 ## configuration file
-mpd_musicdir="$(get_mpd_musicdir)"
-
-msg_samplerate="sample rate"
-msg_sampleencoding="sample encoding"
-msg_source="file on storage"       ## file on storage             < soxi
-msg_transfer="transf by mpd"    ## file as transferred         < mpd
-msg_playback="playback by alsa"    ## file as converted to analog < alsa
+mpd_musicdir="$(get_mpdconf_musicdir)"
 
 ## get the path of the current playing song, relative to
 ## `mpd_musicdir'
