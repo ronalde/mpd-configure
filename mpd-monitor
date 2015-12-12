@@ -163,13 +163,39 @@ function get_mpdconf_parameter() {
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 
     parameter="$1"
-    value="$(grep "${parameter}" "${MPD_CONFIGURATIONFILE}" | \
-awk '{ print $2}' | \
-sed 's/\"//g')"
+    mpdconf_file="${2:-}"
+    msg="mpd configuration file"
+    conf_filter_regexp=""
+    
+    if [[ -z "${mpdconf_file}" ]]; then
+	mpdconf_file="${MPD_CONFIGURATIONFILE}"
+    else
+	msg="${msg} snippet"    
+    fi
+    
+    if [[ ! -f "${mpdconf_file}" ]]; then
+	
+	die "specified ${msg} \`${mpdconf_file}' \
+does not exist or is not accessible"
+    else
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "using ${msg} \`${mpdconf_file}'."
+    fi
+
+    while read -r line; do
+	## lame use of `.' instead of proper escaping single or double quotes
+	conf_filter_regexp="${parameter}[[:space:]]*.(.*).$"
+	if [[ "${line}" =~ ${conf_filter_regexp} ]]; then
+	    value="${BASH_REMATCH[1]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "value \`${value}' found for parameter \`${parameter}'."
+	fi
+    done < "${mpdconf_file}"
+    
 
     if [[ $? -ne 0 ]]; then 
 	die "could not extract \`${parameter}' \
-from mpd configuration file "${MPD_CONFIGURATIONFILE}""
+from ${msg} \`${mpdconf_file}'."
     else
 	## return it 
 	printf "%s" "${value}"
@@ -202,8 +228,8 @@ function get_mpd_musicdir() {
 }
 
 function get_mpd_alsa_audio_outputs() {
-    ## store configuration snippets for each alsa audio_output defined
-    ## in the mpd configuration.
+    ## store configuration snippets in temp files for each alsa
+    ## audio_output defined in the mpd configuration.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
     
@@ -257,7 +283,8 @@ function get_mpd_alsa_audio_outputs() {
 
 
 function get_mpd_device() {
-    ## extract alsa output device from mpd configuration file, and
+    ## extract alsa output device from the temporary configuration
+    ## file snippets created with get_mpd_alsa_audio_outputs, and
     ## return it.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
@@ -267,81 +294,35 @@ function get_mpd_device() {
 	die "no alsa outputs found in the mpd configuration file"
     else 
 	for f in /tmp/${TMPCONFS_TEMPLATE}*; do
-	    echo "$f:" >&2;
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "reading mpd configuration file snippet \`$f'."
 	    while read -r line; do
-		printf "%s\n" "${line}" >&2;
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "line: \`${line}'"
 	    done < "${f}" 
 	done
     fi
 		 
-    printf "%s\n" 
     outputcounter=0
     type_found=""
     alsa_type_found=""
-    declare -A tmpconf
     
-    ## count the number of audio_outputs in mpd configuration
-    mpdconf_parameter="audio_output"
-    mapfile -t mpd_audio_output < <(get_mpdconf_parameter "${mpdconf_parameter}")
-    if [[ ${#mpd_audio_output[@]} -gt 1 ]]; then
-	inform "multiple mpd audio outputs found, will use first device."
-	while read -r line; do
-	    if [[ ! -z "${alsa_type_found}" ]]; then
-		## lines til `}' belong to type
-		if [[ "${line}" =~ "}" ]]; then
-		    ## end of audio_output
-		    type_found=""
-		    alsa_type_found=""
-		    continue
-		else
-		    ## part of audio_output, store it in tmpconf
-		    echo "${line}" >> "${tmpconf}"
-
-		fi
-	    else 
-		if [[ ! -z "${type_found}" ]]; then 
-		    if [[ "${line}" =~ "audio_output" ]]; then
-			outputcounter=$(( ${outputcounter} + 1 ))
-			tmpconf="$(mktemp mpdconf.${outputcounter}.XXXX)"
-			type_found=""   
-			continue
-		    fi
-		    if [[ "${line}" =~ type[[:space:]](.*)$ ]]; then
-			type_found="True"
-			type="${BASH_REMATCH[1]}"
-			if [[ "${type}" =~ alsa ]]; then
-			    ## alsa output device found
-			    debug "alsa output device found: \`${type}'"
-			    alsa_type_found="True"
-			    continue
-			else
-			    ## non-alsa output device found;
-			    debug "non-alsa output device found: \`${type}'"
-			fi
-		    fi
-		fi
-	    fi
-	done <<< "${MPD_CONFIGURATIONFILE}"
-	mpdconf_parameter="audio_output"
-	get_mpdconf_parameter "${mpdconf_parameter}"
-	
-	tmpconf+=()
-    else
-	## only a single output, check if its `type' is `alsa'
-	bla=""
-    fi
-	
 
     msg=""
     mpdconf_parameter="device"
-    mpd_device="$(get_mpdconf_parameter "${mpdconf_parameter}")"
+    for f in /tmp/${TMPCONFS_TEMPLATE}*; do
+	mpd_device="$(get_mpdconf_parameter "${mpdconf_parameter}" "${f}")"
+	## TODO: handle multiple outputs.
+	## for now just stop after the first one.
+	break
+    done 
     
-    if [[ $? -ne 0 ]]; then
+    if [[ -z "${mpd_device}" ]]; then
 	die "Could not get alsa device from the mpd configuration file."
     else
 	[[ ! -z "${DEBUG}" ]] && \
-	    debug "will use mpd device \`${mpd_device}'"
-	printf "%s" "${mpd_device}"
+	    debug "using mpd device \`${mpd_device}'"
+	printf "%s" ${mpd_device}
     fi
 }
 
@@ -374,8 +355,8 @@ function get_file_sampleencoding() {
 
     soxi_output="$1"
 
-    # `Sample Encoding: 16-bit FLAC'
-    # or use `Precision      : 16-bit'
+    ## `Sample Encoding: 16-bit FLAC'
+    ## or use `Precision      : 16-bit'
     se_regexp="Sample Encoding[[:space:]]*:[[:space:]]([0-9]*)-bit.*" 
     
     while read -r line; do 
@@ -398,7 +379,7 @@ function get_alsa_samplerate() {
     alsa_streamfile="$1"
 
     ## USB streamfile
-    # Sample rate: Momentary freq = 95999 Hz (0xb.fff8)
+    ## Sample rate: Momentary freq = 95999 Hz (0xb.fff8)
     sr_regexp="Momentary freq[[:space:]]=[[:space:]]([0-9]*)[[:space:]]Hz[[:space:]].*"
     ## Any hwparamsfile
     ## rate: 96000 (96000/1)
@@ -451,8 +432,11 @@ function get_alsa_streamfile() {
     #monitor file           =  /proc/asound/card1/stream0
     alsa_streamfile=""
     alsa_streamfile_regexp="monitor[[:space:]]file[[:space:]]*=[[:space:]]*(.*)"
-    alsa_hwaddress="$(get_mpd_device)"
-    alsa_hwaddress="${alsa_hwaddress/hw:/}"
+    alsa_hwaddress_value=$(get_mpd_device)
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "got alsa hwaddress: \`${alsa_hwaddress_value}'"
+    
+    alsa_hwaddress="${alsa_hwaddress_value/hw:/}"
     alsa_dev_nr="${alsa_hwaddress%%,*}"
     [[ ! -z "${DEBUG}" ]] && \
 	debug "using alsa_dev_nr: \`${alsa_dev_nr}'"
