@@ -92,11 +92,17 @@ function check_commands() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 
-    CMD_SOXI="$(which soxi || command_not_found "soxi" "sox")"
-
-    if [[ -z  "${CMD_SOXI}" ]]; then
-	die "One or more needed commands are missing."
+    CMD_FFPROBE="$(which ffprobe 2>/dev/null)"
+    if [[ $? -ne 0 ]]; then
+	## try soxi
+	CMD_SOXI="$(which soxi 2>/dev/null)"
+	if [[ $? -ne 0 ]]; then
+	    inform "Neither \`ffprobe' nor the \`soxi' commands where found."
+	    die "Install the packages \`ffmpeg' and/or \`sox'."
+	fi 
     fi
+
+
 }
 
 
@@ -432,6 +438,122 @@ function get_file_samplerate() {
     done<<<"${soxi_output}"
 }
 
+function parse_file_output() {
+    ## parse output from the file command on a wav file.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}'"  
+
+    file_path="$@"
+    endianness_raw=""
+    endianness=""
+    bitdepth=""
+    channelcount_raw=""
+    channelcount=""
+    samplerate=""
+    sign="?"
+
+    ## `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
+    # 2: 8-64
+    regexp_bitdepth="[[:space:]]([0-9]*)[[:space:]]bit"
+    # 4: 21000-384000
+    regexp_samplerate="[[:space:]]([0-9]*)[[:space:]]Hz"
+    # 1: little|big
+    regexp_endianness="RIFF[[:space:]]\(([a-z]*)-endian\)[[:space:]]data"
+    # 3: stereo|mono
+    regexp_channelcount="[[:space:]]([a-z]*)"                             
+    wav_regexp="${regexp_endianness},[[:space:]]WAVE[[:space:]]audio,[[:space:]]Microsoft[[:space:]]PCM,${regexp_bitdepth},${regexp_channelcount}${regexp_samplerate}"
+
+    file_info="$(${file_path})"
+    while read -r line; do
+	if [[ "${line}" =~ ${wav_regexp} ]]; then
+	    bitdepth="${BASH_REMATCH[2]}"
+	    samplerate="${BASH_REMATCH[4]}"
+	    endianness_raw="${BASH_REMATCH[1]}"
+	    channelcount_raw="${BASH_REMATCH[3]}"
+	    case ${endianness_raw} in
+		"little") endianness="L" ;;
+		"big")    endianness="B" ;;
+		*) die "could not determine endianness of \`${file_path}' using the file command" ;;
+	    esac
+	    case ${channelcount_raw} in
+		"mono") channelcount="1" ;;
+		"stereo") channelcount="2" ;;
+		*) channelcount="${channelcount_raw}" ;;
+	    esac
+	    
+	    printf "samplerate:%s\n" "${samplerate}"
+	    printf "bitdepth:%s\n" "${bitdepth}"
+	    printf "endianness:%s\n" "${endianness}"
+	    printf "channelcount:%s\n" "${channelcount}"
+	    printf "sign:%s\n" "${sign}"
+	    
+	    break
+	fi
+    done <<< "${file_info}"
+    
+}
+
+
+function get_file_information() {
+    ## get the sample encoding and sample rate of the file currently
+    ## played by mpd
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}'"  
+
+    file_path="$1"
+    file_name=$(basename "${file_path}")
+    file_extension="${file_name##*.}"
+    file_extension_downcase="${file_extension,,}"
+    file_name="${file_name%.*}"
+
+    
+
+    ##          sample rate | bit depth | channels | endianness | sign
+    ## file     W   F       | W   F     | W   F    | W          | W            
+    ## soxi     W A F       | W A F     | W A F    |            | W A
+    ## ffprobe  W A F       | W A F     | W A F    | W A        | W A F             
+    
+    
+    ## file (from coreutils) works great for wav and flac, not for aiff:
+    ## wav:  `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
+    ## aiff: `IFF data, AIFF audio'.
+    ## flac: `FLAC audio bitstream data, 16 bit, stereo, 44.1 kHz'
+    ##
+    ## ffprobe (from ffmpeg) does the job right for aiff and wav:
+    ## wav:  `pcm_s16le ([1][0][0][0] / 0x0001), 44100 Hz, 2 channels, s16, 1411 kb/s'
+    ## aiff: `pcm_s24be, 96000 Hz, 2 channels, s32 (24 bit), 4608 kb/s`
+    ## flac: `flac, 192000 Hz, stereo, s32 (24 bit)`
+    ## 
+    ## soxi (from sox) for aiff:
+    ## wav:  `Channels : 2 / Sample Rate : 44100 / Precision : 16-bit /
+    ##        Sample Encoding : 16-bit Signed Integer PCM'
+    ## aiff: `Channels : 2 / Sample Rate : 96000 / Precision : 24-bit /
+    ##        Sample Encoding : 24-bit Signed Integer PCM'
+    ## flac: `Channels : 2 / Sample Rate : 192000 / Precision: 24-bit /
+    ##        Sample Encoding : 24-bit FLAC'
+    
+    se_regexp="Sample Encoding[[:space:]]*:[[:space:]]([0-9]*)-bit.*"
+    
+    case ${file_extension_downcase} in
+	"wav*"|"flac")
+	;;
+	
+	"aif*")
+	;;
+	
+
+    
+    while read -r line; do 
+	if [[ "${line}" =~ ${se_regexp} ]]; then 
+	    file_sampleencoding="${BASH_REMATCH[1]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "file_sampleencoding: \`${file_sampleencoding}'."
+	    printf "%s" "${file_sampleencoding}"
+	    
+	fi
+    done<<<"${soxi_output}"
+}
+
 
 function get_file_sampleencoding() {
     ## get the sample encoding of the file currently played by mpd using soxi
@@ -440,9 +562,16 @@ function get_file_sampleencoding() {
 
     soxi_output="$1"
 
-    ## `Sample Encoding: 16-bit FLAC'
+    ## examples of soxi output:
+    ## `Sample Encoding: 16-bit FLAC',
+    ## `Sample Encoding: 24-bit Signed Integer PCM',
     ## or use `Precision      : 16-bit'
-    se_regexp="Sample Encoding[[:space:]]*:[[:space:]]([0-9]*)-bit.*" 
+    se_regexp="Sample Encoding[[:space:]]*:[[:space:]]([0-9]*)-bit.*"
+
+    ## the file command works great for wav and flac, not for aiff:
+    ## wav:  `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
+    ## flac: `FLAC audio bitstream data, 16 bit, stereo, 44.1 kHz, 11304888 samples'
+    ## aiff: `IFF data, AIFF audio'
     
     while read -r line; do 
 	if [[ "${line}" =~ ${se_regexp} ]]; then 
@@ -759,9 +888,9 @@ mpd_musicdir="$(get_mpdconf_musicdir)"
 stored_file_path="${mpd_musicdir}/${mpd_currentsong}"
 
 ## use soxi to determine properties of stored file
-soxi_output="$(${CMD_SOXI} "${stored_file_path}")"
-source_samplerate="$(get_file_samplerate "${soxi_output}")"
-source_sampleencoding="$(get_file_sampleencoding "${soxi_output}")"
+file_information="$(get_file_information "${stored_file_path}")"
+source_samplerate="$(get_file_samplerate "${file_information}")"
+source_sampleencoding="$(get_file_sampleencoding "${file_information}")"
 
 ## use mpd to determine properties of transferred file
 transfer_samplerate="$(get_mpd_samplerate "${mpd_status}")"
