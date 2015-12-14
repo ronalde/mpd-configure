@@ -31,10 +31,15 @@ MPD_SOCKET="/dev/tcp/${MPD_HOST}/${MPD_PORT}"
 
 MPD_PHONY_URL="mpd://${MPD_HOST}:${MPD_PORT}"
 
+## path of the mpd configuration file
+MPD_CONFIGURATIONFILE="${MPD_CONFIGURATIONFILE:-}"
+
 #DEBUG=True
 REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/mpd-monitor"
 CMD_ALSACAPS="alsa-capabilities"
 ALSACAPS_OUTPUT=""
+
+CMD_FFPROBE="$(which ffprobe)"
 
 declare MPD_OUTPUTS
 
@@ -88,21 +93,13 @@ function command_not_found() {
 }
 
 
-function check_commands() {
+function check_needed_commands() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 
-    CMD_FFPROBE="$(which ffprobe 2>/dev/null)"
-    if [[ $? -ne 0 ]]; then
-	## try soxi
-	CMD_SOXI="$(which soxi 2>/dev/null)"
-	if [[ $? -ne 0 ]]; then
-	    inform "Neither \`ffprobe' nor the \`soxi' commands where found."
-	    die "Install the packages \`ffmpeg' and/or \`sox'."
-	fi 
+    if [[ -z "${CMD_FFPROBE}" ]]; then
+	die "command \`ffprobe' not found. Install the \`ffmpeg' package."
     fi
-
-
 }
 
 
@@ -181,6 +178,8 @@ function get_mpdconf_parameter() {
     parameter="$1"
     mpdconf_file="${2:-}"
     conf_filter_regexp=""
+    conf_comment_regexp="^[[:space:]]*#"
+
     
     if [[ -z "${mpdconf_file}" ]]; then
 	mpdconf_file="${MPD_CONFIGURATIONFILE}"
@@ -189,7 +188,6 @@ function get_mpdconf_parameter() {
     fi
     
     if [[ ! -f "${mpdconf_file}" ]]; then
-	
 	die "specified ${msg} \`${mpdconf_file}' \
 does not exist or is not accessible"
     else
@@ -199,11 +197,13 @@ does not exist or is not accessible"
 
     while read -r line; do
 	## lame use of `.' instead of proper escaping single or double quotes
-	conf_filter_regexp="${parameter}[[:space:]]*.(.*).$"
-	if [[ "${line}" =~ ${conf_filter_regexp} ]]; then
-	    value="${BASH_REMATCH[1]}"
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "value \`${value}' found for parameter \`${parameter}'."
+	if [[ ! "${line}" =~ ${conf_comment_regexp} ]]; then 
+	    conf_filter_regexp="^[[:space:]]*${parameter}[[:space:]]*.(.*).$"
+	    if [[ "${line}" =~ ${conf_filter_regexp} ]]; then
+		value="${BASH_REMATCH[1]}"
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug "value \`${value}' found for parameter \`${parameter}'."
+	    fi
 	fi
     done < "${mpdconf_file}"
     
@@ -306,6 +306,7 @@ function get_mpd_alsa_audio_outputs() {
     audio_output_alsa_type_regexp="(type)[[:space:]]*(alsa)"
     alsa_output_started=""
     output_counter=0
+    audio_output_comment_regexp="^[[:space:]]*#"
        
     while read -r line; do
 
@@ -319,8 +320,13 @@ function get_mpd_alsa_audio_outputs() {
 	    else
 		[[ ! -z "${DEBUG}" ]] && \
 		    debug "inside output: \`${line}'."
-		## store the line in the temporary config file
-		printf "%s\n" "${line}" >> "${tmpconf}"
+		if [[ "${line}" =~ ${audio_output_comment_regexp} ]]; then
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug "skip commented line: \`${line}'."
+		else
+		    ## store the line in the temporary config file
+		    printf "%s\n" "${line}" >> "${tmpconf}"
+		fi
 	    fi
 	else   
 	    if [[ "${line}" =~ ${audio_output_started_regexp} ]]; then
@@ -418,38 +424,26 @@ function get_mpd_device() {
 }
 
 
-function get_file_samplerate() {
-    ## get the sample rate of the file currently played by mpd using soxi
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}'"  
-
-    soxi_output="$1"
-
-    # `Sample Rate    : 44100'
-    sr_regexp="Sample Rate[[:space:]]*:[[:space:]]([0-9]*)" 
-    
-    while read -r line; do 
-	if [[ "${line}" =~ ${sr_regexp} ]]; then
-	    file_samplerate="${BASH_REMATCH[1]}"
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "file_samplerate: \`${file_samplerate}'."
-	    printf "%s" "${file_samplerate}"
-	fi
-    done<<<"${soxi_output}"
-}
-
-function parse_file_output() {
+function parse_command_output_file() {
     ## parse output from the file command on a wav file.
     [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}'"  
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
-    file_path="$@"
+    file_path="$1"
+    file_extension_downcase="$2"
+       
+    ## file (from coreutils) works great for wav and flac, not for aiff:
+    ## wav:  `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
+    ## aiff: `IFF data, AIFF audio'.
+    ## flac: `FLAC audio bitstream data, 16 bit, stereo, 44.1 kHz'
+    
     endianness_raw=""
     endianness=""
     bitdepth=""
     channelcount_raw=""
     channelcount=""
     samplerate=""
+    ## file does not provide information on sign
     sign="?"
 
     ## `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
@@ -493,65 +487,302 @@ function parse_file_output() {
     
 }
 
-
-function get_file_information() {
-    ## get the sample encoding and sample rate of the file currently
-    ## played by mpd
+function parse_command_output_soxi() {
+    ## parse output from the soxi command on wav, flac or aiff files.
     [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}'"  
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     file_path="$1"
-    file_name=$(basename "${file_path}")
-    file_extension="${file_name##*.}"
-    file_extension_downcase="${file_extension,,}"
-    file_name="${file_name%.*}"
+    file_extension_downcase="$2"
 
+    [[ -z "${CMD_SOXI}" ]] && return 1
     
+    ## soxi produces output with one parameter on each line
+    file_info_raw="$(${CMD_SOXI} "${file_path}")"
+    ## reconstruct the output to a single line seperated with ###
+    file_info="$(while read -r line; do printf "%s###" "${line}"; done<<<"${file_info_raw}")"
 
-    ##          sample rate | bit depth | channels | endianness | sign
-    ## file     W   F       | W   F     | W   F    | W          | W            
-    ## soxi     W A F       | W A F     | W A F    |            | W A
-    ## ffprobe  W A F       | W A F     | W A F    | W A        | W A F             
-    
-    
-    ## file (from coreutils) works great for wav and flac, not for aiff:
-    ## wav:  `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
-    ## aiff: `IFF data, AIFF audio'.
-    ## flac: `FLAC audio bitstream data, 16 bit, stereo, 44.1 kHz'
-    ##
-    ## ffprobe (from ffmpeg) does the job right for aiff and wav:
-    ## wav:  `pcm_s16le ([1][0][0][0] / 0x0001), 44100 Hz, 2 channels, s16, 1411 kb/s'
-    ## aiff: `pcm_s24be, 96000 Hz, 2 channels, s32 (24 bit), 4608 kb/s`
-    ## flac: `flac, 192000 Hz, stereo, s32 (24 bit)`
-    ## 
-    ## soxi (from sox) for aiff:
+    bitdepth=""
+    samplerate=""
+    ## soxi does not provide information on the endiannes
+    endianness_raw=""
+    endianness="?"
+    channelcount_raw=""
+    channelcount=""
+    sign=""
+
+    ## soxi (from sox package):
     ## wav:  `Channels : 2 / Sample Rate : 44100 / Precision : 16-bit /
     ##        Sample Encoding : 16-bit Signed Integer PCM'
     ## aiff: `Channels : 2 / Sample Rate : 96000 / Precision : 24-bit /
     ##        Sample Encoding : 24-bit Signed Integer PCM'
     ## flac: `Channels : 2 / Sample Rate : 192000 / Precision: 24-bit /
     ##        Sample Encoding : 24-bit FLAC'
-    
-    se_regexp="Sample Encoding[[:space:]]*:[[:space:]]([0-9]*)-bit.*"
-    
-    case ${file_extension_downcase} in
-	"wav*"|"flac")
-	;;
-	
-	"aif*")
-	;;
-	
 
     
-    while read -r line; do 
-	if [[ "${line}" =~ ${se_regexp} ]]; then 
-	    file_sampleencoding="${BASH_REMATCH[1]}"
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "file_sampleencoding: \`${file_sampleencoding}'."
-	    printf "%s" "${file_sampleencoding}"
+    ## `RIFF (little-endian) data, WAVE audio, Microsoft PCM, 16 bit, stereo 44100 Hz'
+    # 3: 8-64
+    regexp_bitdepth="[[:space:]]*Precision[[:space:]]*:[[:space:]]*([0-9]*)-bit"
+    # 2: 21000-384000
+    regexp_samplerate="[[:space:]]Sample[[:space:]]Rate[[:space:]]*:[[:space:]]*([0-9]*)[[:space:]]"
+    # 4: Signed|Unsigned
+    regexp_sign=""
+    # 1: 1-9
+    regexp_channelcount="Channels[[:space:]]*:[[:space:]]*([0-9])"
+
+    regexp_sign="###Sample[[:space:]]Encoding[[:space:]]*:[[:space:]]*[0-9]*-bit[[:space:]]([[A-Z][a-z]*])[[:space:]]Integer[[:space:]]PCM"
+    
+    ## sign only available for wav and aiff
+    if [[ "${extension}" = "flac" ]]; then
+	endianness="B"
+	regexp_sign=""
+	sign="?"
+    fi
+    
+    soxi_regexp="${regexp_channelcount}###${regexp_samplerate}###${regexp_bitdepth}${regexp_sign}"
+    
+    while read -r line; do
+	if [[ "${line}" =~ ${wav_regexp} ]]; then
+	    bitdepth="${BASH_REMATCH[3]}"
+	    samplerate="${BASH_REMATCH[2]}"
+	    if [[ "${extension}" = "flac" ]]; then
+		sign_raw="${BASH_REMATCH[4]}"
+		if [[ "${sign_raw}" = "Signed" ]]; then
+		    sign="S"
+		else
+		    sign="U"
+		fi
+	    fi
+	    channelcount="${BASH_REMATCH[1]}"
 	    
+	    printf "samplerate:%s\n" "${samplerate}"
+	    printf "bitdepth:%s\n" "${bitdepth}"
+	    printf "endianness:%s\n" "${endianness}"
+	    printf "channelcount:%s\n" "${channelcount}"
+	    printf "sign:%s\n" "${sign}"
+	    
+	    break
 	fi
-    done<<<"${soxi_output}"
+    done <<< "${file_info}"
+    
+}
+
+function parse_command_output_ffprobe() {
+    ## parse output from the ffprobe command on wav, flac or aiff files.
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    file_path="$1"
+    file_extension_downcase="$2"
+
+    ## ffprobe (from ffmpeg) with the options `-show_streams
+    ## -select_streams a' does the job right:
+
+    ffprobe_opts=(-show_streams)
+    ffprobe_opts+=(-select_streams "a")
+    msg="$(printf "%s %s "%s"" "${CMD_FFPROBE}" "${ffprobe_opts[@]}" "${file_path}")"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "will execute: \`${msg}'"
+    file_info_raw="$(${CMD_FFPROBE} "${ffprobe_opts[@]}" "${file_path}" 2>&1)"
+
+    sep="###"
+    file_info="$(while read -r line; do printf "###%s" "${line}"; done <<< "${file_info_raw}")"
+
+    ## ffprobe (filtered) output:
+    ## codec_name=pcm_s16le|pcm_u24be|flac
+    ## sample_fmt=s32
+    ## sample_rate=192000
+    ## channels=2
+    ## bits_per_raw_sample=24
+
+    ## mp3 | mp4
+    ###codec_name=mp3|aac
+    ###sample_fmt=s16p
+    ###sample_rate=44100
+    ###channels=2
+    ###bits_per_sample=0
+    ###bits_per_raw_sample=N/A
+    ###[/STREAM]
+
+    ## see: https://ffmpeg.org/doxygen/2.8/group__lavu__sampfmts.html
+    ## optional P means planar, ie non-interleaved channel separation
+    ## AV_SAMPLE_FMT_NONE 	
+    ## AV_SAMPLE_FMT_(U8)(S(16|32))([P]) : (optional P is planar)
+    ## AV_SAMPLE_FMT_FLT([P]): float 
+    ## AV_SAMPLE_FMT_DBL([P]): double
+
+    ## 8-64bit
+    bitdepth_encoding=""
+    ## unsigned 8 bits, signed 16 or 32 bits
+    bitdepth_packing=""
+    ## channel separation
+    ## s16,s32: channel interleaving, s16p,s32,fltp: planar
+
+    samplerate=""
+    ## for non-compressed codecs (wave and aiff)
+    endianness_raw=""
+    endianness=""
+    channelcount_raw=""
+    channelcount=""
+    sign=""
+
+    field_bitdepth_encoding="bits_per_raw_sample"
+    filter_bitdepth_encoding="([0-9]+)"
+    field_samplerate="sample_rate"
+    filter_samplerate="([0-9]+)"
+
+    field_channelcount="channels"
+    filter_channelcount="([0-9]+)"
+
+    ## number of bytes per sample or zero if unknown for the given sample format
+    ## need sign re to determine bit depth of compressed files
+    field_sign="sample_fmt"
+    filter_sign="(s|u)([0-9]+)"
+   
+    ## exception for flac
+    field_endianness="codec_name"
+    filter_endianness="pcm_[su][0-9]+([lb])e"
+
+    case "${file_extension_downcase}" in
+	"flac")
+	    endianness="BE"
+	    filter_endianness="(flac)"
+	    ;;
+	"mp"*|"aac")
+	    endianness="BE"
+	    filter_bitdepth_encoding="(.*)"
+	    filter_endianness="(.*)"
+	    ## fltp: Planar Floating point 
+	    filter_sign="(flt[p]*)"	    
+	    ;;
+    esac
+
+    regexp_bitdepth_encoding="${field_bitdepth_encoding}=${filter_bitdepth_encoding}"
+    regexp_samplerate="${field_samplerate}=${filter_samplerate}"
+    regexp_sign="${field_sign}=${filter_sign}"
+    regexp_endianness="${field_endianness}=${filter_endianness}"
+    regexp_channelcount="${field_channelcount}=${filter_channelcount}"
+    
+    sep=".*${sep}"
+    ffprobe_regexp="${sep}${regexp_endianness}${sep}${regexp_sign}${sep}${regexp_samplerate}${sep}${regexp_channelcount}${sep}${regexp_bitdepth_encoding}"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "will use ffprobe_regexp: \`${ffprobe_regexp}'."  
+
+    if [[ "${file_info}" =~ ${ffprobe_regexp} ]]; then
+	
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "ffprobe_regexp match"  
+	
+	bitdepth_encoding="${BASH_REMATCH[6]}"
+	samplerate="${BASH_REMATCH[4]}"
+	sign="${BASH_REMATCH[2]^^}"
+	endianness_raw="${BASH_REMATCH[1]}E"
+	channelcount="${BASH_REMATCH[5]}"
+	
+	case "${file_extension_downcase}" in
+	    "wav"*|"aif"*)
+		endianness="${endianness_raw^^}"
+		;;
+	    "mp"*|"aac")
+		## extract bitdepth from sample_fmt
+		for i in {0..6}; do  
+		    debug "@@@@${i}: \`${BASH_REMATCH[$i]}'"
+		done
+		#bitdepth_encoding="${sign}"
+		samplerate="${BASH_REMATCH[3]}"
+		;;
+	esac
+
+	## return the formatted string to the calling function
+	str_fmt="$(printf "%s%s_%s@%s" "${sign}" "${bitdepth_encoding}" "${endianness}" "${samplerate}")"
+	
+	if [[ ! -z "${DEBUG}" ]]; then
+	    debug "samplerate: \`${samplerate}'"
+	    debug "bitdepth_encoding: \`${bitdepth_encoding}'"
+	    debug "endianness: \`${endianness}'"
+	    debug "channelcount: \`${channelcount}'"
+	    debug "sign: \`${sign}'"
+	    debug "str_fmt: \`${str_fmt}'"
+	fi
+	
+	printf "%s" "${str_fmt}"
+
+    else
+	if [[ ! -z "${DEBUG}" ]]; then 
+	    debug "no match: \`${file_info}'."
+	    printf "could not extract file information using ffprobe, using:\n\t%s\n" \
+		   "${ffprobe_regexp}" 1>&2;
+	    printf "will try to extract the raw values:\n"  1>&2;
+	    tmp_regexp="${field_sign}=(.*)###${field_samplerate}"
+	    tmp_value=""
+	    [[ "${file_info}" =~ ${tmp_regexp} ]] && tmp_value=${BASH_REMATCH[1]}
+	    printf "%s = '%s'\n\n" "${tmp_regexp}" "${tmp_value}"  1>&2;
+	    tmp_regexp="${field_samplerate}=(.*)###${field_channelcount}"
+	    tmp_value=""
+	    [[ "${file_info}" =~ ${tmp_regexp} ]] && tmp_value=${BASH_REMATCH[1]}
+	    printf "%s = '%s'\n\n" "${tmp_regexp}" "${tmp_value}"  1>&2;
+	    tmp_regexp="${field_channelcount}=(.*)###channel"
+	    tmp_value=""
+	    [[ "${file_info}" =~ ${tmp_regexp} ]] && tmp_value=${BASH_REMATCH[1]}
+	    printf "%s = '%s'\n\n" "${tmp_regexp}" "${tmp_value}"  1>&2;
+	    tmp_regexp="${field_bitdepth_encoding}=(.*)###nb_frames"
+	    tmp_value=""
+	    [[ "${file_info}" =~ ${tmp_regexp} ]] && tmp_value=${BASH_REMATCH[1]}
+	    printf "%s = '%s'\n\n" "${tmp_regexp}" "${tmp_value}"  1>&2;
+	fi
+	return 1
+    fi
+    
+}
+
+
+function get_file_information() {
+    ## get the sample encoding and sample rate of the file currently
+    ## played by mpd
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'."  
+
+    file_path="$1"
+   
+    file_name=$(basename "${file_path}")
+    file_extension="${file_name##*.}"
+    file_extension_downcase="${file_extension,,}"
+    file_name="${file_name%.*}"
+
+    res="$(parse_command_output_ffprobe "${file_path}" "${file_extension_downcase}")"
+
+    if [[ $? -ne 0 ]]; then
+	die "could not extract file information using ffprobe (\`${res}')."
+    else
+	printf "%s" "${res}"
+    fi
+        
+}
+
+function get_file_samplerate_encoding() {
+    ## get the sample rate of the file currently played by mpd using soxi
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"  
+
+    input="$1"
+    ## either "samplerate" or "encoding"
+    property="$2" 
+    sr_regexp="(.*)@(.*)" 
+    brm_nr="1"
+    if [[ "${property}" = "samplerate" ]]; then
+	brm_nr="2"
+    fi
+    
+    while read -r line; do 
+	if [[ "${line}" =~ ${sr_regexp} ]]; then
+	    property_value="${BASH_REMATCH[${brm_nr}]}"
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug "file ${property}: \`${property_value}'."
+	    printf "%s" "${property_value}"
+	fi
+    done<<<"${input}"
 }
 
 
@@ -707,16 +938,23 @@ function execute_mpd_command() {
     ## read from mpd's descriptor
     mpd_out=$(cat <&5)
     ## return the output to the calling function
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "output from mpd: \`${mpd_out}'."
     printf "%s" "${mpd_out}"
   
 }
 
 function get_mpd_currentsong() {
-
+    ## use mpd protocol to get the path (relative to the music_dir) of
+    ## the file currently playing
+    
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     mpd_currentsong_output="$(execute_mpd_command currentsong)"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "### mpd_current_song: \`${mpd_currentsong_output}'."
+    
     ## file: some/relative/path/song.wav
     mpd_currentsong_regexp="^file:[[:space:]](.*)$"
     while read -r line; do
@@ -733,6 +971,10 @@ function get_mpd_currentsong() {
 }
 
 function get_mpd_samplerate() {
+    ## get and return the samplerate of the current file, as transferred by mpd
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     mpd_status="$@"
     
@@ -757,6 +999,10 @@ function get_mpd_samplerate() {
 }
 
 function get_mpd_bitdepth() {
+    ## get and return the bitdepth of the current file, as transferred by mpd
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     msg=""
     mpd_status="$@"
@@ -784,7 +1030,10 @@ function get_mpd_bitdepth() {
 
 function is_mpd_playing() {
     ## check if mpd is running and playing a file.
-    
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
     mpd_status="$(execute_mpd_command status)"
     
     ## state: stop|play
@@ -813,6 +1062,10 @@ function is_mpd_playing() {
 }
 
 function get_soxi_props() {
+    ## dummy?
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     stored_file_path="$@"
     
@@ -840,81 +1093,105 @@ mpd_samplerate=""
 mpd_bitdepth=""
 mpd_channels=""
 
-## sanity checks
+function check_sanity() {
+    ## sanity checks for environment
 
-[[ ! -z "${DEBUG}" ]] && \
-    debug "start checking sanity ..."
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+   
+    ## check if mpd is running local, or exit gracefully
+    msg_remote="$(is_mpd_local)"
+    [[ $? -eq 0 ]] || die "${msg_remote}"
+    
+    ## exit when mpd is not playing a file
+    msg_notplaying="$(is_mpd_playing)"
+    [[ $? -eq 0 ]] || die "${msg_notplaying}"
+    
+    ## check for audio outputs
+    msg_nooutputs="$(does_mpd_haveoutputs)"
+    [[ $? -eq 0 ]] || die "${msg_nooutputs}"
 
-## check if mpd is running local, or exit gracefully
-msg_remote="$(is_mpd_local)"
-[[ $? -eq 0 ]] || die "${msg_remote}"
+    ## check if needed commands are available; exit with error when
+    ## they are not
+    res="$(check_needed_commands)"
+    if [[ $? -ne 0 ]]; then
+	[[ ! -z "${DEBUG}" ]] && 
+	    debug "check_needed_commands returned an error"
+    else 
+	[[ ! -z "${DEBUG}" ]] && 
+	    debug "check_needed_commands returned: \`${res}'."
+    fi
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "... done checking sanity."
 
-## exit when mpd is not playing a file
-msg_notplaying="$(is_mpd_playing)"
-[[ $? -eq 0 ]] || die "${msg_notplaying}"
+    return 0
+}
 
-## check for audio outputs
-msg_nooutputs="$(does_mpd_haveoutputs)"
-[[ $? -eq 0 ]] || die "${msg_nooutputs}"
+function main() {
+    ## main script
+    
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
-[[ ! -z "${DEBUG}" ]] && \
-    debug "... done checking sanity."
+    res="$(check_sanity || die "environment not ok")"
+
+    mpd_currentsong="$(get_mpd_currentsong)"
+
+    if [[ -z "${MPD_CONFIGURATIONFILE}" ]]; then
+	MPD_CONFIGURATIONFILE="$(get_mpdconf_filepath)"
+    fi
+
+    ## get the path of the hwparams file for the alsa interface from the
+    ## mpd configuration file
+    alsa_streamfile="$(get_alsa_streamfile)"
+
+    ## get the path to the (parent) music directory from the mpd
+    ## configuration file
+    mpd_musicdir="$(get_mpdconf_musicdir)"
+
+    ## get the path of the current playing song, relative to
+    ## `mpd_musicdir'
+    stored_file_path="${mpd_musicdir}/${mpd_currentsong}"
+
+    ## use soxi to determine properties of stored file
+    file_information="$(get_file_information "${stored_file_path}")"
+    source_samplerate="$(get_file_samplerate_encoding "${file_information}" "samplerate")"
+    source_sampleencoding="$(get_file_samplerate_encoding "${file_information}" "encoding")"
+
+    ## use mpd to determine properties of transferred file
+    transfer_samplerate="$(get_mpd_samplerate "${mpd_status}")"
+    transfer_sampleencoding="$(get_mpd_bitdepth "${mpd_status}")"
+    
+    playback_samplerate="$(get_alsa_samplerate "${alsa_streamfile}")"
+    playback_sampleencoding="$(get_alsa_sampleencoding "${alsa_streamfile}")"
+
+    printf "Properties of\n\`%s':\n" "${stored_file_path}"
+    
+    printf " %.0s" {1..22}
+    printf "%-13s %-13s\n" "${msg_samplerate}" "${msg_sampleencoding}"
+    printf " %.0s" {1..22}
+    printf "=%.0s" {1..13}
+    printf " "
+    printf "=%.0s" {1..13}
+    printf "\n"
+    
+    printf " %-20s %-13s %-13s\n" \
+	   "${msg_source}" "${source_samplerate}" "${source_sampleencoding}"
+    
+    printf " %-20s %-13s %-13s\n" \
+	   "${msg_transfer}" "${transfer_samplerate}" "${transfer_sampleencoding}"
+    
+    printf " %-20s %-13s %-13s\n\n" \
+	   "${msg_playback}" "${playback_samplerate}" "${playback_sampleencoding}"
+    
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "... done. clean exit."
+
+    return 0
+}
 
 
-mpd_currentsong="$(get_mpd_currentsong)"
-
-## check if soxi command is available; exit with error when
-## it is not
-check_commands || exit 1
-
-## get the path of the mpd configuration file
-MPD_CONFIGURATIONFILE="${MPD_CONFIGURATIONFILE:-}"
-
-if [[ -z "${MPD_CONFIGURATIONFILE}" ]]; then
-    MPD_CONFIGURATIONFILE="$(get_mpdconf_filepath)"
-fi
-
-
-## get the path of the hwparams file for the alsa interface from the
-## mpd configuration file
-alsa_streamfile="$(get_alsa_streamfile)"
-
-## get the path to the (parent) music directory from the mpd
-## configuration file
-mpd_musicdir="$(get_mpdconf_musicdir)"
-
-## get the path of the current playing song, relative to
-## `mpd_musicdir'
-stored_file_path="${mpd_musicdir}/${mpd_currentsong}"
-
-## use soxi to determine properties of stored file
-file_information="$(get_file_information "${stored_file_path}")"
-source_samplerate="$(get_file_samplerate "${file_information}")"
-source_sampleencoding="$(get_file_sampleencoding "${file_information}")"
-
-## use mpd to determine properties of transferred file
-transfer_samplerate="$(get_mpd_samplerate "${mpd_status}")"
-transfer_sampleencoding="$(get_mpd_bitdepth "${mpd_status}")"
-
-playback_samplerate="$(get_alsa_samplerate "${alsa_streamfile}")"
-playback_sampleencoding="$(get_alsa_sampleencoding "${alsa_streamfile}")"
-
-printf "Properties of\n\`%s':\n" "${stored_file_path}"
-
-printf " %.0s" {1..22}
-printf "%-13s %-13s\n" "${msg_samplerate}" "${msg_sampleencoding}"
-printf " %.0s" {1..22}
-printf "=%.0s" {1..13}
-printf " "
-printf "=%.0s" {1..13}
-printf "\n"
-
-printf " %-20s %-13s %-13s\n" \
-       "${msg_source}" "${source_samplerate}" "${source_sampleencoding}"
-
-printf " %-20s %-13s %-13s\n" \
-       "${msg_transfer}" "${transfer_samplerate}" "${transfer_sampleencoding}"
-
-printf " %-20s %-13s %-13s\n\n" \
-       "${msg_playback}" "${playback_samplerate}" "${playback_sampleencoding}"
-
+## if the script is not sourced by another script but run within its
+## own shell call function `return_alsa_interface'
+[[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || main "$@"
