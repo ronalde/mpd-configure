@@ -257,7 +257,7 @@ function does_mpd_haveoutputs() {
 	done<<< "${mpd_outputs_result}"
 
 	if [[ ${#MPD_OUTPUTS[@]} -lt 1 ]]; then 
-	    printf "no outputs found"
+	    printf "no audio outputs configured in mpd"
 	    return 1
 	else
 	    msg="$(printf "\`%s' " "${MPD_OUTPUTS[@]}")"
@@ -318,25 +318,31 @@ function get_mpd_alsa_audio_outputs() {
 		output_started=""
 		continue
 	    else
-		[[ ! -z "${DEBUG}" ]] && \
-		    debug "inside output: \`${line}'."
 		if [[ "${line}" =~ ${audio_output_comment_regexp} ]]; then
 		    [[ ! -z "${DEBUG}" ]] && \
 			debug "skip commented line: \`${line}'."
 		else
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug "inside output: \`${line}'."
 		    ## store the line in the temporary config file
 		    printf "%s\n" "${line}" >> "${tmpconf}"
 		fi
 	    fi
 	else   
 	    if [[ "${line}" =~ ${audio_output_started_regexp} ]]; then
- 		output_started="True"
-		## raise the counter and (mis)use the tmpfile
-		((output_counter++))
-		tmpconf="/tmp/${TMPCONFS_TEMPLATE}.${output_counter}"
-		[[ ! -z "${DEBUG}" ]] && \
-		    debug "start of audio_output section."
-		continue
+		if [[ "${line}" =~ ${audio_output_comment_regexp} ]]; then
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug "skip commented line: \`${line}'."
+		else
+ 		    output_started="True"
+		    ## raise the counter and (mis)use the tmpfile
+		    ((output_counter++))
+		    tmpconf="/tmp/${TMPCONFS_TEMPLATE}.${output_counter}"
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug "start of audio_output section."
+		    continue
+		fi
+		    
 	    fi
 	fi
 	
@@ -686,9 +692,6 @@ function parse_command_output_ffprobe() {
 		;;
 	    "mp"*|"aac")
 		## extract bitdepth from sample_fmt
-		for i in {0..6}; do  
-		    debug "@@@@${i}: \`${BASH_REMATCH[$i]}'"
-		done
 		#bitdepth_encoding="${sign}"
 		samplerate="${BASH_REMATCH[3]}"
 		;;
@@ -1101,26 +1104,36 @@ function check_sanity() {
    
     ## check if mpd is running local, or exit gracefully
     msg_remote="$(is_mpd_local)"
-    [[ $? -eq 0 ]] || die "${msg_remote}"
+    if [[ $? -ne 0 ]]; then
+	printf "%s" "${msg_remote}"
+	return 1
+    fi
     
     ## exit when mpd is not playing a file
     msg_notplaying="$(is_mpd_playing)"
-    [[ $? -eq 0 ]] || die "${msg_notplaying}"
+    if [[ $? -ne 0 ]]; then
+	printf "%s" "${msg_notplaying}"
+	return 1
+    fi
     
     ## check for audio outputs
     msg_nooutputs="$(does_mpd_haveoutputs)"
-    [[ $? -eq 0 ]] || die "${msg_nooutputs}"
+    if [[ $? -ne 0 ]]; then
+	printf "%s" "${msg_nooutputs}"
+	return 1
+    fi
 
     ## check if needed commands are available; exit with error when
     ## they are not
     res="$(check_needed_commands)"
     if [[ $? -ne 0 ]]; then
-	[[ ! -z "${DEBUG}" ]] && 
-	    debug "check_needed_commands returned an error"
-    else 
-	[[ ! -z "${DEBUG}" ]] && 
-	    debug "check_needed_commands returned: \`${res}'."
-    fi
+	printf "%s" "${res}"
+	return 1
+    fi 
+
+    [[ ! -z "${DEBUG}" ]] && 
+	debug "check_needed_commands returned: \`${res}'."
+
     [[ ! -z "${DEBUG}" ]] && \
 	debug "... done checking sanity."
 
@@ -1133,9 +1146,15 @@ function main() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
-    res="$(check_sanity || die "environment not ok")"
+    res="$(check_sanity)"
+    if [[ $? -ne 0 ]]; then
+     die "${res}"
+    fi
 
     mpd_currentsong="$(get_mpd_currentsong)"
+    if [[ $? -ne 0 ]]; then
+     die "could not get current file from mpd"
+    fi
 
     if [[ -z "${MPD_CONFIGURATIONFILE}" ]]; then
 	MPD_CONFIGURATIONFILE="$(get_mpdconf_filepath)"
@@ -1144,6 +1163,9 @@ function main() {
     ## get the path of the hwparams file for the alsa interface from the
     ## mpd configuration file
     alsa_streamfile="$(get_alsa_streamfile)"
+    if [[ $? -ne 0 ]]; then
+     die "could not get current file from alsa"
+    fi
 
     ## get the path to the (parent) music directory from the mpd
     ## configuration file
