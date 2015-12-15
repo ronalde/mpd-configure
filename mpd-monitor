@@ -34,7 +34,7 @@ function inform() {
 }
 
 function debug() {
-    printf "DEBUG *** %s" "$@" 1>&2;
+    printf "DEBUG *** %s\n" "$@" 1>&2;
 }
 
 
@@ -459,7 +459,7 @@ function parse_command_output_ffprobe() {
     file_info_raw="$(${CMD_FFPROBE} "${ffprobe_opts[@]}" "${file_path}" 2>&1)"
 
     sep="###"
-    file_info="$(while read -r line; do printf "###%s" "${line}"; done <<< "${file_info_raw}")"
+    file_info="$(while read -r line; do printf "###%s" "${line}"; done <<< "${file_info_raw}")"    
 
     ## ffprobe (filtered) output:
     ## codec_name=pcm_s16le|pcm_u24be|flac
