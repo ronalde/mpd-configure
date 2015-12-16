@@ -98,7 +98,14 @@ function fetch_alsa_outputinterfaces() {
     aplay_output=""
     aplay_msg_nosoundcards_re="no[[:space:]]soundcards"
     aplay_card_regexp="card [0-99]:"
-    
+
+    alsa_dev_nr=""
+    alsa_dev_name=""
+    alsa_dev_label=""
+    alsa_if_nr=""
+    alsa_if_name=""
+    alsa_if_label=""
+
     ## to see how the script behaves with a certain output of aplay -l
     ## on a particular host, store it's output in a file and supply
     ## the file path as the value of TESTFILE, eg: `bash-capabilities
@@ -145,16 +152,12 @@ function fetch_alsa_outputinterfaces() {
     while read -r line ; do 
 	## filter for `^card' and then for `OPT_FILTER' to get matching
 	## lines from aplay and store them in an array
-
 	
 	if [[ "${line}" =~ ${aplay_card_regexp} ]]; then
-
 	    [[ ! -z "${DEBUG}" ]] && \
 		debug  "Inspecting interface: ${line}"
-
 	    ## raise the counter for interfaces without filtering
 	    let NR_AIFS_BEFOREFILTERING+=1
-
 	    ## check if line matches `OPT_FILTER'
 	    if [[ -z "${OPT_FILTER}"  || \
 		"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
@@ -171,7 +174,6 @@ function fetch_alsa_outputinterfaces() {
     for line in "${aplay_lines[@]}"; do 
 	## set if type to default (ie analog)
 	alsa_if_type="ao"
-
 	## construct bash rematch (brm) regexp for sound device
 	## portion (ie before `,')
 	brm_dev="card[[:space:]]+([0-9]+):[[:space:]]+(.*)[[:space:]]+\[(.*)\]"
@@ -180,7 +182,15 @@ function fetch_alsa_outputinterfaces() {
 	## put together
 	brm_template="${brm_dev},${brm_if}"
 
+	## unset / empty out all variables
 	unset errors
+	alsa_dev_nr=""
+	alsa_dev_name=""
+	alsa_dev_label=""
+	alsa_if_nr=""
+	alsa_if_name=""
+	alsa_if_label=""
+	
 	errors=()
 	## start matching and collect errors in array
 	if [[ "${line}" =~ ${brm_template} ]]; then
