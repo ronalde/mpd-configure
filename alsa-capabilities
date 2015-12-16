@@ -189,7 +189,7 @@ function fetch_alsa_outputinterfaces() {
 	## same for interface portion
 	brm_if=",[[:space:]]device[[:space:]]([0-9]+):[[:space:]](.*)[[:space:]]\[(.*)\]"
 	## put together
-	brm_template="${brm_dev}${brm_if}"
+	brm_template="^${brm_dev}${brm_if}$"
 
 	## unset / empty out all variables
 	unset errors
