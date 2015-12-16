@@ -24,8 +24,9 @@ LANG=C
 
 ### generic functions
 
+
 function die() {
-    printf "\nError: %s\n" "$@" 1>&2;
+    printf "\nError in %s: %s\n" "${BASH_SOURCE[0]:-}" "$@" 1>&2;
     exit 1
 }
 
@@ -180,12 +181,13 @@ function does_mpd_haveoutputs() {
 		## line should indicate if output is enabled
 		if [[ ${line} =~ ${outputenabled_regexp} ]]; then
 		    if [[ ${BASH_REMATCH[1]} -eq 1 ]]; then
-			[[ ! -z ${DEBUG} ]] && \
-			    debug "enabled output found: \`${named_output}'."
+
+
 			## add its name to the array
+
 			MPD_OUTPUTS+=("${named_output}")
-			printf "output added \`%s' (total: %s)\n" \
-			       "${named_output}" "${#MPD_OUTPUTS[@]}" 1>&2;
+			[[ ! -z ${DEBUG} ]] && \
+			    debug "output added \`${named_output}' (total: ${#MPD_OUTPUTS[@]})"
 		    fi
 		    ## reset the loop
 		    named_output=""
@@ -209,6 +211,8 @@ function does_mpd_haveoutputs() {
 	fi
 
     fi
+
+    printf "@@@@ end of %s: %s (%s)\n" "${FUNC_NAME}" "${MPD_OUTPUTS[*]}" "${#MPD_OUTPUTS[@]}"  1>&2;
     
 }
 
@@ -241,8 +245,9 @@ function get_mpd_alsa_audio_outputs() {
     ## audio_output defined in the mpd configuration.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
-    
-    audio_output_started_regexp="audio_output"
+
+    ## be sure not to match global parameter `audio_output_format'
+    audio_output_started_regexp="^[[:space:]]*audio_output[[:space:]]"
     audio_output_ended_regexp="}"
     output_started=""
     audio_output_alsa_type_regexp="(type)[[:space:]]*(alsa)"
@@ -260,12 +265,7 @@ function get_mpd_alsa_audio_outputs() {
 		output_started=""
 		continue
 	    else
-		if [[ "${line}" =~ ${audio_output_comment_regexp} ]]; then
-		    [[ ! -z "${DEBUG}" ]] && \
-			debug "skip commented line: \`${line}'."
-		else
-		    [[ ! -z "${DEBUG}" ]] && \
-			debug "inside output: \`${line}'."
+		if [[ ! "${line}" =~ ${audio_output_comment_regexp} ]]; then
 		    ## store the line in the temporary config file
 		    printf "%s\n" "${line}" >> "${tmpconf}"
 		fi
@@ -326,10 +326,7 @@ function get_mpd_device() {
     mpd_fixed_channelcount=""
     mpd_fixed_sampleencoding=""
 
-    MPD_OUTPUTS=()
     alsa_outputs="$(get_mpd_alsa_audio_outputs)"
-    printf "output: %s (total: %s)\n" \
-	   "${MPD_OUTPUTS[@]}" "${#MPD_OUTPUTS[@]}" 1>&2;
     if [[ ${alsa_outputs} -lt 1 ]]; then 
 	die "no alsa outputs found in the ${MSG_MPDCONF}"
     else 
@@ -370,7 +367,7 @@ function get_mpd_device() {
     else
 	[[ ! -z "${DEBUG}" ]] && \
 	    debug "using mpd device \`${mpd_device}'"
-	printf "%s" ${mpd_device}
+	printf "%s" "${mpd_device}"
     fi
 }
 
@@ -714,9 +711,11 @@ function get_alsa_streamfile() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
+    
     #monitor file           =  /proc/asound/card1/stream0
     alsa_streamfile=""
     alsa_streamfile_regexp="monitor[[:space:]]file[[:space:]]*=[[:space:]]*(.*)"
+
     alsa_hwaddress_value=$(get_mpd_device)
     [[ ! -z "${DEBUG}" ]] && \
 	debug "got alsa hwaddress: \`${alsa_hwaddress_value}'"
@@ -875,8 +874,6 @@ function is_mpd_playing() {
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     MPD_STATUS="$(execute_mpd_command status)"
-    [[ ! -z ${DEBUG} ]] && \
-	debug "@@@ MPD_STATUS: \`${MPD_STATUS}'."
     
     ## state: stop|play
     state_regexp="state:[[:space:]]([a-z]*)"
@@ -905,9 +902,15 @@ function is_mpd_playing() {
 
 msg_samplerate="sample rate"
 msg_sampleencoding="encoding"
-msg_source="file on storage"       ## file on storage             < ffprobe
-msg_transfer="transfer by mpd"    ## file as transferred          < mpd
-msg_playback="playback by alsa"    ## file as converted to analog < alsa
+## file on storage < ffprobe
+msg_storage="storage"
+## file as transferred < mpd
+msg_mpd_in="mpd input"
+msg_mpd_out="mpd alsa output"
+## file as transferred < mpd
+## file as converted to analog < alsa
+msg_alsa="alsa"
+msg_final="audio system"
 msg_bitperfect="bit perfect"
 
 mpd_state=""
@@ -916,10 +919,7 @@ mpd_bitdepth=""
 mpd_channels=""
 
 function check_sanity() {
-    ## sanity checks for environment
-
-    #declare MPD_OUTPUTS
-    
+    ## sanity checks for environment 
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
    
@@ -927,6 +927,13 @@ function check_sanity() {
     msg_remote="$(is_mpd_local)"
     if [[ $? -ne 0 ]]; then
 	printf "%s" "${msg_remote}"
+	return 1
+    fi
+
+    ## exit mpd is not started
+    bash -c "echo '' > /dev/tcp/${MPD_HOST}/${MPD_PORT}" 2>/dev/null
+    if [[ $? -ne 0 ]]; then
+	printf "mpd is not running on host %s and port %s" "${MPD_HOST}" "${MPD_PORT}"
 	return 1
     fi
     
@@ -939,6 +946,7 @@ function check_sanity() {
     
     ## check for audio outputs
     msg_nooutputs="$(does_mpd_haveoutputs)"
+    
     if [[ $? -ne 0 ]]; then
 	printf "%s" "${msg_nooutputs}"
 	return 1
@@ -982,9 +990,6 @@ function main() {
     [[ ! -z ${DEBUG} ]] && \
 	debug "%%% MPDCONF_GLOBAL_STATICFORMAT: \`${MPDCONF_GLOBAL_STATICFORMAT}'"
 
-    ## global?
-    #declare MPD_OUTPUTS
-
     ## use mpd to determine properties of transferred file
     transfer_samplerate="$(get_mpd_samplerate "${MPD_STATUS}")"
     transfer_sampleencoding="$(get_mpd_bitdepth "${MPD_STATUS}")"  
@@ -1027,10 +1032,10 @@ function main() {
     fi
     printf "${MSG_PROPERTIES}\n" "${stored_file_path}"
     
-    printf " %.0s" {1..22}
+    printf " %.0s" {1..35}
     printf "%11s  %8s  %11s\n" \
 	   "${msg_samplerate}" "${msg_sampleencoding}" "${msg_bitperfect}"
-    printf " %.0s" {1..22}
+    printf " %.0s" {1..35}
     printf "=%.0s" {1..11}
     printf "  "
     printf "=%.0s" {1..8}
@@ -1038,25 +1043,34 @@ function main() {
     printf "=%.0s" {1..11}
     printf "\n"
     
-    printf " %-20s %11s  %8s  %11s\n" \
-	   "${msg_source}" \
+    printf " %15s > %-15s %11s  %8s  %11s\n" \
+	   "${msg_storage}" \
+	   "${msg_mpd_in}" \
 	   "${source_samplerate}" \
 	   "${source_sampleencoding}" \
 	   "${source_bitperfect}"
+
+    printf " %15s > %-15s %11s  %8s  %11s\n" \
+	   "${msg_mpd_in}" \
+	   "${msg_mpd_out}" \
+	   "${transfer_samplerate_mpdtru}" \
+	   "${transfer_sampleencoding_mpdtru}" \
+	   "${transfer_bitperfect_mpdtru}"
     
-    printf " %-20s %11s  %8s  %11s\n" \
-	   "${msg_transfer}" \
-	   "${transfer_samplerate}" \
-	   "${transfer_sampleencoding}" \
-	   "${transfer_bitperfect}"
+    printf " %15s > %-15s %11s  %8s  %11s\n" \
+	   "${msg_mpd_out}" \
+	   "${msg_alsa}" \
+	   "${transfer_samplerate_mpdout}" \
+	   "${transfer_sampleencoding_mpdout}" \
+	   "${transfer_bitperfect_mpdout}"
     
-    printf " %-20s %11s  %8s  %11s\n\n" \
-	   "${msg_playback}" \
+    printf " %15s > %-15s %11s  %8s  %11s\n\n" \
+	   "${msg_alsa}" \
+	   "${msg_final}" \
 	   "${playback_samplerate}" \
 	   "${playback_sampleencoding}" \
 	   "${playback_bitperfect}"
     
-    printf "\n\naudio outputs: %s\n\n" "${MPD_OUTPUTS[@]}"
     [[ ! -z "${DEBUG}" ]] && \
 	debug "... done. clean exit."
 
@@ -1082,7 +1096,8 @@ ALSACAPS_OUTPUT=""
 
 CMD_FFPROBE="$(which ffprobe)"
 
-TMPCONFS_TEMPLATE="$(mktemp -u mpdconf.XXXX)"
+## use dry-run to only produce a name (somewhat sloppy)
+TMPCONFS_TEMPLATE="$(mktemp --dry-run mpdconf.XXXX)"
 
 MSG_MPDCONF="mpd configuration file"
 MSG_MPDCONF_NOT_FOUND="no ${MSG_MPDCONF}(s) found; tried %s)"
@@ -1095,7 +1110,10 @@ file_sampleencoding=""
 alsa_samplerate=""
 alsa_sampleencoding=""
 
-
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
 [[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || main "$@"
+
+## clean up 
+[[ -z ${DEBUG} ]] && \
+    rm -f /tmp/mpdconf.*
