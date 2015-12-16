@@ -175,12 +175,21 @@ function fetch_alsa_outputinterfaces() {
 	## set if type to default (ie analog)
 	alsa_if_type="ao"
 	## construct bash rematch (brm) regexp for sound device
+	## based on aplay.c:
+	## printf(_("card %i: %s [%s], device %i: %s [%s]\n"),
+	## 1 card,
+	## 2 snd_ctl_card_info_get_id(info),
+	## 3 snd_ctl_card_info_get_name(info),
+	## 4 dev,
+	## 5 snd_pcm_info_get_id(pcminfo),
+	## 6 snd_pcm_info_get_name(pcminfo));
+	## 
 	## portion (ie before `,')
-	brm_dev="card[[:space:]]+([0-9]+):[[:space:]]+(.*)[[:space:]]+\[(.*)\]"
+	brm_dev="card[[:space:]]([0-9]+):[[:space:]](.*)[[:space:]]\[(.*)\]"
 	## same for interface portion
-	brm_if="[[:space:]]+device[[:space:]]+([0-9]+):[[:space:]]+(.*)[[:space:]]+\[(.*)\]"
+	brm_if=",[[:space:]]device[[:space:]]([0-9]+):[[:space:]](.*)[[:space:]]\[(.*)\]"
 	## put together
-	brm_template="${brm_dev},${brm_if}"
+	brm_template="${brm_dev}${brm_if}"
 
 	## unset / empty out all variables
 	unset errors
