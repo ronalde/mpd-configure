@@ -174,9 +174,9 @@ function fetch_alsa_outputinterfaces() {
 
 	## construct bash rematch (brm) regexp for sound device
 	## portion (ie before `,')
-	brm_dev="card[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\]"
+	brm_dev="card[[:space:]]+([0-9]+):[[:space:]]+(.*)[[:space:]]+\[(.*)\]"
 	## same for interface portion
-	brm_if="[[:space:]]device[[:space:]]([0-99]):[[:space:]](.*)[[:space:]]\[(.*)\](.*)"
+	brm_if="[[:space:]]+device[[:space:]]+([0-9]+):[[:space:]]+(.*)[[:space:]]+\[(.*)\]"
 	## put together
 	brm_template="${brm_dev},${brm_if}"
 
