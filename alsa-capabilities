@@ -86,49 +86,79 @@ function command_not_found() {
 
 
 ### alsa related functions
+function get_aplay_output() {
+    ## use aplay to do a basic alsa sanity check and return its (raw)
+    ## output to the calling function.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
-function fetch_alsa_outputinterfaces() {
-    ## parses each output interface returned by `aplay -l' after
-    ## filtering (when the appropriate commandline options are given),
-    ## stores its capabilities in the appropriate global indexed
-    ## arrays and displays them.
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
     res=""
     aplay_output=""
-    aplay_msg_nosoundcards_re="no[[:space:]]soundcards"
-    aplay_card_regexp="card [0-99]:"
+    aplay_msg_nosoundcards_regexp="no[[:space:]]soundcards"
+    aplay_card_regexp="${1}"
 
     ## to see how the script behaves with a certain output of aplay -l
     ## on a particular host, store it's output in a file and supply
-    ## the file path as the value of TESTFILE, eg: `bash-capabilities
-    ## /path/to/output-of-aplay-l'. Of course all hardware and device
-    ## tests will fail (hopefully with some grace).
+    ## the file path as the value of TESTFILE, eg:
+    ## `TESTFILE=/tmp/somefile ./bash-capabilities
+    ## All hardware and device tests will fail or produce fake outputs
+    ## (hopefully with some grace).
     if [[ ! -z "${TESTFILE}" ]]; then
-	if [[ -f "${TESTFILE}" ]]; then
+	if [[ ! -f "${TESTFILE}" ]]; then
+	    printf "${MSG_APLAY_ERROR_NOSUCHTESTFILE}" "${TESTFILE}"
+	    return 1
+	else 
 	    ## get the output from a file for testing purposes
-	    inform "NOTICE: not using real aplay output but contents of TESTFILE \`${TESTFILE}'"
+	    printf "${MSG_APLAY_USINGTESTFILE}\n" "${TESTFILE}" 1>&2;
 	    aplay_output="$(< "${TESTFILE}")"
-	else
-	    die "Specified TESTFILE \'${TESTFILE}' does not exist."
+	    if [[ $? -ne 0 ]]; then
+		printf "${MSG_APLAY_ERROR_OPENINGTESTFILE}"
+		return 1
+	    fi
 	fi
     else
-    
-	## run aplay to check for alsa errors
+    	## run aplay to check for alsa errors
 	res="$(${CMD_APLAY} -l 2>&1)"
 	## check for alsa errors
 	if [[ $? -ne 0 ]]; then
-	    die "cannot continue, because alsa reported the following error:\n\`${res}'\n"
+	    printf "${MSG_APLAY_ERROR_GENERAL}\n" "${res}"
+	    return 1
 	fi
 	## check for no soundcards
-	if [[ "${res}" =~ ${aplay_msg_nosoundcards_re} ]]; then
-	    die "cannot continue, because alsa found no soundcards in your system."
+	if [[ "${res}" =~ ${aplay_msg_nosoundcards_regexp} ]]; then
+	    printf "%s\n" "${MSG_APLAY_ERROR_NOSOUNDCARDS}"
+	    return 1
 	fi
 	## run it again without std_err
 	aplay_output="$(${CMD_APLAY} -l)"
     fi
-	
-    declare -a aplay_lines=()
+    if [[ $? -ne 0 ]]; then
+	printf "%s" "${MSG_APLAY_ERROR_UNSPECIFIED}"
+	return 1
+    else
+	printf "%s" "${aplay_output}"
+    fi
+}
+
+
+function fetch_alsa_outputinterfaces() {
+    ## parses each output interface returned by `get_aplay_output'
+    ## after filtering (when the appropriate commandline options are
+    ## given), stores its capabilities in the appropriate global
+    ## indexed arrays and displays them.
+
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    msg=""
+    aplay_lines=()
+    integer_regexp='^[0-9]+$'
+    aplay_card_regexp="^card[[:space:]][0-9]+:"
+    aplay_output="$(get_aplay_output "${aplay_card_regexp}")"
+    if [[ $? -ne 0 ]]; then
+	die "${aplay_output}"
+    fi
+    
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
 
@@ -138,7 +168,17 @@ function fetch_alsa_outputinterfaces() {
 	alsa_filtered_hwaddr="${OPT_HWFILTER#hw:*}" 
 	alsa_filtered_cardnr="${alsa_filtered_hwaddr%%,*}"
 	alsa_filtered_devicenr="${alsa_filtered_hwaddr##*,}"
-	aplay_card_regexp="card ${alsa_filtered_cardnr}:.* device ${alsa_filtered_devicenr}:"	
+	if [[ ! ${alsa_filtered_cardnr} =~ ${integer_regexp} ]] || \
+	   [[ ! ${alsa_filtered_devicenr} =~ ${integer_regexp} ]]; then
+	    msg="Invalid OPT_HWFILTER (\`${OPT_HWFILTER}') specified.\n"
+	    msg+="Should be \`hw:x,y' were x and y are both integers."
+	    die "${msg}"
+	fi
+	aplay_card_regexp="^card[[:space:]]${alsa_filtered_cardnr}:[[:space:]].*"
+	aplay_device_regexp="[[:space:]]device[[:space:]]${alsa_filtered_devicenr}:"
+	aplay_card_device_regexp="${aplay_card_regexp}${aplay_device_regexp}"
+    else
+	aplay_card_device_regexp="${aplay_card_regexp}"
     fi
 
     ## iterate each line of aplay output
@@ -146,7 +186,7 @@ function fetch_alsa_outputinterfaces() {
 	## filter for `^card' and then for `OPT_FILTER' to get matching
 	## lines from aplay and store them in an array
 	
-	if [[ "${line}" =~ ${aplay_card_regexp} ]]; then
+	if [[ "${line}" =~ ${aplay_card_device_regexp} ]]; then
 	    [[ ! -z "${DEBUG}" ]] && \
 		debug  "Inspecting interface: ${line}"
 	    ## raise the counter for interfaces without filtering
@@ -162,7 +202,11 @@ function fetch_alsa_outputinterfaces() {
 	fi
     done <<< "${aplay_output}"
 
-    errors=()
+    ## check whether soundcards were found
+    if [[ ${#aplay_lines[@]} -lt 1 ]]; then 
+	die "${#aplay_lines[@]} soundcards found"
+    fi
+
     ## loop through each item in the array
     for line in "${aplay_lines[@]}"; do 
 	## set if type to default (ie analog)
@@ -1054,6 +1098,12 @@ MSG_PROP_NOTAPPLICABLE="(n/a)"
 MSG_PROP_NOTAVAILABLE="(none)"
 MSG_DEVICE_BUSY="can't detect"
 MSG_RUN_AS_ROOT="device in use, run as root to display process."
+MSG_APLAY_ERROR_NOSOUNDCARDS="aplay did not find any soundcard."
+MSG_APLAY_ERROR_GENERAL="aplay reported the following error:\n\`%s'"
+MSG_APLAY_ERROR_UNSPECIFIED="aplay returned no results."
+MSG_APLAY_USINGTESTFILE="NOTICE: using fake aplay output stored in TESTFILE: \`%s'."
+MSG_APLAY_ERROR_NOSUCHTESTFILE="Specified TESTFILE \'%s' does not exist."
+MSG_APLAY_ERROR_OPENINGTESTFILE="Error opening TESTFILE \'%s'."
 MSG_NO_DEVICE="no such device"
 MSG_NO_FILE="no such file"
 MSG_TAB=" * "
