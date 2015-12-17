@@ -278,18 +278,15 @@ function fetch_alsa_outputinterfaces() {
 	    ## construct the path to the hwparams file
 	    alsa_if_hwparamsfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/hw_params"
 	    ## check if the chardev exists
-	    res="$(check_alsa_chardev "${alsa_if_chardev}")"
-	    if [[ $? -ne 0 ]] ;then
+	    if [[ ! -c "${alsa_if_chardev}" ]]; then 
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug "check_alsa_chardev returned error: \`${res}'"
-		#die "cannot get hwparamsfile"
+		    debug "alsa_if_chardev \`${alsa_if_chardev}' is not a chardev."
 		alsa_if_chardev="${alsa_if_chardev} (error: not accessible)"
 		alsa_if_formats="(can't determine: character device error)"
 		alsa_if_monitorfile="${alsa_if_hwparamsfile} (error: not accessible)"
 	    else
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug "${FUNCNAME}: check_alsa_chardev returned no error: \`${res}'"
-		## chardev exists, check if it is in use
+		    debug "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
 		res="$(get_locking_process "${alsa_if_chardev}")"
 		if [[ $? -ne 0 ]]; then
 		    ## can't determine
@@ -322,7 +319,7 @@ function fetch_alsa_outputinterfaces() {
 	    ## check if the hwparams file exists
 	    res=$(check_alsa_hwparamsfile "${alsa_if_hwparamsfile}")
 	    if [[ $? -ne 0 ]] ;then
-		    alsa_if_hwparamsfile="${alsa_if_hwparamsfile} (error: not accessible)"
+		alsa_if_hwparamsfile="${alsa_if_hwparamsfile} (error: not accessible)"
 	    fi
 
 	    ## before determining whether this is a usb device, assume
@@ -356,30 +353,24 @@ function fetch_alsa_outputinterfaces() {
 	    else
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "check_alsa_streamfile returned success: \`${res}'."
-		
 		## set interface to usb out
 		alsa_if_type="uo"
 		## uac devices will use the stream file instead of
 		## hwaparams file to monitor
 		alsa_if_monitorfile="${alsa_if_streamfile}"
-
 		## get the type of uac endpoint
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "alsa_if_streamfile: \`${alsa_if_streamfile}'."
-		
 		res="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
-		
-		if [[ $? -eq 1 ]]; then
+		if [[ $? -ne 0 ]]; then
 		    [[ ! -z ${DEBUG} ]] && \
 			debug "return_alsa_uac_ep returned error: \`${res}'."
 		    alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
-
 		else
 		    [[ ! -z ${DEBUG} ]] && \
 			debug "return_alsa_uac_ep returned success: \`${res}'."		    
 		    alsa_if_uac_ep="${res}"
 		    ## lookup the uac class in the array for this type of endpoint (EP)
-
 		    ## (for readability)
 		    alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
 		    ## get the uac class number (ie `1' or `2')
@@ -396,15 +387,18 @@ function fetch_alsa_outputinterfaces() {
 	case "${alsa_if_type}" in
 	    "ao")
 		## only if neither `OPT_LIMIT_DO' and `OPT_LIMIT_UO' are set
-		[[ ! -z ${OPT_LIMIT_DO} || ! -z ${OPT_LIMIT_UO} ]] && continue || match="true"
+		[[ ! -z ${OPT_LIMIT_DO} || ! -z ${OPT_LIMIT_UO} ]] && \
+		    continue || match="true"
 		;;
 	    "do")
 		## only if neither `OPT_LIMIT_AO' and `OPT_LIMIT_UO' are set
-		[[ ! -z ${OPT_LIMIT_AO} || ! -z ${OPT_LIMIT_UO} ]] && continue || match="true"
+		[[ ! -z ${OPT_LIMIT_AO} || ! -z ${OPT_LIMIT_UO} ]] && \
+		    continue || match="true"
 		;;
 	    "uo")
 		## only if `OPT_LIMIT_AO' is not set
-		[[ ! -z ${OPT_LIMIT_AO} ]] && continue || match="true"
+		[[ ! -z ${OPT_LIMIT_AO} ]] && \
+		    continue || match="true"
 	esac
 
 	if [[ ! -z "${match}" ]]; then
@@ -413,7 +407,9 @@ function fetch_alsa_outputinterfaces() {
 
 	    ## construct the display title
 	    alsa_if_display_title=$(printf " %s) %s \`%s'" \
-		"${#ALSA_AIF_HWADDRESSES[@]}" "${alsa_if_title_label}" "${alsa_if_hwaddress}")
+					   "${#ALSA_AIF_HWADDRESSES[@]}" \
+					   "${alsa_if_title_label}" \
+					   "${alsa_if_hwaddress}")
 
 	    ## store the details of the current interface in global arrays
 	    ALSA_AIF_HWADDRESSES+=("${alsa_if_hwaddress}")
@@ -534,18 +530,6 @@ LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
 	
     fi
     
-}
-
-function check_alsa_chardev() {
-    ## check to see whether character device $1 exists/is accessible
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-    
-    chardev_path="$1"
-    if [[ -c "${chardev_path}" ]]; then
-	printf "${chardev_path}"
-    else
-	return 1
-    fi
 }
 
 function check_alsa_hwparamsfile() {
