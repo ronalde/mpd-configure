@@ -296,14 +296,12 @@ function fetch_alsa_outputinterfaces() {
 		    alsa_if_chardev="${alsa_if_chardev} (error: no access; run the script as root or using sudo"
 		    alsa_if_formats="(error: can't determine)"
 		else
-		    [[ ! -z "${DEBUG}" ]] && \
-			debug "${FUNCNAME}: get_locking_process returned no error: \`${res}'"
 		    if [[ ! -z "${res}" ]]; then
 			alsa_if_chardev="${alsa_if_chardev} ${res}"
 		    fi
-		    ## can determine; 
-    		    ## get the formats the interface natively handles or
-		    ## return the process id and name blocking the interface
+		    ## can determine; get the formats the interface
+    		    ## natively handles or return the process id and
+    		    ## name blocking the interface
 		    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
 		    if [[ $? -ne 0 ]]; then
 			## no random device available or other error accessing it
@@ -358,8 +356,7 @@ function fetch_alsa_outputinterfaces() {
 		alsa_if_monitorfile="${alsa_streamfile}"
 		## get the type of uac endpoint
 		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_streamfile}")"
-		if [[ $? -ne 0 ]]; then
-		    
+		if [[ $? -ne 0 ]]; then    
 		    alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
 		    alsa_if_uac_class_nr="?"
 		    alsa_if_uac_class_label="${MSG_PROP_NOTAVAILABLE}"
@@ -568,7 +565,7 @@ function return_alsa_uac_ep() {
 	if [[ "${line}" =~ ${ep_regexp} ]]; then
 	    ep_mode="${BASH_REMATCH[2]}"
 	    [[ ! -z "${DEBUG}" ]] && \
-		debug "matching endpoint found in line \`$line': \`ep_mode'."
+		debug "matching endpoint found in line \`${line}': \`${ep_mode}'."
 	    break
 	fi
     done<"${alsa_streamfile_path}"
@@ -580,8 +577,7 @@ function return_alsa_uac_ep() {
 	return 1
     else
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "return_alsa_uac_ep returned value: \`${res}'."
-
+	    debug "return_alsa_uac_ep returned value: \`${ep_mode}'."
 	## return the filtered endpoint type
 	printf "%s" "${ep_mode}"
     fi
