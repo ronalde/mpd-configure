@@ -99,13 +99,6 @@ function fetch_alsa_outputinterfaces() {
     aplay_msg_nosoundcards_re="no[[:space:]]soundcards"
     aplay_card_regexp="card [0-99]:"
 
-    alsa_dev_nr=""
-    alsa_dev_name=""
-    alsa_dev_label=""
-    alsa_if_nr=""
-    alsa_if_name=""
-    alsa_if_label=""
-
     ## to see how the script behaves with a certain output of aplay -l
     ## on a particular host, store it's output in a file and supply
     ## the file path as the value of TESTFILE, eg: `bash-capabilities
