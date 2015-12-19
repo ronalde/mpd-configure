@@ -43,6 +43,7 @@ LANG=C
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
 DEBUG="${DEBUG:-}"
+PROFILE="${PROFILE:-}"
 TESTFILE="${TESTFILE:-}"
 
 
@@ -140,6 +141,128 @@ function get_aplay_output() {
     fi
 }
 
+function get_driver() {
+    card_nr="$1"
+    card_name="card${card_nr}"
+    sysclasssound="/sys/class/sound"
+    driver=""
+
+    module=$(readlink /sys/class/sound/${card_name}/device/driver/module || return 1)
+    driver="${module##*/}"
+    printf "%s" "${driver}"
+
+}
+
+function get_codecs() {
+    card_nr="$1"
+    card_name="card${card_nr}"
+    driver="$2"
+    driverusb="snd_usb_audio"
+    codec_re="^Codec:[[:space:]](.*)$"
+    
+    if [[ "${driver}" == "${driverusb}" ]]; then
+	codecs="N/A"
+	printf "%s\n" "${codecs}"
+    else
+	for codec_file in /proc/asound/${card_name}/codec#*; do
+	    while read -r line; do
+		if [[ "${line}" =~ ${codec_re} ]]; then 
+		    printf "%s\n" "${BASH_REMATCH[1]}"
+		    break
+		fi
+	    done<"${codec_file}"
+	done
+    fi
+}
+
+function get_samplerates_codec() {
+    card_nr="$1"
+    card_name="card${card_nr}"
+    codec_nr="$2"
+    codec_file="/proc/asound/${card_name}/codec#${codec_nr}"
+    samplerate_re="^rates \[[[:alnum:]]*\]:[[:space:]](.*)$"
+    samplerates=""
+    
+    # rates [0x5f0]: 32000 44100 48000 88200 96000 192000
+    for codec_file in /proc/asound/${card_name}/codec#*; do
+	while read -r line; do
+	    if [[ "${line}" =~ ${samplerate_re} ]]; then 
+		samplerates="${BASH_REMATCH[1]// /, }"
+		break
+	    fi
+	done<"${codec_file}"
+    done
+
+    printf "codec rates: %s\n" "${samplerates}" 1>&2;
+    printf "%s" ${samplerates}
+    
+}
+
+function get_samplerates_usb() {
+    card_nr="$1"
+    card_name="card${card_nr}"
+    samplerates_re="^[[:space:]]*Rates: (.*)$"
+    #Rates: 44100, 48000, 88200, 96000, 176400, 192000
+    streamfile="/proc/asound/card${card_nr}/stream0"
+    samplerates=""
+    
+    while read -r line; do
+	if [[ "${line}" =~ ${samplerates_re} ]]; then
+	    samplerates="${BASH_REMATCH[1]}"
+	fi
+    done<"${streamfile}"
+    printf "usb rates: %s\n" "${samplerates}" 1>&2;
+    printf "%s" ${samplerates}
+}
+
+function alt_alsa_cards_brm() {
+    ## inspired by alsa's scan.sh
+
+    #PS4='+ $(date "+%s.%N")\011 '
+    #exec 3>&2 2>/tmp/bashstart.$$.log
+    #set -x
+ 
+    card_re="^card([0-9]+)"
+    driverusb="snd_usb_audio"
+    path="$(pwd)"
+    cd /proc/asound || exit 1
+
+    while read -r line; do
+	if [[ "${line}" =~ ${card_re} ]]; then
+	    codecs=()
+	    samplerates=()
+	    #list+=(${BASH_REMATCH[1]})
+	    card_nr="${BASH_REMATCH[1]}"
+	    printf "card number: %s\n" "${card_nr}" 1>&2;
+	    driver="$(get_driver "${card_nr}")"
+	    printf "driver: %s\n" "${driver}" 1>&2;
+
+	    while read -r codec_line; do
+		codecs+=("${codec_line}")
+	    done< <(get_codecs "${card_nr}" "${driver}")
+	    printf "codecarray: %s\n" "${codecs[@]}" 1>&2;
+
+
+	    if [[ "${driver}" == "${driverusb}" ]]; then
+		samplerates=($(get_samplerates_usb "${card_nr}" "${codeccounter}"))
+	    else 
+		codeccounter=0
+		for codec in "${codecs[@]}"; do
+		    samplerates=($(get_samplerates_codec "${card_nr}" "${codeccounter}"))
+		    (( codeccounter++ ))
+		done
+	    fi
+	    printf "sampleratearray: %s\n" "${samplerates[@]}" 1>&2;
+	    
+
+	fi
+    done< <(ls card*)
+
+    #cd "${path}"
+    #set +x
+    #exec 2>&3 3>&-
+}
+
 
 function fetch_alsa_outputinterfaces() {
     ## parses each output interface returned by `get_aplay_output'
@@ -155,9 +278,8 @@ function fetch_alsa_outputinterfaces() {
     integer_regexp='^[0-9]+$'
     aplay_card_regexp="^card[[:space:]][0-9]+:"
     aplay_output="$(get_aplay_output "${aplay_card_regexp}")"
-    if [[ $? -ne 0 ]]; then
-	die "${aplay_output}"
-    fi
+    ## exit on error
+    [[ $? -eq 0 ]] || die "${aplay_output}"
     
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
@@ -277,6 +399,7 @@ function fetch_alsa_outputinterfaces() {
 	    alsa_if_chardev="/dev/snd/pcmC${alsa_dev_nr}D${alsa_if_nr}p"
 	    ## construct the path to the hwparams file
 	    alsa_if_hwparamsfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/hw_params"
+	    alsa_if_statusfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/status"
 	    ## check if the chardev exists
 	    if [[ ! -c "${alsa_if_chardev}" ]]; then 
 		[[ ! -z "${DEBUG}" ]] && \
@@ -287,31 +410,34 @@ function fetch_alsa_outputinterfaces() {
 	    else
 		[[ ! -z "${DEBUG}" ]] && \
 		    debug "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
-		res="$(get_locking_process "${alsa_if_chardev}")"
-		if [[ $? -ne 0 ]]; then
-		    ## can't determine
-		    [[ ! -z "${DEBUG}" ]] && \
-			debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
-		    
-		    alsa_if_chardev="${alsa_if_chardev} (error: no access; run the script as root or using sudo"
-		    alsa_if_formats="(error: can't determine)"
-		else
-		    if [[ ! -z "${res}" ]]; then
-			alsa_if_chardev="${alsa_if_chardev} ${res}"
-		    fi
-		    ## can determine; get the formats the interface
-    		    ## natively handles or return the process id and
-    		    ## name blocking the interface
-		    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
+		if [[ "$(< ${alsa_if_statusfile})" != "closed" ]]; then
+		    ## device is being used, get the lociking pid
+		    res="$(get_locking_process "${alsa_if_chardev}")"
 		    if [[ $? -ne 0 ]]; then
-			## no random device available or other error accessing it
-			alsa_if_formats="(error accessing /dev/[u]random)"
+			## can't determine
+			[[ ! -z "${DEBUG}" ]] && \
+			    debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
+			
+			alsa_if_chardev="${alsa_if_chardev} (is locked by an unknown process; run the script as root or using sudo to see which)"
+			alsa_if_formats="(can't determine because device is locked)"
 		    else
-			if [[ "${alsa_if_formats}" = "${MSG_DEVICE_BUSY}" ]]; then
-			    alsa_if_formats="(error: can't determine because device is in use)"
+			$d$2:$d$572
+			if [[ ! -z "${res}" ]]; then
+			    alsa_if_chardev="${alsa_if_chardev} ${res}"
 			fi
+			alsa_if_formats="(error: can't determine)"
+			## can determine; get the formats the interface
+    			## natively handles or return the process id and
+    			## name blocking the interface
+		    fi
+		else
+		    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
+		    if [[ "${alsa_if_formats}" == "${MSG_DEVICE_BUSY}" ]]; then
+			alsa_if_formats="(error: can't determine because device is in use)"
 		    fi
 		fi
+		    
+
 	    fi
 
 	    ## check if the hwparams file exists
@@ -345,7 +471,7 @@ function fetch_alsa_outputinterfaces() {
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "${msg_alsa_streamfile} ${MSG_ERROR_NOFILE}"
 		## no uac interface
-		alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
+		alsa_if_uacclass="${MSG_PROP_NOTAVAILABLE}"
 	    else
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "${msg_alsa_streamfile} is an accessible file."
@@ -357,26 +483,26 @@ function fetch_alsa_outputinterfaces() {
 		## get the type of uac endpoint
 		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_streamfile}")"
 		if [[ $? -ne 0 ]]; then    
-		    alsa_if_uac_class="${MSG_PROP_NOTAVAILABLE}"
-		    alsa_if_uac_class_nr="?"
-		    alsa_if_uac_class_label="${MSG_PROP_NOTAVAILABLE}"
+		    alsa_if_uacclass="${MSG_PROP_NOTAVAILABLE}"
+		    alsa_if_uacclass_nr="?"
+		    alsa_if_uacclass_label="${MSG_PROP_NOTAVAILABLE}"
 		else
 		    [[ ! -z ${DEBUG} ]] && \
 			debug "alsa_if_uac_ep set to \`${alsa_if_uac_ep}'."		    
 		    ## lookup the uac class in the array for this type of endpoint (EP)
 		    ## (for readability)
-		    alsa_if_uac_class="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
+		    alsa_if_uacclass="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
 		    ## the uac class number (0, 1, 2 or 3) according to ./sound/usb/card.h
-		    alsa_if_uac_class_nr="${alsa_if_uac_class% - *}"
+		    alsa_if_uacclass_nr="${alsa_if_uacclass% - *}"
 		    classnr_regexp='^[0-3]+$'
-		    if [[ ! ${alsa_if_uac_class_nr} =~ ${classnr_regexp} ]]; then
+		    if [[ ! ${alsa_if_uacclass_nr} =~ ${classnr_regexp} ]]; then
 			[[ ! -z ${DEBUG} ]] && \
-			    debug "invalid uac class number \`${alsa_if_uac_class_nr}'. \
+			    debug "invalid uac class number \`${alsa_if_uacclass_nr}'. \
 ${MSG_ERROR_UNEXPECTED}"
-			alsa_if_uac_class_nr="?"
+			alsa_if_uacclass_nr="?"
 		    fi
 		    ## the uac label (ie everything after `x: ')
-		    alsa_if_uac_class_label="${alsa_if_uac_class:4}"
+		    alsa_if_uacclass_label="${alsa_if_uacclass:4}"
 		fi
 	    fi
 	fi
@@ -417,28 +543,42 @@ ${MSG_ERROR_UNEXPECTED}"
 	    ALSA_AIF_DISPLAYTITLES+=("${alsa_if_display_title}")
 	    ALSA_AIF_DEVLABELS+=("${alsa_dev_label}")
 	    ALSA_AIF_LABELS+=("${alsa_if_label}")
-	    ALSA_AIF_UACCLASSES+=("${alsa_if_uac_class}")
+	    ALSA_AIF_UACCLASSES+=("${alsa_if_uacclass}")
 	    ALSA_AIF_FORMATS+=("${alsa_if_formats}")
 	    ALSA_AIF_CHARDEVS+=("${alsa_if_chardev}")
-
 	fi
 
+	#alsa_if_samplerates="$(return_alsa_samplerates \
+#"${alsa_dev_nr}" "${alsa_if_nr}" "${alsa_if_type}" "${alsa_if_label}")"
+#	if [[ $? -ne 0 ]]; then
+#	    [[ ! -z ${DEBUG} ]] && \
+#		debug "error getting samplerates"
+#	else
+#	    [[ ! -z ${DEBUG} ]] && \
+#		debug "alsa_if_samplerates: \`${alsa_if_samplerates}'."
+#	fi
+	
 	## construct a list with the properties of the current
 	## interface if `OPT_QUIET' is not set
+	msg_alsa_devname="device name"
+	msg_alsa_codecname="codec name"
+	msg_alsa_ifname="interface name"
+	msg_alsa_uacclass="usb audio class"
+	msg_alsa_chardev="character device"
+	msg_alsa_encodingformats="encoding formats"
+	msg_alsa_packingformats="packing formats"
+	msg_alsa_samplerates="sample rates"
+	msg_alsa_monitorfile="monitor file"
+	
 	if [[ -z "${OPT_QUIET}" ]]; then
-	    alsa_details_output=$(cat <<EOF
-${alsa_if_display_title}
-    - card/device name       =  ${alsa_dev_label}
-    - interface name         =  ${alsa_if_label}
-    - usb audio class        =  ${alsa_if_uac_class}
-    - character device       =  ${alsa_if_chardev}
-    - digital formats        =  ${alsa_if_formats}
-    - monitor file           =  ${alsa_if_monitorfile}
-EOF
-) 
-	    ## echo it to std_err
-	    inform "${alsa_details_output}"
-
+	    printf "%s\n" "${alsa_if_display_title}" 1>&2;
+	    printf " - %-17s = %-60s\n" "${msg_alsa_devname}" "${alsa_dev_label}" 1>&2;
+	    printf " - %-17s = %-60s\n" "${msg_alsa_ifname}" "${alsa_if_label}" 1>&2;
+	    printf " - %-17s = %-60s\n" "${msg_alsa_uacclass}" "${alsa_if_uacclass}" 1>&2;
+	    printf " - %-17s = %-60s\n" "${msg_alsa_chardev}" "${alsa_if_chardev}" 1>&2;
+	    printf " - %-17s = %-60s\n" "${msg_alsa_encodingformats}" "${alsa_if_formats}" 1>&2;
+	    printf " - %-17s = %-60s\n" "${msg_alsa_monitorfile}" "${alsa_if_monitorfile}" 1>&2;
+	    printf "\n"
 	fi
 
     done
@@ -447,17 +587,17 @@ EOF
 
 function get_locking_process() {
     ## get the pid and name of the process accessing chardev $1, which
-    ## may be a file or a socket. Returns a descriptive string, nothing or an error.
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    ## may be a file or a socket. Returns a descriptive string or a notice with error.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     chardev_path="$1"
     ## try fuser which returns the pid in std_out.
     res="$(${CMD_FUSER} -v ${chardev_path} 2>&1)"
     if [[ $? -ne 0 ]]; then
-	if [[ ! -z "${res}" ]]; then
-	    ## real error; return it to calling function
-	    return 1
-	fi
+	## real error; return it to calling function
+	printf "%s" "${res}"
+	return 1
     else   
 	[[ ! -z ${DEBUG} ]] && \
 	    debug "${FUNCNAME}: \`${chardev_path}' is accessible"
@@ -465,17 +605,21 @@ function get_locking_process() {
 	## fetch the process name
 	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path} 2>/dev/null))
 	res="$?"
+	## TODO: pnamedpid is always empty (2>/dev/null)
 	[[ ! -z ${DEBUG} ]] && \
 	    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
-
 	if [[ ${res} -ne 0 ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: ps returned an error: \`${res}'"
+		debug "${FUNCNAME}: ps returned error \`${res}'"
+	    printf "ps returned error \`%s'" "${res}"
+	    return 1
 	else
 	    if [[ -z ${pnamepid} ]]; then
 		## process not found
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "${FUNCNAME}: ps returned no error and no processes"
+		printf "ps found no processess"
+		return 1
 	    else
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "${FUNCNAME}: ps returned \`${pnamepid}'"
@@ -489,47 +633,90 @@ function get_locking_process() {
     fi
 }
 
+function return_alsa_samplerates() {
+    ## fetch and return a comma separated string of playback sample
+    ## rates for the card specified by its cardnr in $1, device number
+    ## in $2 and type in $3.
+    
+    [[ ! -z ${DEBUG} ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+
+    #non-uac: "rates" in /proc/asound/cardx/codec#0
+    #uac:     "Rates" in /proc/asound/cardx/stream0
+    
+    alsa_dev_nr="$1"
+    alsa_if_nr="$2"
+    ## uo = uac, else non-uac
+    alsa_if_type="$3"
+    alsa_if_name="$4"
+    samplerates=""
+    rates_file=""
+    
+    if [[ "${alsa_if_type}" == "uo" ]]; then 
+	rates_regexp="Rates:[[:space:]](.*)$"
+	rates_file="/proc/asound/card${alsa_dev_nr}/stream${alsa_if_nr}"
+    else
+	rates_regexp="rates[[:space:]]\[[0-9a-z]*\]:[[:space:]](.*)$"
+	rates_file="/proc/asound/card${alsa_dev_nr}/codec#${alsa_if_nr}"
+    fi 
+
+    if [[ ! -f "${rates_file}" ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "invalid ${rates_file}: \`${rates_file}'."
+	return 1
+    else
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "using rates_file \`${rates_file}' and rates_regexp \`${rates_regexp}'"
+	while read -r line; do
+	    #debug "line: ${line}"
+	    if [[ "${line}" =~ ${rates_regexp} ]]; then
+		debug "matching line: ${line}"
+		samplerates="${BASH_REMATCH[1]}"
+		break
+	    fi
+	    
+	done<"${rates_file}"
+    fi
+    if [[ -z "${samplerates}" ]]; then
+	## some error
+	return 1
+    else 
+	if [[ ! "${alsa_if_type}" == "uo" ]]; then 
+	    ## replace spaces with `, '
+	    samplerates="${samplerates// /, }"
+	fi
+	printf "${samplerates}"
+    fi
+   
+}
+
 function return_alsa_formats() {
-    ## fetches and returns a comma seperated string of playback formats
-    ## by feeding it dummy input while keeping the test silent 
-    ## by redirecting output to /dev/null.
+    ## fetch and return a comma separated string of playback
+    ## formats by feeding aplay dummy input (--format=MPEG) while
+    ## making sure the test is silent by redirecting output to
+    ## /dev/null.
     ## 
     ## needs address of alsa output device in `hw:x,y' format 
     ## as single argument ($1)
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     alsa_hw_device="$1"
+    aplay_opts=(-D ${alsa_hw_device})
+    aplay_opts+=(-f MPEG)
     format=""
-    randomdev=/dev/urandom
-    ALSA_BEFORE_FORMATS="Available formats:"
-    ## can't assume existence of /dev/urandom
-    if [[ ! -c ${randomdev} ]] && [[ ! -c /dev/random ]]; then
-	## no random device available; exit with error
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME}: no random device available"
-	return 1
-    else
-	if [[ ! -c ${randomdev} ]]; then
-	    randomdev=/dev/random
-	fi
+    pseudo_random="30985218341569576428057261168568123489906994"
 
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME}: using random device \`${randomdev}'"
+    ## throw psuedo random but non-audio data to aplay to determine formats
+    aplay_out="$(echo ${pseudo_random} | \
+LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null | grep '^- ')"
+    while read -r line; do 
+	format="${format}, ${line/- /}"
+    done <<< "${aplay_out}"
+    formats="${format#, }"
+    [[ ! -z "${formats}" ]] && \
+	printf "${formats}" || printf "${MSG_DEVICE_BUSY}"
 
-	aplay_out="$(cat ${randomdev} | \
-LANG=C ${CMD_APLAY} -D ${alsa_hw_device} 2>&1 >/dev/null | grep '^- ')"
-	
-	while read -r line; do 
-	    format="${format}, ${line/- /}"
-	done <<< "${aplay_out}"
-	formats="${format#, }"
-	[[ ! -z "${formats}" ]] && \
-	    printf "${formats}" || \
-		printf "${MSG_DEVICE_BUSY}"
-	
-    fi
-    
 }
 
 
@@ -706,6 +893,15 @@ function analyze_command_line() {
 function return_alsa_interface() {
     ## main function; see display_usageinfo()
 
+    profile_file=""
+    ## start profiling
+    if [[ ! -z ${PROFILE} ]]; then
+	profile_file="/tmp/alsa-capabilities.$$.log"
+	PS4='+ $(date "+%s.%N")\011 '
+	exec 3>&2 2>${profile_file}
+	set -x
+    fi
+
     [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## check if needed commands are available
@@ -737,8 +933,16 @@ function return_alsa_interface() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "Number of audio interfaces after filtering: ${#ALSA_AIF_HWADDRESSES[@]}"
 
+    if [[ ! -z ${PROFILE} ]]; then 
+	## end profiling
+	set +x
+	exec 2>&3 3>&-
+	debug "Profiling information stored in: ${profile_file}"
+    fi
+
     ## return success if interfaces are found
     return 0
+    
 
 }
 
@@ -841,30 +1045,30 @@ function pulseaudio_evaluate_restoring() {
 function pulseaudio_restore_clientconf() {
     ## restore backed up client configuration if created by script.
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     cp -av "${PA_CLIENT_CONF_BACKUP}" "${PA_CLIENT_CONF}"
-    res="$?"
-    if [[ "${res}" = "0" ]]; then
+    cpres="$?"
+    if [[ ${cpres} -ne 0 ]]; then
+	## error restoring
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug "copying \`${PA_CLIENT_CONF_BACKUP}' to \`${PA_CLIENT_CONF}' \
+failed with error \`${cpres}'"
+    else
 	## succesfully copied back to client.conf
 	[[ ! -z "${DEBUG}" ]] && \
 	    debug "\`${PA_CLIENT_CONF_BACKUP}' restored to \`${PA_CLIENT_CONF}'."
 	## remove the backup
 	rm "${PA_CLIENT_CONF_BACKUP}"
 	rmres="$?"
-	if [[ "$?" = "0" ]]; then
+	if [[ ${rmres} -eq 0 ]]; then
 	    [[ ! -z "${DEBUG}" ]] && \
 		debug "backup conf \`${PA_CLIENT_CONF_BACKUP}' removed."
 	else
 	    [[ ! -z "${DEBUG}" ]] && \
 		debug "removal of \`${PA_CLIENT_CONF_BACKUP}' failed with error: \`${rmres}'."
 	fi
-	
-    else
-	## error restoring
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "copying \`${PA_CLIENT_CONF_BACKUP}' to \`${PA_CLIENT_CONF}' \
-failed with error \`${res}'"
     fi
    
 }
@@ -915,7 +1119,7 @@ function pulseaudio_disable_respawn() {
 
     ## create or overwrite the pulseaudio configuration file
     res=$(printf "autospawn = no\n" > "${PA_CLIENT_CONF}")
-    if [[ "$?" = "0" ]]; then
+    if [[ $? -eq 0 ]]; then
 	[[ ! -z "${DEBUG}" ]] && debug "respawning disabled by modifying \`${PA_CLIENT_CONF}'."
 	## return true
 	printf "0"
@@ -933,7 +1137,7 @@ function pulseaudio_backup_clientconf() {
 	formatted_date="$(date +'%Y%m%d%k%M%S')"
 	PA_CLIENT_CONF_BACKUP="${HOME}/.pulse/client.conf.backup-${formatted_date}"
 	res=$(cp "${PA_CLIENT_CONF}" "${PA_CLIENT_CONF_BACKUP}")
-	if [[ "$?" = "0" ]]; then
+	if [[ $? -eq 0 ]]; then
 	    [[ ! -z "${DEBUG}" ]] && \
 		debug "pulseaudio configuration backed up to \`${PA_CLIENT_CONF_BACKUP}'."
 	    printf "0"
