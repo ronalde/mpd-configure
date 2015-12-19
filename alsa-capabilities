@@ -1194,7 +1194,7 @@ function pulseaudio_stop() {
 
 ## indexed arrays to store the details of interfaces of one would
 ## declare such an array in another script, that array would be filled
-## instead of these.
+## instead of these. See examples/bash-example.sh for usage.
 set +u 
 
 [[ -z ${ALSA_AIF_HWADDRESSES} ]] && declare -a ALSA_AIF_HWADDRESSES=()
