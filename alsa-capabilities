@@ -266,6 +266,40 @@ function alt_alsa_cards_brm() {
     #exec 2>&3 3>&-
 }
 
+function handle_doublebrackets() {
+    ## return the name of the alsa card / device, even when they
+    ## contain brackets.
+    
+    string="$@"
+    [[ ! -z ${DEBUG} ]] && \
+	debug "using string: \`${string}'"
+    
+    bracketcounter=0
+    
+    for (( i=0; i<${#string}; i++ )); do
+	char="${string:$i:1}"
+	#printf "." 1>&2;
+	if [[ "${char}" = "[" ]]; then
+	    (( bracketcounter++ ))
+	elif [[ "${char}" = "]" ]]; then
+	    (( bracketcounter-- ))
+	fi
+	if [[ ${bracketcounter} -gt 0 ]]; then
+	    ## inside outer brackets
+	    if [[ ${bracketcounter} -lt 2 ]] && [[ "${char}" == "[" ]]; then
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "name with brackets found."
+	    else
+		printf "${char}"
+	    fi
+	fi
+    done
+    
+}
+
+
+
+
 
 function fetch_alsa_outputinterfaces() {
     ## parses each output interface returned by `get_aplay_output'
