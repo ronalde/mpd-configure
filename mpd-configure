@@ -23,6 +23,10 @@
 ## Also see `README'
 
 LANG=C
+APP_NAME_MPDCONFIGURE="mpd-configure"
+APP_URL="https://github.com/ronalde/${APP_NAME_MPDCONFIGURE}/"
+APP_VERSION="0.3"
+
 ### defaults
 ## default network address to listen to
 CONF_MPD_NETWORK_ADRESS_DEFAULT="0.0.0.0"
@@ -33,21 +37,26 @@ MAX_PLAYLIST_LENGTH_DEFAULT="16384"
 
 
 function echo_stderr() {
-    ## prevent messages from mixing with the actual output of the
-    ## script (ie stdout)
-
-    echo -e "$@" 1>&2; 
+    printf "%s\n" "$@" 1>&2; 
 }
 
 function die() {
-    ## exit with error while displaying an error message $1
-
-    echo_stderr "ERROR: $@"
+    echo_stderr "\nError in ${APP_NAME_MPDCONFIGURE} (v${APP_VERSION}): $@"
     exit 1
 }
 
 function debug_configure() {
-    echo_stderr "DEBUG *   ${1}"    
+    echo_stderr "DEBUG ${APP_NAME_MPDCONFIGURE} *** $@"    
+}
+
+function debug_function() {
+    printf "DEBUG %-18s:\n" "${APP_NAME_MPDCONFIGURE}" 1>&2;
+    printf "\tentering function \`%s',\n" "$1" 1>&2;
+    printf "\twith arguments \`%s'\n" "$2" 1>&2;
+}
+
+function inform() {
+    echo_stderr "$@\n"
 }
 
 
@@ -55,8 +64,7 @@ function write_error() {
     ## the conf file or dir ($1) is not writable and exists if ($2) is set. 
     ## echo the contents of the generated conf file to std_out and
     ## exit with error
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     path_notwritable="${1}"
     path_exists="${2}"
@@ -77,8 +85,7 @@ function write_error() {
 
 function really_write() {
     ## writes the contents of CONF_CONTENTS to MPD_CONFFILE
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     if [[ -z "${DRYRUN}" ]]; then
 	## do the actual writing
@@ -92,7 +99,7 @@ function really_write() {
     fi
 
     ## display the result
-    printf "${msg}"
+    printf "%s\n" "${msg}"
 
     [[ ! -z "${DEBUG}" ]] && debug_configure "result: \`${msg}'"
 
@@ -100,11 +107,9 @@ function really_write() {
 
 function write_conffile() {
     ## prepares to write to the mpd configuration file.
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     msg=""
-
     mpd_conf_dir="$(dirname ${MPD_CONFFILE})"
 
     if [[ ! -d "${mpd_conf_dir}" ]]; then
@@ -121,11 +126,8 @@ function write_conffile() {
 
     ## exit with error if this failed
     [[ ! -z "${msg}" ]] && die "\n${MSG_TAB}${msg}"
-
     [[ ! -z "${DEBUG}" ]] && debug_configure "mpd_conf_dir ok: \`${mpd_conf_dir}'"
-
     if [[ -f "${MPD_CONFFILE}" ]]; then
-
 	## conf file exists, check if its writable
 	if [[ ! -w "${MPD_CONFFILE}" ]]; then
 	    ## not writable, exit with error 
@@ -133,7 +135,6 @@ function write_conffile() {
 but is not writable."
 	    die "${msg}"
 	fi
-
 	## is writable, prompt to overwrite
 	msg="${MSG_TAB}Original ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' exists."
 	inform "${msg}"
@@ -155,15 +156,13 @@ echo -e "${overwrite}")"
 
     ## do the actual writing
     fileok="$(really_write)"
-
 }
 
 
 function command_not_found() {
     ## give installation instructions when a command is not available
-    ## and exit with error
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    ## and exit with error,
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     command="$1"
     package="$2"
@@ -186,9 +185,8 @@ function fetch_alsa_hwaddresses() {
     ##
     ## stores the hardware address and label in global variables
     ## ALSA_AIF_HWADDRESS and ALSA_AIF_DEVLABEL.
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
-
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    
     ## prompt when multiple alsa interfaces are found
     msg_multiple_alsahw="${MSG_TAB}Multiple interfaces found."
 
@@ -202,8 +200,8 @@ function fetch_alsa_hwaddresses() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_configure "number of returned alsa interfaces: ${#ALSA_AIF_HWADDRESSES[@]}"
 
-    ## set first interface found as default
-    selectedkey=0
+    prompt_messages=()
+    selectedkey=
     default_aif_hwaddress="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
 
     if [[ ${#ALSA_AIF_HWADDRESSES[@]} -gt 1 ]]; then
@@ -211,14 +209,17 @@ function fetch_alsa_hwaddresses() {
 	    ## display instructions for multiple interfaces and prompt
 	    #echo_stderr "${msg_multiple_alsahw}"
 	    #prompt="${MSG_MARGIN}>> Interface to use: "
-	    msg_prompt=">> Specify the interface to use and press [ENTER] to confirm: "
-	    prompt="$(printf '%s\n%s' "${msg_multiple_alsahw}" \
+	    prompt_messages+=("Specify the hardware address of the interface you wish to use")
+	    prompt_messages+=("and press [ENTER] to confirm: ")
+	    msg_prompt="$(printf "\t%s\n" "${prompt_messages[@]}")"
+	    prompt="$(printf '%s\n%s\n' "${msg_multiple_alsahw}" \
 "${MSG_MARGIN}${msg_prompt}")"
 	    ## prompt the user to select a interface
 	    alsa_aif_hwaddress="$(read -e -p "${prompt}" \
 -i "${default_aif_hwaddress}" alsa_aif_hwaddress && \
 echo -e "${alsa_aif_hwaddress}")"
 
+	    [[ ! -z ${DEBUG} ]] && debug "user entered \`${alsa_aif_hwaddress}'."
 	    for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
 		## set the user selected key and exit loop
 		if [[ "${ALSA_AIF_HWADDRESSES[$key]}" = "${alsa_aif_hwaddress}" ]]; then
@@ -230,17 +231,26 @@ echo -e "${alsa_aif_hwaddress}")"
     fi
 
     ## store the hardware address and label for usage in audio_conf
+    if [[ -z ${selectedkey} ]]; then
+	[[ ! -z ${DEBUG} ]] && debug "no key selected, defaulting to 0"
+	let selectedkey=0
+	inform "The hardware address you've entered (${alsa_aif_hwaddress}) is invalid."
+	inform "Defaulting to the first available interface (${ALSA_AIF_HWADDRESSES[0]})"
+    fi
+    [[ ! -z ${DEBUG} ]] && \
+	debug "chosen key \`${selectedkey}' for interface \`${ALSA_AIF_HWADDRESSES[${selectedkey}]}'"
     CONF_ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
     CONF_ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selectedkey}]} - \
 ${ALSA_AIF_LABELS[${selectedkey}]}"
+
 }
 
 
 function check_readable_path() {
     ## checks if path ($1), needed for ($2) is readable, or adds
-    ## problem description ($2) to problems array
+    ## problem description ($2) to problems array.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$*'"
     path="$1"
     purpose="$2"
     problem="$3"
@@ -253,9 +263,8 @@ function check_readable_path() {
 
 function check_writeable_path() {
     ## checks if path ($1), needed for ($2) is writeable, or adds
-    ## problem description ($2) to problems array
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'\n"
+    ## problem description ($2) to problems array.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     path="$1"
     purpose="$2"
@@ -268,8 +277,10 @@ function check_writeable_path() {
 }
 
 function parse_configuration_line() {
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    ## parse a line from mpd configuration templates, replacing
+    ## variables in those templates with values from this scripts
+    ## configuration files and returning them to the calling function.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     line="$@"
 
@@ -298,7 +309,6 @@ function parse_configuration_line() {
 	exp_name=var_template
 	## assign the value of the variable (`$VARNAME') to $expanded_value
 	local exp_value="${!exp_name}"
-	
 	## return the line with its real/expanded value
 	if [[ ! -z "${!exp_value}" ]]; then
 	    printf "%s" "${line//\$\{${var_search}\}/${!exp_value}}"
@@ -320,19 +330,15 @@ function source_enabled_confs() {
     ## source conf snippets in ./confs-enabled/*.conf while
     ## substituting the variables in those conf files with the ones
     ## generated in this script.
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     ## temporary file needed to source enabled configuration snippets files
     tempconfs="$(mktemp)"
-
     ## fill the file with all configuration lines from `confs-enabled/*.conf`
     sed 's/^\([[:alnum:][:space:]_]*\)[[:space:]]*"\${\(.*\):-\(.*\)}"$/export \2="\${\2:-\3}"/' \
 	${SCRIPT_DIR}/confs-enabled/*.conf | grep -E ^export > "${tempconfs}"
-
     ## source it (needed for variable expansion)
     source "${tempconfs}" || die "could not source \`${tempconfs}'"
-
     ## remove it when DEBUG_CONFIGURE is not set
     [[ ! -z "${DEBUG}" ]] && \
 	debug_configure "sourced configuration values stored in \`${tempconfs}'.\n" || \
@@ -340,27 +346,21 @@ function source_enabled_confs() {
 
     ## iterate each file
     for conf_file in ${CONFS_ENABLED}; do
-
 	## check if the symlink points to a valid file
 	isvalid="$(readlink -e "${conf_file}")"
-
 	## process the next one if the symlink is broken 
 	if [[ -z "${isvalid}" ]]; then
 	    [[ ! -z "${DEBUG}" ]] && debug_configure "not a valid symlink \`${conf_file}'"
 	    continue
 	fi
-
 	## the file exists, parse it
 	printf "\n## start processing \`%s'\n" "${conf_file##*/}"
-
 	## iterate each line
 	while IFS='' read -r line ; do
-
 	    ## skip commented lines
 	    ## create trimmed version of line
 	    if [[ -z ${INCLUDE_COMMENTS} ]]; then
 		trimmed=$([[ "${line}" =~ [[:space:]]*([^[:space:]]|[^[:space:]].*[^[:space:]])[[:space:]]* ]]; echo -n "${BASH_REMATCH[1]}")
-
 		if [[ "${trimmed#\#*}" = "${trimmed}" ]]; then
 		    if [[ ! -z "${trimmed}" ]]; then
 			## parse the line
@@ -383,9 +383,7 @@ function source_enabled_confs() {
 
 function perform_automagic() {
     ### automagic configuration stuff
-
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     ## client limits
     ## if the directory specified in `CONF_MPD_MUSICDIR` is
@@ -483,7 +481,6 @@ function perform_automagic() {
 	
 	## set string to use if hostname contains something
 	[[ ! -z ${hostname} ]] && hostname_string="on ${hostname} "
-	
 	G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD \
 ${hostname_string}through ${CONF_ALSA_AIF_DEVLABEL}}"
 	
@@ -493,8 +490,7 @@ ${hostname_string}through ${CONF_ALSA_AIF_DEVLABEL}}"
 
 function get_mpd_musicdir() {
     ### get and check music dir
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     ## check if user set the music dir configuration parameters
     if [[ ! -z "${CONF_MPD_MUSICDIR}" ]]; then
@@ -534,15 +530,14 @@ function get_mpd_musicdir() {
       [[ ! -z ${DEBUG} ]] && \
 	  debug_configure "G_PATHS_MUSICDIRECTORY set to current dir: \`${G_PATHS_MUSICDIRECTORY}'."
     fi 
-    
+   
     check_readable_path "${G_PATHS_MUSICDIRECTORY}" "music directory" "listen to music"
     
 }
 
 function get_mpd_userdir() {
     ### get and check working directory for mpd
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "entering \`${FUNCNAME}' with arguments \`$@'"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
   
     ## if `CONF_MPD_HOMEDIR` not set by user use `XDG_CONFIG_MPDDIR`
     if [[ -z ${CONF_MPD_HOMEDIR} ]]; then
@@ -562,7 +557,6 @@ function get_mpd_userdir() {
 	CONF_MPD_HOMEDIR=${XDG_CONFIG_DIR}/mpd
 	[[ ! -z ${DEBUG} ]] && \
 		debug_configure "CONF_MPD_HOMEDIR set by script to: \`${CONF_MPD_HOMEDIR}'."
-	
     else
 	[[ ! -z ${DEBUG} ]] && \
 	    debug_configure "CONF_MPD_HOMEDIR set by user to \`${CONF_MPD_HOMEDIR}'."
@@ -600,48 +594,42 @@ function get_mpd_userdir() {
 
 function conf_header() {
     ## construct the byline for the configuration file
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     formatted_date="$(date -Is)"
-    app_url="https://github.com/ronalde/${APP_NAME}/"
 
-    printf "\n%s\n%s begin of %s\n%s created by \`%s' on %s.\n%s see: %s\n%s" \
+    printf "\n%s\n%s begin of %s\n%s created by \`%s' (version %s) on %s.\n%s see: %s\n%s" \
 	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" "${MSG_CONF_TITLE}" \
-	"${MSG_CONF_SEP}" "${APP_NAME}" "${formatted_date}" \
-	"${MSG_CONF_SEP}" "${app_url}" "${MSG_CONF_LINESEP}\n"
+	"${MSG_CONF_SEP}" "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "${formatted_date}" \
+	"${MSG_CONF_SEP}" "${APP_URL}" "${MSG_CONF_LINESEP}"
 
 }
 
 function conf_footer() {
+    ## construct the footer for the configuration file
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+
     printf "\n\n%s\n%s end of %s\n%s" \
 	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" \
-	"${MSG_CONF_TITLE}" "${MSG_CONF_LINESEP}\n"
+	"${MSG_CONF_TITLE}" "${MSG_CONF_LINESEP}"
 }
 
 
 function do_configure() {
+    ## main function
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
     ## get an array with available alsa hardware addresses
     fetch_alsa_hwaddresses
-    if [[ $? -ne 0 ]]; then
-	die "error in fetch_alsa_hwaddresses"
-    fi
+    [[ $? -eq 0 ]] || die "error in fetch_alsa_hwaddresses."
+
     ## get and check paths
     get_mpd_musicdir
-    if [[ $? -ne 0 ]]; then
-	die "error in get_mpd_musicdir"
-    fi
-
-    get_mpd_userdir
-    if [[ $? -ne 0 ]]; then
-	die "error in get_mpd_userdir"
-    fi
+    [[ $? -eq 0 ]] || die "error in get_mpd_musicdir."
 
     ### perform automagic configuration
     perform_automagic
-    if [[ $? -ne 0 ]]; then
-	die "error in perform_automagic"
-    fi
-
+    [[ $? -eq 0 ]] || die "error in perform_automagic."
 
     ## store conf snippets in `CONF_CONTENTS`
     header="$(conf_header)"
@@ -659,8 +647,6 @@ function do_configure() {
 }
 
 ### program start
-
-APP_NAME="mpd-configure"
 
 ## check if we're re being sourced
 SOURCED=""
@@ -680,8 +666,6 @@ fi
 
 if [[ ! -z ${DEBUG} ]]; then
     debug_configure "debugging turned on by user."
-    debug_configure "Lines marked \`DEBUG *' depict this script "
-    debug_configure "Lines marked \`DEBUG ***' depict alsa-capabilities helper script "
 fi
 
 ## no problem if GNU find is not found; fail silently
@@ -813,7 +797,6 @@ fi
 
 ## display (potential) problematic situations, like no right access to
 ## files and directories
-
 if [[ ! -z "${DEBUG}" ]]; then
     if [[ ${#PROBLEMS[@]} -gt 0 ]]; then
 	debug_configure "\nPotential problems found:\n${PROBLEMS[@]}"
@@ -821,7 +804,6 @@ if [[ ! -z "${DEBUG}" ]]; then
 	debug_configure "No potential problems found."
     fi
 fi
-
 
 ## if the script is sourced do nothing, otherwise run main flow
 if [[ -z "${SOURCED}" ]]; then

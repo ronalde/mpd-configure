@@ -2,11 +2,15 @@ README for mpd-configure
 ========================
 
 The `mpd-configure` bash script creates a valid
-[mpd](http://www.musicpd.org/) configuration file, optimised for bit
-perfect playback of any digital audio file, including those of high
-resolution. It relies on the accompanying bash script
-`alsa-capabilities` for getting information about the available
-interfaces from alsa.
+[mpd](http://www.musicpd.org/) configuration file optimised for
+bit perfect playback of any digital audio file, including those of
+high resolution.
+
+With default settings the script uses the first available audio
+interface, and has automagic procedures for things like the music
+directory, the number of items in the music direcory and the UPNP
+name. When multiple audio interfaces are found, the user is presented
+with a choice
 
 All configuration parameters for mpd are available in configuration
 snippet files in the `./confs-available/` directory. By symlinking
@@ -15,17 +19,25 @@ them to the `./confs-enabled/` directory, they will be included by the
 bash variable in those configuration snippets, will be expanded to
 their calculated values by the script.
 
+It relies on the accompanying bash script `alsa-capabilities` for
+getting information about the available audio output interfaces from
+alsa. Also offered is the `mpd-monitor' script which shows which parts
+of the audio chain are configured for bit perfect audio playback.
+
+
+
 About the mpd-monitor helper script
 -----------------------------------
 
 The actual configuration of the system may be inspected/monitored by
 the helper script `mpd-monitor`, which can be executed as follows:
 
-    bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/mpd-monitor")
+    bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")
 
-Or, when mpd is running on a remote host to which you have (key based) ssh access, execute:
+Or, when mpd is running on a remote host to which you have (key based)
+ssh access, execute:
 
-    ssh ${username}@${remotehost} "bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/mpd-monitor")"
+    ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
 
 
 About the alsa-capabilities helper script
@@ -39,15 +51,20 @@ it's character device (in `/dev/snd`) and the file to watch or monitor
 (in `/proc/asound`).
 
 The interfaces returned by the script may be reduced by setting
-prefabbed or custom filters. These options can be displayed by running
+prefab or custom filters. These options can be displayed by running
 the script with the `-h` help option, eg:
 
 
     bash alsa-capabilities -h
 
-or
+The script can also run 'directly' from github using:
 
-    bash <(wget -q -O - "https://raw.githubusercontent.com/ronalde/mpd-configure/master/alsa-capabilities")
+    bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")
+
+To display the alsa playback interfaces on a remote host to which you
+have ssh access, use:
+
+    ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")"
 
 
 Background
@@ -63,31 +80,22 @@ Simple usage
 ------------
 
 For systems with a fixed configuration --eg a PC with a locally
-installed mpd, connected to some USB DAC-- the script may be
-invoked manually:
+installed mpd connected to some USB DAC or with a internal soundcard--
+the script may be invoked manually:
 
     bash mpd-configure > mpd.conf
 
-This will create the file `./mpd.conf` configured to use the first
-available audio output interface in bit perfect mode. If more than one
-output interface (or DAC) is found, it will prompt you to specify
-which one to use. As bitperfect mode assumes that `mpd` has exclusive
-access to this output interface, the script will notify the user if
-its in use.
-
-If you use a (single) USB Audio Class DAC you may specify the
-`LIMIT_INTERFACE_TYPE="usb"` parameter in the `mpd-configure.conf`
-file or on the command line, and it will automagically and without
-questions configure mpd to use that DAC:
-
-    LIMIT_INTERFACE_TYPE="usb" bash mpd-configure > ~/mpd.conf
-
+This will create the file `mpd.conf` in the current directory,
+configured to use the first available audio output interface in bit
+perfect mode. If more than one output interface (or DAC) is found, it
+will prompt you to specify which one to use. As bitperfect mode
+assumes that `mpd` has exclusive access to this output interface, the
+script will notify the user if its in use.
 
 After creating such a configuration file, `mpd` can betold to use this
 configuration file with:
 
     mpd ~/mpd.conf
-
 
 To use the generated configuration file system wide, it can be copied
 to the system wide mpd configuration file when you want to run `mpd`
@@ -95,6 +103,21 @@ as a system daemon:
 
     sudo cp ~/mpd.conf /etc/mpd.conf
     sudo service mpd restart
+
+
+Suppose you're PC is configured with an internal (embedded) soundcard
+and a (single) USB Audio Class external DAC, you may specify the
+`LIMIT_INTERFACE_TYPE="usb"` parameter in the `mpd-configure.conf`
+file or on the command line, and it will automagically and without
+questions configure mpd to use that DAC:
+
+    LIMIT_INTERFACE_TYPE="usb" bash mpd-configure > ~/mpd.conf
+
+Or, when you want to store the results in the system wide mpd
+configuration file:
+
+    LIMIT_INTERFACE_TYPE="usb" bash mpd-configure | sudo tee /etc/mpd.conf
+
 
 
 More complex usage
