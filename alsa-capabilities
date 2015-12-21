@@ -398,6 +398,38 @@ function fetch_alsa_outputinterfaces() {
 	
 	errors=()
 	## start matching and collect errors in array
+
+	## see if the name contains square brackets, ie it ends with `]]'
+	name=""
+	alsacard=""
+	seperator="*#*"
+	name_re="card[[:space:]][0-9]+:[[:space:]](.*)\[.*\[.*\]\].*"
+	
+	brackets_re="card[[:space:]]([0-9]+):(.*\])\],[[:space:]](device[[:space:]][0-9]+:.*\])"
+	if [[ "${line}" =~ ${brackets_re} ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "#####: line with brackets \`${line}'"
+	    if [[ "${line}" =~ ${name_re} ]]; then
+		name="${BASH_REMATCH[1]}"
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "#####: name \`${name}'"		
+	    fi
+	fi
+	if [[ ! -z "${name}" ]]; then
+	    if [[ "${line}" =~ ${brackets_re} ]]; then
+		## construct string without brackets
+		alsacard="$(handle_doublebrackets "${BASH_REMATCH[2]}")"	
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "#####: alsacard: \`${alsacard}'"		
+		
+		## replace [ and ] with *
+		alsacard="${alsacard//[\[\]]/${seperator}}"
+		line="card ${BASH_REMATCH[1]}: ${name}[${alsacard}], ${BASH_REMATCH[3]}"
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "#####: replace line with \`${line}'"
+	    fi
+	fi
+	    
 	if [[ "${line}" =~ ${brm_template} ]]; then
 	    [[ ! -z "${BASH_REMATCH[1]}" ]] && \
 		alsa_dev_nr="${BASH_REMATCH[1]}" || \
