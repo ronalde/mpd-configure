@@ -72,6 +72,13 @@ function debug() {
 	   "${APP_NAME_AC}" "$@" 1>&2;
 }
 
+function debug_function_ac() {
+    printf "DEBUG %-18s:\n" "${APP_NAME_AC}" 1>&2;
+    printf "\tentering function \`%s',\n" "$1" 1>&2;
+    printf "\twith arguments \`%s'\n" "$2" 1>&2;
+}
+
+
 function command_not_found() {
     ## give installation instructions for package $2 when command $1
     ## is not available, optional with non default instructions $3
@@ -96,8 +103,8 @@ function command_not_found() {
 function get_aplay_output() {
     ## use aplay to do a basic alsa sanity check and return its (raw)
     ## output to the calling function.
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
 
     res=""
     aplay_output=""
@@ -304,8 +311,8 @@ function fetch_alsa_outputinterfaces() {
     ## given), stores its capabilities in the appropriate global
     ## indexed arrays and displays them.
 
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
 
     msg=""
     aplay_lines=()
@@ -343,14 +350,14 @@ function fetch_alsa_outputinterfaces() {
 	## lines from aplay and store them in an array
 	
 	if [[ "${line}" =~ ${aplay_card_device_regexp} ]]; then
-	    [[ ! -z "${DEBUG}" ]] && \
+	    [[ ! -z ${DEBUG} ]] && \
 		debug  "Inspecting interface: ${line}"
 	    ## raise the counter for interfaces without filtering
 	    let NR_AIFS_BEFOREFILTERING+=1
 	    ## check if line matches `OPT_FILTER'
 	    if [[ -z "${OPT_FILTER}"  || \
 		"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug  "               match: ${line}"
 		## store the line in an array
 		aplay_lines+=("${line}")
@@ -457,7 +464,7 @@ function fetch_alsa_outputinterfaces() {
 		break
 	    fi
 
-	    if [[ ! -z "${DEBUG}" ]] && [[ "${#errors[@]}" -ne 0 ]]; then
+	    if [[ ! -z ${DEBUG} ]] && [[ "${#errors[@]}" -ne 0 ]]; then
 		debug "$(printf "errors: %s\n" "${errors[@]}")"
 	    fi
 
@@ -470,20 +477,20 @@ function fetch_alsa_outputinterfaces() {
 	    alsa_if_statusfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/status"
 	    ## check if the chardev exists
 	    if [[ ! -c "${alsa_if_chardev}" ]]; then 
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "alsa_if_chardev \`${alsa_if_chardev}' is not a chardev."
 		alsa_if_chardev="${alsa_if_chardev} (error: not accessible)"
 		alsa_if_formats="(can't determine: character device error)"
 		alsa_if_monitorfile="${alsa_if_hwparamsfile} (error: not accessible)"
 	    else
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
 		if [[ "$(< ${alsa_if_statusfile})" != "closed" ]]; then
 		    ## device is being used, get the lociking pid
 		    res="$(get_locking_process "${alsa_if_chardev}")"
 		    if [[ $? -ne 0 ]]; then
 			## can't determine
-			[[ ! -z "${DEBUG}" ]] && \
+			[[ ! -z ${DEBUG} ]] && \
 			    debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
 			
 			alsa_if_chardev="${alsa_if_chardev} (is locked by an unknown process; run the script as root or using sudo to see which)"
@@ -521,7 +528,8 @@ function fetch_alsa_outputinterfaces() {
 	    for filter in "${DO_INTERFACE_FILTER[@]}"; do
 		## `,,' downcases the string, while `*var*' does a wildcard match
 		if [[ "${alsa_if_name,,}" == *"${filter}"* ]]; then
-		    [[ ! -z "${DEBUG}" ]] && debug "match = ${alsa_if_name,,}: ${filter}"
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "match = ${alsa_if_name,,}: ${filter}"
 		    ## set ao type to d(igital)o(out)
 		    alsa_if_type="do"
 		    ## exit this for loop
@@ -644,12 +652,18 @@ ${MSG_ERROR_UNEXPECTED}"
 	
 	if [[ -z "${OPT_QUIET}" ]]; then
 	    printf "%s\n" "${alsa_if_display_title}" 1>&2;
-	    printf " - %-17s = %-60s\n" "${msg_alsa_devname}" "${alsa_dev_label}" 1>&2;
-	    printf " - %-17s = %-60s\n" "${msg_alsa_ifname}" "${alsa_if_label}" 1>&2;
-	    printf " - %-17s = %-60s\n" "${msg_alsa_uacclass}" "${alsa_if_uacclass}" 1>&2;
-	    printf " - %-17s = %-60s\n" "${msg_alsa_chardev}" "${alsa_if_chardev}" 1>&2;
-	    printf " - %-17s = %-60s\n" "${msg_alsa_encodingformats}" "${alsa_if_formats}" 1>&2;
-	    printf " - %-17s = %-60s\n" "${msg_alsa_monitorfile}" "${alsa_if_monitorfile}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${msg_alsa_devname}" "${alsa_dev_label}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${msg_alsa_ifname}" "${alsa_if_label}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${msg_alsa_uacclass}" "${alsa_if_uacclass}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${msg_alsa_chardev}" "${alsa_if_chardev}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${msg_alsa_encodingformats}" "${alsa_if_formats}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${msg_alsa_monitorfile}" "${alsa_if_monitorfile}" 1>&2;
 	    printf "\n"
 	fi
 
@@ -659,9 +673,11 @@ ${MSG_ERROR_UNEXPECTED}"
 
 function get_locking_process() {
     ## get the pid and name of the process accessing chardev $1, which
-    ## may be a file or a socket. Returns a descriptive string or a notice with error.
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    ## may be a file or a socket. Returns a descriptive string or a
+    ## notice with error.
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
+
 
     chardev_path="$1"
     ## try fuser which returns the pid in std_out.
@@ -679,7 +695,8 @@ function get_locking_process() {
 	res="$?"
 	## TODO: pnamedpid is always empty (2>/dev/null)
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME}: \`${chardev_path}' is in use; ps returned: \`${pnamepid}"
+	    debug "${FUNCNAME}: \`${chardev_path}' is in use; \
+ps returned: \`${pnamepid}"
 	if [[ ${res} -ne 0 ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "${FUNCNAME}: ps returned error \`${res}'"
@@ -709,13 +726,11 @@ function return_alsa_samplerates() {
     ## fetch and return a comma separated string of playback sample
     ## rates for the card specified by its cardnr in $1, device number
     ## in $2 and type in $3.
-    
     [[ ! -z ${DEBUG} ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+	debug_function_ac "${FUNCNAME}" "$@"
 
     #non-uac: "rates" in /proc/asound/cardx/codec#0
     #uac:     "Rates" in /proc/asound/cardx/stream0
-    
     alsa_dev_nr="$1"
     alsa_if_nr="$2"
     ## uo = uac, else non-uac
@@ -738,7 +753,8 @@ function return_alsa_samplerates() {
 	return 1
     else
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "using rates_file \`${rates_file}' and rates_regexp \`${rates_regexp}'"
+	    debug "using rates_file \`${rates_file}' and \
+rates_regexp \`${rates_regexp}'"
 	while read -r line; do
 	    #debug "line: ${line}"
 	    if [[ "${line}" =~ ${rates_regexp} ]]; then
@@ -771,7 +787,7 @@ function return_alsa_formats() {
     ## needs address of alsa output device in `hw:x,y' format 
     ## as single argument ($1)
     [[ ! -z ${DEBUG} ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+	debug_function_ac "${FUNCNAME}" "$@"
 
     alsa_hw_device="$1"
     aplay_opts=(-D ${alsa_hw_device})
@@ -795,8 +811,8 @@ LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null | grep '^- ')"
 function return_alsa_uac_ep() {
     ## returns/echoes the usb audio class endpoint as a fixed number.
     ## needs path to stream file as single argument ($1)
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
     
     ## based on ./sound/usb/proc.c:
     ##  printf "    Endpoint: %d %s (%s)\n",
@@ -823,7 +839,7 @@ function return_alsa_uac_ep() {
     while read -r line; do
 	if [[ "${line}" =~ ${ep_regexp} ]]; then
 	    ep_mode="${BASH_REMATCH[2]}"
-	    [[ ! -z "${DEBUG}" ]] && \
+	    [[ ! -z ${DEBUG} ]] && \
 		debug "matching endpoint found in line \`${line}': \`${ep_mode}'."
 	    break
 	fi
@@ -848,29 +864,33 @@ function return_alsa_uac_ep() {
 
 function analyze_opt_limit() {
     ## check if the argument for the `-l' (limit) option is proper
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
 
     opt_limit="$1"
     case ${opt_limit} in
         a|analog) 
 	    OPT_LIMIT_AO="True"
-	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_AO set to \`${OPT_LIMIT_AO}'"
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "OPT_LIMIT_AO set to \`${OPT_LIMIT_AO}'"
 	    return 0
 	    ;;
         u|usb|uac) 
 	    OPT_LIMIT_UO="True"
-	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_UO set to \`${OPT_LIMIT_UO}'"
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "OPT_LIMIT_UO set to \`${OPT_LIMIT_UO}'"
 	    return 0
 	    ;;
         d|digital)
 	    OPT_LIMIT_DO="True"
-	    [[ ! -z "${DEBUG}" ]] && debug "OPT_LIMIT_DO set to \`${OPT_LIMIT_DO}'"
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "OPT_LIMIT_DO set to \`${OPT_LIMIT_DO}'"
 	    return 0
 	    ;;
 	*)
 	    args=$(printf "\"%s\", " "${OPT_LIMIT_ARGS[@]}")
-	    die "the \`-l' (limit) option requires one of the following arguments:\
+	    die "the \`-l' (limit) option requires one of the \
+following arguments:\
 \n${args%*, }"
     esac
 }
@@ -878,6 +898,8 @@ function analyze_opt_limit() {
 
 function display_usageinfo() {
     ## display syntax and exit
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
 
     msg=$(cat <<EOF
 Usage:
@@ -920,8 +942,8 @@ EOF
 
 function analyze_command_line() {
     ## parse command line arguments using bash getopts
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
 
     ## put characters in the array in a string
     shortopts=":${SHORT_OPTS[@]/ /}"
@@ -929,23 +951,23 @@ function analyze_command_line() {
     while getopts "${shortopts}" option; do
         case "$option" in
             l) 
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "option \`l' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_LIMIT="True"
 		analyze_opt_limit "${OPTARG}"
 		;;
             q)
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "option \`q' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_QUIET=true
 		;;
             c) 
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "option \`c' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_FILTER="${OPTARG}"
 		;;
             a) 
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "option \`a' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		OPT_HWFILTER="${OPTARG}"
 		;;
@@ -954,7 +976,7 @@ function analyze_command_line() {
 		display_usageinfo
 		;;
             *) 
-		[[ ! -z "${DEBUG}" ]] && \
+		[[ ! -z ${DEBUG} ]] && \
 		    debug "option \`other' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
 		done_opts=true
 		display_usageinfo
@@ -964,6 +986,8 @@ function analyze_command_line() {
 
 function return_alsa_interface() {
     ## main function; see display_usageinfo()
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$@"
 
     profile_file=""
     ## start profiling
@@ -973,9 +997,6 @@ function return_alsa_interface() {
 	exec 3>&2 2>${profile_file}
 	set -x
     fi
-
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## check if needed commands are available
     CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
@@ -991,7 +1012,9 @@ function return_alsa_interface() {
 	   [[ ! -z ${OPT_DISABLE_PULSEAUDIO} ]]; then 
 	## analyse pulseaudio when requested
 	if [[ ! -f pulseaudio-helper ]]; then
-	    inform "option \`OPT_STOP_PULSEAUDIO' and/or OPT_DISABLE_PULSEAUDIO are set, but helper script \`pulseaudio-helper' not found."
+	    inform "option \`OPT_STOP_PULSEAUDIO' and/or \
+OPT_DISABLE_PULSEAUDIO are set, but helper script \
+\`pulseaudio-helper' not found."
 	else
 	    source pulseaudio-helper
 	    pulseaudio_evaluate_stopping
@@ -1011,12 +1034,14 @@ function return_alsa_interface() {
 	msg="\n${MSG_MATCH_IF_NONE_UNLIMITED}"
 	##  display information about the number of interfaces before filtering
 	[[ ! ${NR_AIFS_BEFOREFILTERING} == 0 ]] && \
-	    msg=$(printf "${MSG_MATCH_IF_NONE_LIMITED}"  "${NR_AIFS_BEFOREFILTERING}")
+	    msg=$(printf "${MSG_MATCH_IF_NONE_LIMITED}" \
+			 "${NR_AIFS_BEFOREFILTERING}")
 	inform "\n${msg}"
     fi
     
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "Number of audio interfaces after filtering: ${#ALSA_AIF_HWADDRESSES[@]}"
+    [[ ! -z ${DEBUG} ]] && \
+	debug "Number of audio interfaces after filtering: \
+ ${#ALSA_AIF_HWADDRESSES[@]}"
 
     if [[ ! -z ${PROFILE} ]]; then 
 	## end profiling
@@ -1027,8 +1052,6 @@ function return_alsa_interface() {
 
     ## return success if interfaces are found
     return 0
-    
-
 }
 
 ### global variables
