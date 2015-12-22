@@ -34,19 +34,20 @@
 LANG=C
 
 APP_NAME_AC="alsa-capabilities"
-APP_VERSION="0.3"
-
-## ugly temporary hack; see github issue #8
-## exit on all errors
-#set -e
-
-## exit in case of usage of uninitialized variables
-#set -u
+APP_VERSION="0.4"
 
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
 DEBUG="${DEBUG:-}"
+## set PROFILE to a non empty value to get detailed timing
+## information. Normal output is suppressed.
 PROFILE="${PROFILE:-}"
+## to see how the script behaves with a certain output of aplay -l
+## on a particular host, store it's output in a file and supply
+## the file path as the value of TESTFILE, eg:
+## `TESTFILE=/tmp/somefile ./bash-capabilities
+## All hardware and device tests will fail or produce fake outputs
+## (hopefully with some grace).
 TESTFILE="${TESTFILE:-}"
 
 
@@ -57,16 +58,18 @@ function echo_stderr() {
 }
 
 function die() {
-    echo_stderr "\nError in ${APP_NAME_AC} (v${APP_VERSION}): $@"
+    printf "\nError in %s (v%s): %s\n" \
+	   "${APP_NAME_AC}" "${APP_VERSION}" "$@" 1>&2;
     exit 1
 }
 
 function inform() {
-    echo_stderr "$@\n"
+    printf "%s\n" "$@" 1>&2;
 }
 
 function debug() {
-    echo_stderr "DEBUG ${APP_NAME_AC} *** $@"
+    printf "DEBUG %s *** %s\n" \
+	   "${APP_NAME_AC}" "$@" 1>&2;
 }
 
 function command_not_found() {
@@ -101,12 +104,6 @@ function get_aplay_output() {
     aplay_msg_nosoundcards_regexp="no[[:space:]]soundcards"
     aplay_card_regexp="${1}"
 
-    ## to see how the script behaves with a certain output of aplay -l
-    ## on a particular host, store it's output in a file and supply
-    ## the file path as the value of TESTFILE, eg:
-    ## `TESTFILE=/tmp/somefile ./bash-capabilities
-    ## All hardware and device tests will fail or produce fake outputs
-    ## (hopefully with some grace).
     if [[ ! -z "${TESTFILE}" ]]; then
 	if [[ ! -f "${TESTFILE}" ]]; then
 	    printf "${MSG_APLAY_ERROR_NOSUCHTESTFILE}" "${TESTFILE}"
@@ -977,7 +974,8 @@ function return_alsa_interface() {
 	set -x
     fi
 
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     ## check if needed commands are available
     CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
@@ -988,13 +986,25 @@ function return_alsa_interface() {
 
     ## parse command line arguments
     analyze_command_line "$@"
-    ## stop pulseaudio when requested
-    pulseaudio_evaluate_stopping
+
+    if [[ ! -z ${OPT_STOP_PULSEAUDIO} ]] || \
+	   [[ ! -z ${OPT_DISABLE_PULSEAUDIO} ]]; then 
+	## analyse pulseaudio when requested
+	if [[ ! -f pulseaudio-helper ]]; then
+	    inform "option \`OPT_STOP_PULSEAUDIO' and/or OPT_DISABLE_PULSEAUDIO are set, but helper script \`pulseaudio-helper' not found."
+	else
+	    source pulseaudio-helper
+	    pulseaudio_evaluate_stopping
+	fi
+    fi
     ## create a list of alsa audio output interfaces and parse it.
     fetch_alsa_outputinterfaces
 
-    ## restore and restart pulseaudio if requested and command available.
-    pulseaudio_evaluate_restoring
+    if [[ ! -z ${OPT_STOP_PULSEAUDIO} ]] || \
+	   [[ ! -z ${OPT_DISABLE_PULSEAUDIO} ]]; then 
+	## restore and restart pulseaudio if requested and command available.
+	pulseaudio_evaluate_restoring
+    fi
 
     ## exit with error if no matching output line was found
     if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
@@ -1021,250 +1031,6 @@ function return_alsa_interface() {
 
 }
 
-
-function pulseaudio_evaluate_stopping() {
-    ## evaluate if pulseaudio needs to be stopped.
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-    ## check if its installed
-    CMD_PULSEAUDIO=$(which pulseaudio)
-
-    if [[ ! -z "${CMD_PULSEAUDIO}" ]]; then
-	## it is installed
-
-	## check if pulseaudio stopping is requested
-	if [[ ! -z "${OPT_STOP_PULSEAUDIO}" ||  ! -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
-
-	    ## stopping is requested
-	    ## check if it should be permanently disabled
-	    if [[ -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
-		# no disabling should be temporary
-		inform " * temporary disabling of pulseaudio requested."
-		## check if there's an existing client.conf
-		if [[ -f ${PA_CLIENT_CONF} ]]; then
-		    ## there is
-		    PA_CLIENT_CONF_EXISTED=True
-		    ## back it up
-		    pulseaudio_backup_clientconf
-		fi
-		if [[ ! -z "$(pulseaudio_is_running)" ]]; then
-		    PA_CLIENT_WAS_RUNNING=True
-		fi
-		
-	    else
-		## disabling should be permanent
-		inform " * permanent disabling of pulseaudio requested."
-	    fi
-	    
-	    ## disable respawn by modifying client.conf
-	    pulseaudio_disable_respawn
-	    
-	    ## stop it
-	    pulseaudio_stop
-	    
-	fi
-    else
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "no pulseaudio command found in path."
-	
-    fi
-
-}
-
-
-function pulseaudio_evaluate_restoring() {
-    ## evaluate if pulseaudio needs to be restored
-
-    if [[ ! -z "${CMD_PULSEAUDIO}" ]]; then
-
-
-	## check if restoring is required
-	if [[ ! -z "${OPT_STOP_PULSEAUDIO}" && -z "${OPT_DISABLE_PULSEAUDIO}" ]]; then
-	    ## it is
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "restoring of pulseaudio requested."
-	    
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "\`OPT_DISABLE_PULSEAUDIO' not set, will restore pulseaudio."
-	    if [[  -z "${PA_CLIENT_CONF_EXISTED}" ]]; then
-		## client.conf is generated by script, remove it
-		rm "${PA_CLIENT_CONF}"
-	    else
-		## restore original
-		pulseaudio_restore_clientconf
-	    fi
-	    
-	    if [[ ! -z "${PA_CLIENT_WAS_RUNNING}" ]]; then
-		## restart it
-		[[ ! -z "${DEBUG}" ]] && \
-		    debug "pulseaudio was running: restart it."
-		
-		pulseaudio_start
-	    else
-		[[ ! -z "${DEBUG}" ]] && \
-		    debug "pulseaudio was not running before: don't restart it."
-		
-	    fi
-	    
-	fi
-
-    else
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "no pulseaudio command found in path."
-	
-    fi
-    
-}
-
-
-function pulseaudio_restore_clientconf() {
-    ## restore backed up client configuration if created by script.
-
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
-    cp -av "${PA_CLIENT_CONF_BACKUP}" "${PA_CLIENT_CONF}"
-    cpres="$?"
-    if [[ ${cpres} -ne 0 ]]; then
-	## error restoring
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "copying \`${PA_CLIENT_CONF_BACKUP}' to \`${PA_CLIENT_CONF}' \
-failed with error \`${cpres}'"
-    else
-	## succesfully copied back to client.conf
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "\`${PA_CLIENT_CONF_BACKUP}' restored to \`${PA_CLIENT_CONF}'."
-	## remove the backup
-	rm "${PA_CLIENT_CONF_BACKUP}"
-	rmres="$?"
-	if [[ ${rmres} -eq 0 ]]; then
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "backup conf \`${PA_CLIENT_CONF_BACKUP}' removed."
-	else
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "removal of \`${PA_CLIENT_CONF_BACKUP}' failed with error: \`${rmres}'."
-	fi
-    fi
-   
-}
-
-
-function pulseaudio_is_running() {
-    ## returns pid of pulseaudio if running, otherwise empty
-
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-    
-
-    pa_running="$(pgrep -u ${USER} pulseaudio)"
-    ## return its pid
-    if [[ ! -z "${pa_running}" ]] ; then
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "pulseaudio is running: \`${pa_running}'"
-	printf "%s" "${pa_running}"
-    else
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "pulseaudio is not running"
-    fi
-
-}
-
-function pulseaudio_start() {
-    ## start pulseaudio
-    
-    [[ ! -z "${DEBUG}" ]] && debug "entering \`${FUNCNAME}' with arguments \`$*'"
-    
-    if [[ ! -z "$(pulseaudio_is_running)" ]]; then
-	## pulseaudio is running
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "not starting pulseaudio, is already running."
-    else
-	## pulseaudio is not running, start it
-	res=$(${CMD_PULSEAUDIO} --start)
-	if [[ ! -z "$(pulseaudio_is_running)" ]]; then	
-	    [[ ! -z "${DEBUG}" ]] && debug "pulseaudio started."
-	else
-	    [[ ! -z "${DEBUG}" ]] && debug "pulseaudio could not be started."
-	fi
-    fi
-
-}
-
-function pulseaudio_disable_respawn() {
-    ## disables spawning of pulseaudio
-
-    ## create or overwrite the pulseaudio configuration file
-    res=$(printf "autospawn = no\n" > "${PA_CLIENT_CONF}")
-    if [[ $? -eq 0 ]]; then
-	[[ ! -z "${DEBUG}" ]] && debug "respawning disabled by modifying \`${PA_CLIENT_CONF}'."
-	## return true
-	printf "0"
-    else
-	[[ ! -z "${DEBUG}" ]] && debug "modifying \`${PA_CLIENT_CONF}' failed with error: \`${res}'."	
-    fi
-
-}
-
-
-function pulseaudio_backup_clientconf() {
-    ## backes up client.conf
-
-    if [[ -f "${PA_CLIENT_CONF}" ]] ; then    
-	formatted_date="$(date +'%Y%m%d%k%M%S')"
-	PA_CLIENT_CONF_BACKUP="${HOME}/.pulse/client.conf.backup-${formatted_date}"
-	res=$(cp "${PA_CLIENT_CONF}" "${PA_CLIENT_CONF_BACKUP}")
-	if [[ $? -eq 0 ]]; then
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "pulseaudio configuration backed up to \`${PA_CLIENT_CONF_BACKUP}'."
-	    printf "0"
-	else
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "could not copy \`${PA_CLIENT_CONF}' to \`${PA_CLIENT_CONF_BACKUP}. \
-failed with error: \`${res}'."
-	fi
-
-    fi
-
-}
-
-
-function pulseaudio_stop() {
-
-    ## temporary keep pulseaudio from respawning and stop it
-
-    [[ ! -z "${DEBUG}" ]] && \
-	debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
-    ## check if its running
-    pa_running="$(pulseaudio_is_running)"
-    
-    echo_stderr "pa_running: $?"
-    
-    if [[ -z "${pa_running}" ]]; then
-	## it isn't
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "pulseaudio is not running."
-    else
-	
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug "pulseaudio is running."
-	
-	## kill pulseaudio
-	res=$(${CMD_PULSEAUDIO} --kill)
-	
-	## check if that worked
-	if [[ -z "$(pulseaudio_is_running)" ]]; then
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug "pulseaudio killed."
-	else
-	    [[ ! -z "${DEBUG}" ]] && debug "could not kill pulseaudio, error: \`${res}'."
-	    ## restore to situation before running script
-	    pulseaudio_restore
-	fi
-    fi
-    
-}
-
-
 ### global variables
 
 ## indexed arrays to store the details of interfaces of one would
@@ -1282,8 +1048,6 @@ set +u
 [[ -z ${ALSA_AIF_CHARDEVS} ]] && declare -a ALSA_AIF_CHARDEVS=()
 
 set -u
-
-PA_CLIENT_CONF=${HOME}/.pulse/client.conf
 
 ## counter for unfiltered interfaces
 NR_AIFS_BEFOREFILTERING=0
@@ -1318,12 +1082,6 @@ ALSA_IF_LABELS+=(["uo"]="${UAC} ${ALSA_IF_LABELS[do]}")
 ALSA_NON_DO_IF="${ALSA_IF_LABELS[ao]}"
 ALSA_NON_UO_IF="Non-UAC ${ALSA_IF_LABELS[do]}"
 
-## strings for pulseaudio handling
-CMD_PULSEAUDIO=""
-PULSEAUDIO_CLIENT_CONF="${HOME}/.pulse/client.conf"
-PULSEAUDIO_CONF_MODIFIED=""
-PA_CLIENT_CONF_EXISTED=""
-PA_CLIENT_WAS_RUNNING=""
 
 ## USB_SYNC_TYPEs
 ## strings alsa uses for UAC endpoint descriptors.
@@ -1371,8 +1129,6 @@ none matched your filter."
 declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb" "uac")
 SHORT_OPTS=("l:" "c:" "a:" "q" "h")
 
-OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
-OPT_DISABLE_PULSEAUDIO="${OPT_DISABLE_PULSEAUDIO:-}"
 OPT_FILTER="${OPT_FILTER:-}"
 OPT_HWFILTER="${OPT_HWFILTER:-}"
 
@@ -1383,7 +1139,9 @@ OPT_QUIET=${OPT_QUIET:-}
 OPT_FILTER=${OPT_FILTER:-}
 OPT_HWFILTER=${OPT_HWFILTER:-}
 
-
+## currently unused
+OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
+OPT_DISABLE_PULSEAUDIO="${OPT_DISABLE_PULSEAUDIO:-}"
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
