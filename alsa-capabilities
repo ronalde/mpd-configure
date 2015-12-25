@@ -628,15 +628,15 @@ ${MSG_ERROR_UNEXPECTED}"
 	    ALSA_AIF_CHARDEVS+=("${alsa_if_chardev}")
 	fi
 
-	#alsa_if_samplerates="$(return_alsa_samplerates \
-#"${alsa_dev_nr}" "${alsa_if_nr}" "${alsa_if_type}" "${alsa_if_label}")"
-#	if [[ $? -ne 0 ]]; then
-#	    [[ ! -z ${DEBUG} ]] && \
-#		debug "error getting samplerates"
-#	else
-#	    [[ ! -z ${DEBUG} ]] && \
-#		debug "alsa_if_samplerates: \`${alsa_if_samplerates}'."
-#	fi
+	alsa_if_samplerates="$(return_alsa_samplerates \
+"${alsa_dev_nr}" "${alsa_if_nr}" "${alsa_if_type}" "${alsa_if_label}")"
+	if [[ $? -ne 0 ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "error getting samplerates"
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "alsa_if_samplerates: \`${alsa_if_samplerates}'."
+	fi
 	
 	## construct a list with the properties of the current
 	## interface if `OPT_QUIET' is not set
@@ -729,6 +729,19 @@ function return_alsa_samplerates() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$@"
 
+    ## structure of codec file:
+    #Codec: Bla die bla
+    #Address: x (same as last number in file name ./codec#x)
+    #Default PCM: (capabilities of the codec/chip, ie interface independant)
+    #  rates [hex]:  32000 44100 48000 88200 96000 192000 ..
+    #  bits [hex]: 16 20 24
+    #  formats
+    #...
+    #Node 0x10 [Audio Output] wcaps 0x611: Stereo Digital
+    #  #Device: name="ALC887-VD Digital", type="SPDIF", device=1
+    #  PCM:  (capabilities of the codec/chip coupled with the interface)
+    #   rates [0x5f0]: 32000 44100 48000 96000 192000
+    
     #non-uac: "rates" in /proc/asound/cardx/codec#0
     #uac:     "Rates" in /proc/asound/cardx/stream0
     alsa_dev_nr="$1"
