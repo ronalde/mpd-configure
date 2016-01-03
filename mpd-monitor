@@ -26,7 +26,7 @@ LANG=C
 
 
 function die() {
-    printf "\nError in %s: %s\n" "${BASH_SOURCE[0]:-}" "$@" 1>&2;
+    printf "\nError running %s: %s\n" "${BASH_SOURCE[0]:-}" "$@" 1>&2;
     exit 1
 }
 
@@ -240,6 +240,31 @@ function get_mpdconf_musicdir() {
     fi
 }
 
+function make_verbose_mpdconf() {
+    ## create a temporary copy of the current mpd.conf, ensuring the
+    ## log_level is "verbose". returns the name of the temporary file.
+    [[ ! -z "${DEBUG}" ]] && \
+	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
+ 
+    loglevel=""
+    mpdconf_lines=()
+    mpdconf_temp="$(mktemp -p /tmp mpd.conf.XXXXX)"
+    loglevel_re="[[:space:]]*log_level[[:space:]]+\"([a-z]+)\".*"
+    while read -r line; do
+	if [[ "${line}" =~ ${loglevel_re} ]]; then
+	    loglevel="${BASH_REMATCH[1]}"
+	    mpdconf_lines+=("$(printf "#log_level \"%s\"" "${loglevel}")")
+	    mpdconf_lines+=("$(printf "log_level  "%s"" "verbose")")
+	else
+	    mpdconf_lines+=("$(printf "%s" "${line}")")
+	fi
+    done<"$(get_mpdconf_filepath)"
+    ## write the values to the temporary mpd conf file
+    printf "%s\n" "${mpdconf_lines[@]}" > ${mpdconf_temp}
+    ## return its file name
+    printf "%s" "${mpdconf_temp}"
+}
+
 function get_mpd_alsa_audio_outputs() {
     ## store configuration snippets in temp files for each alsa
     ## audio_output defined in the mpd configuration.
@@ -438,16 +463,13 @@ function parse_command_output_file() {
 
 function parse_command_output_ffprobe() {
     ## parse output from the ffprobe command on wav, flac or aiff files.
-    
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
 
     file_path="$1"
     file_extension_downcase="$2"
-
     ## ffprobe (from ffmpeg) with the options `-show_streams
     ## -select_streams a' does the job right:
-
     ffprobe_opts=(-show_streams)
     ffprobe_opts+=(-select_streams "a")
     msg="$(printf "%s %s "%s"" "${CMD_FFPROBE}" "${ffprobe_opts[@]}" "${file_path}")"
@@ -814,14 +836,11 @@ function get_mpd_samplerate() {
     
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
     MPD_STATUS="$@"
-    
     #audio: 96000:24:2
     MPD_STATUS_audio_regexp="^audio:[[:space:]]([0-9]*):([0-9]*):([0-9]*)$"
     
     while read -r line; do
-	
 	if  [[ "${line}" =~ ${MPD_STATUS_audio_regexp} ]]; then
 	    ## get properties of audio file currently playing
 	    msg="$(printf "%s:%s:%s" ${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]})"
@@ -839,10 +858,8 @@ function get_mpd_samplerate() {
 
 function get_mpd_bitdepth() {
     ## get and return the bitdepth of the current file, as transferred by mpd
-    
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
     msg=""
     MPD_STATUS="$@"
     
@@ -850,7 +867,6 @@ function get_mpd_bitdepth() {
     MPD_STATUS_audio_regexp="^audio:[[:space:]]([0-9]*):([0-9]*):([0-9]*)$"
     
     while read -r line; do
-	
 	if  [[ "${line}" =~ ${MPD_STATUS_audio_regexp} ]]; then
 	    ## get properties of audio file currently playing
 	    msg="$(printf "%s:%s:%s" ${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]})"
@@ -900,24 +916,6 @@ function is_mpd_playing() {
 
 }
 
-msg_samplerate="sample rate"
-msg_sampleencoding="encoding"
-## file on storage < ffprobe
-msg_storage="storage"
-## file as transferred < mpd
-msg_mpd_in="mpd input"
-msg_mpd_out="mpd alsa output"
-## file as transferred < mpd
-## file as converted to analog < alsa
-msg_alsa="alsa"
-msg_final="audio system"
-msg_bitperfect="bit perfect"
-
-mpd_state=""
-mpd_samplerate=""
-mpd_bitdepth=""
-mpd_channels=""
-
 function check_sanity() {
     ## sanity checks for environment 
     [[ ! -z "${DEBUG}" ]] && \
@@ -933,7 +931,8 @@ function check_sanity() {
     ## exit mpd is not started
     bash -c "echo '' > /dev/tcp/${MPD_HOST}/${MPD_PORT}" 2>/dev/null
     if [[ $? -ne 0 ]]; then
-	printf "mpd is not running on host %s and port %s" "${MPD_HOST}" "${MPD_PORT}"
+	printf "mpd is not running on port %s of %s. " "${MPD_PORT}" "${MPD_HOST}"
+	printf "Run the following commands to start it:\nsudo systemctl start mpd\n"
 	return 1
     fi
     
@@ -990,9 +989,20 @@ function main() {
     [[ ! -z ${DEBUG} ]] && \
 	debug "%%% MPDCONF_GLOBAL_STATICFORMAT: \`${MPDCONF_GLOBAL_STATICFORMAT}'"
 
+    ## verbose logging switch on: mpd.log contains
+    ## #Dec 31 17:15 : mpdpart: notice
+    #alsa_output: opened hw:0,0 type=HW
+    #alsa_output: format=S16_LE (Signed 16 bit Little Endian)
+    #output: opened plugin=alsa name="Peachtree 24/192 USB X" audio_format=48000:16:2
+    #output: converting from 88200:24:2
+    
+    MPD_STATUS="$(execute_mpd_command status)"
+    debug "${MPD_STATUS}"
     ## use mpd to determine properties of transferred file
     transfer_samplerate="$(get_mpd_samplerate "${MPD_STATUS}")"
-    transfer_sampleencoding="$(get_mpd_bitdepth "${MPD_STATUS}")"  
+    debug "transfer_samplerate: \`${transfer_samplerate}'"
+    transfer_sampleencoding="$(get_mpd_bitdepth "${MPD_STATUS}")"
+    debug "transfer_sampleencoding: \`${transfer_sampleencoding}'"
     
     ## get the path of the hwparams file for the alsa interface from the
     ## mpd configuration file
@@ -1076,6 +1086,24 @@ function main() {
 
     return 0
 }
+
+msg_samplerate="sample rate"
+msg_sampleencoding="encoding"
+## file on storage < ffprobe
+msg_storage="storage"
+## file as transferred < mpd
+msg_mpd_in="mpd input"
+msg_mpd_out="mpd alsa output"
+## file as transferred < mpd
+## file as converted to analog < alsa
+msg_alsa="alsa"
+msg_final="audio system"
+msg_bitperfect="bit perfect"
+
+mpd_state=""
+mpd_samplerate=""
+mpd_bitdepth=""
+mpd_channels=""
 
 ## TODO: handle non-local mpd
 MPD_HOST="${MPD_HOST:-localhost}"

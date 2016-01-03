@@ -69,7 +69,7 @@ have ssh access, use:
 
 Proper detection of the sample rates each format supports on an
 interface currently is very slow. It therefore is a non-default
-option, `-s' or `--samplerates'. It is recommended to mute all output
+option, `-s` or `--samplerates`. It is recommended to mute all output
 interfaces because the script will play (pseudo) random noise on each
 interface. Usage:
 
