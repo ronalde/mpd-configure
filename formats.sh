@@ -36,15 +36,20 @@ sampleformat_nonavailable_re=".*Sample[[:space:]]format[[:space:]]non[[:space:]]
 wrongformat_re=".*wrong[[:space:]]extended[[:space:]]format.*"
 default_re=".*Playing[[:space:]]raw[[:space:]]data.*"
 
+errors=()
 
 function get_rates() {
-
+    ## use aplay to get supported sample rates for playback for
+    ## specified interface and encoding. returns space seperated lists
+    ## of valid rates.
     noerror=
     format="$1"
     for rate in ${rates[@]}; do
 	unset aplay_opts_post
 	aplay_opts_post=(-f "${format}")
 	aplay_opts_post+=(-r "${rate}")
+	res="$(amixer set Master mute 2>&1 >/dev/null)"
+	mute=$?
 	aplay_out="$(echo "${pseudo_random}" | \
 LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1 >/dev/null)"
 	
@@ -57,6 +62,13 @@ LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1 >/dev/nu
 		fi
 	    done<<<"${aplay_out}"
 	fi
+	if [[ ${mute} -eq 0 ]]; then 
+	    res="$(amixer set Master unmute 2>&1 >/dev/null)"
+	    if [[ $? -ne 0 ]]; then
+		errors+=("error unmuting master volume control")
+	    fi 
+	fi 
+
     done
 
 }
@@ -73,3 +85,6 @@ for format in ${formats[@]}; do
     #printf "%s\n" "${rates_supported["${str_format}"]}"
 done 
 
+if [[ ${#errors[@]} -gt 0 ]]; then 
+    printf "%s\n" "${errors[@]}" 1>&2;
+fi 
