@@ -62,6 +62,10 @@ The script can also run 'directly' from github using:
 
     bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")
 
+To specify an option (like `-l usb`) use the following syntax:
+
+    bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities") -l usb    
+
 To display the alsa playback interfaces on a remote host to which you
 have ssh access, use:
 
