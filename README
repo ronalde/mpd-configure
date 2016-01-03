@@ -39,6 +39,7 @@ ssh access, execute:
 
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
 
+The mpd-monitor script is in a development state.
 
 About the alsa-capabilities helper script
 -----------------------------------------
@@ -65,6 +66,14 @@ To display the alsa playback interfaces on a remote host to which you
 have ssh access, use:
 
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")"
+
+Proper detection of the sample rates each format supports on an
+interface currently is very slow. It therefore is a non-default
+option, `-s' or `--samplerates'. It is recommended to mute all output
+interfaces because the script will play (pseudo) random noise on each
+interface. Usage:
+
+    bash alsa-capabilities -s   
 
 
 Background
