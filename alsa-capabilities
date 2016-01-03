@@ -53,18 +53,10 @@ TESTFILE="${TESTFILE:-}"
 
 ### generic functions
 
-function echo_stderr() {
-    printf "$@\n" 1>&2; 
-}
-
 function die() {
     printf "\nError in %s (v%s): %s\n" \
 	   "${APP_NAME_AC}" "${APP_VERSION}" "$@" 1>&2;
     exit 1
-}
-
-function inform() {
-    printf "%s\n" "$@" 1>&2;
 }
 
 function debug() {
@@ -104,7 +96,7 @@ function get_aplay_output() {
     ## use aplay to do a basic alsa sanity check and return its (raw)
     ## output to the calling function.
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
     res=""
     aplay_output=""
@@ -149,6 +141,7 @@ function get_aplay_output() {
 }
 
 function get_driver() {
+    ## TODO: fix
     card_nr="$1"
     card_name="card${card_nr}"
     sysclasssound="/sys/class/sound"
@@ -161,6 +154,7 @@ function get_driver() {
 }
 
 function get_codecs() {
+    ## TODO: fix
     card_nr="$1"
     card_name="card${card_nr}"
     driver="$2"
@@ -180,94 +174,6 @@ function get_codecs() {
 	    done<"${codec_file}"
 	done
     fi
-}
-
-function get_samplerates_codec() {
-    card_nr="$1"
-    card_name="card${card_nr}"
-    codec_nr="$2"
-    codec_file="/proc/asound/${card_name}/codec#${codec_nr}"
-    samplerate_re="^rates \[[[:alnum:]]*\]:[[:space:]](.*)$"
-    samplerates=""
-    
-    # rates [0x5f0]: 32000 44100 48000 88200 96000 192000
-    for codec_file in /proc/asound/${card_name}/codec#*; do
-	while read -r line; do
-	    if [[ "${line}" =~ ${samplerate_re} ]]; then 
-		samplerates="${BASH_REMATCH[1]// /, }"
-		break
-	    fi
-	done<"${codec_file}"
-    done
-
-    printf "codec rates: %s\n" "${samplerates}" 1>&2;
-    printf "%s" ${samplerates}
-    
-}
-
-function get_samplerates_usb() {
-    card_nr="$1"
-    card_name="card${card_nr}"
-    samplerates_re="^[[:space:]]*Rates: (.*)$"
-    #Rates: 44100, 48000, 88200, 96000, 176400, 192000
-    streamfile="/proc/asound/card${card_nr}/stream0"
-    samplerates=""
-    
-    while read -r line; do
-	if [[ "${line}" =~ ${samplerates_re} ]]; then
-	    samplerates="${BASH_REMATCH[1]}"
-	fi
-    done<"${streamfile}"
-    printf "usb rates: %s\n" "${samplerates}" 1>&2;
-    printf "%s" ${samplerates}
-}
-
-function alt_alsa_cards_brm() {
-    ## inspired by alsa's scan.sh
-
-    #PS4='+ $(date "+%s.%N")\011 '
-    #exec 3>&2 2>/tmp/bashstart.$$.log
-    #set -x
- 
-    card_re="^card([0-9]+)"
-    driverusb="snd_usb_audio"
-    path="$(pwd)"
-    cd /proc/asound || exit 1
-
-    while read -r line; do
-	if [[ "${line}" =~ ${card_re} ]]; then
-	    codecs=()
-	    samplerates=()
-	    #list+=(${BASH_REMATCH[1]})
-	    card_nr="${BASH_REMATCH[1]}"
-	    printf "card number: %s\n" "${card_nr}" 1>&2;
-	    driver="$(get_driver "${card_nr}")"
-	    printf "driver: %s\n" "${driver}" 1>&2;
-
-	    while read -r codec_line; do
-		codecs+=("${codec_line}")
-	    done< <(get_codecs "${card_nr}" "${driver}")
-	    printf "codecarray: %s\n" "${codecs[@]}" 1>&2;
-
-
-	    if [[ "${driver}" == "${driverusb}" ]]; then
-		samplerates=($(get_samplerates_usb "${card_nr}" "${codeccounter}"))
-	    else 
-		codeccounter=0
-		for codec in "${codecs[@]}"; do
-		    samplerates=($(get_samplerates_codec "${card_nr}" "${codeccounter}"))
-		    (( codeccounter++ ))
-		done
-	    fi
-	    printf "sampleratearray: %s\n" "${samplerates[@]}" 1>&2;
-	    
-
-	fi
-    done< <(ls card*)
-
-    #cd "${path}"
-    #set +x
-    #exec 2>&3 3>&-
 }
 
 function handle_doublebrackets() {
@@ -312,9 +218,9 @@ function fetch_alsa_outputinterfaces() {
     ## indexed arrays and displays them.
 
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
-    msg=""
+    msg=()
     aplay_lines=()
     integer_regexp='^[0-9]+$'
     aplay_card_regexp="^card[[:space:]][0-9]+:"
@@ -333,9 +239,9 @@ function fetch_alsa_outputinterfaces() {
 	alsa_filtered_devicenr="${alsa_filtered_hwaddr##*,}"
 	if [[ ! ${alsa_filtered_cardnr} =~ ${integer_regexp} ]] || \
 	   [[ ! ${alsa_filtered_devicenr} =~ ${integer_regexp} ]]; then
-	    msg="Invalid OPT_HWFILTER (\`${OPT_HWFILTER}') specified.\n"
-	    msg+="Should be \`hw:x,y' were x and y are both integers."
-	    die "${msg}"
+	    msg+=("Invalid OPT_HWFILTER (\`${OPT_HWFILTER}') specified.")
+	    msg+=("Should be \`hw:x,y' were x and y are both integers.")
+	    die "$(printf "%s\n" "${msg[@]}")"
 	fi
 	aplay_card_regexp="^card[[:space:]]${alsa_filtered_cardnr}:[[:space:]].*"
 	aplay_device_regexp="[[:space:]]device[[:space:]]${alsa_filtered_devicenr}:"
@@ -400,8 +306,8 @@ function fetch_alsa_outputinterfaces() {
 	alsa_if_name=""
 	alsa_if_label=""
 	
-	errors=()
 	## start matching and collect errors in array
+	errors=()
 
 	## see if the name contains square brackets, ie it ends with `]]'
 	name=""
@@ -409,7 +315,6 @@ function fetch_alsa_outputinterfaces() {
 	seperator_start="*##"
 	seperator_end="##*"
 	name_re="card[[:space:]][0-9]+:[[:space:]](.*)\[.*\[.*\]\].*"
-	
 	brackets_re="card[[:space:]]([0-9]+):(.*\])\],[[:space:]](device[[:space:]][0-9]+:.*\])"
 	if [[ "${line}" =~ ${brackets_re} ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
@@ -427,7 +332,7 @@ function fetch_alsa_outputinterfaces() {
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "#####: alsacard: \`${alsacard}'"		
 		
-		## replace [ and ] with *
+		## replace `name [something]' with `name *##something##*'
 		alsacard="${alsacard//\[/${seperator_start}}"
 		alsacard="${alsacard//\]/${seperator_end}}"
 		line="card ${BASH_REMATCH[1]}: ${name}[${alsacard}], ${BASH_REMATCH[3]}"
@@ -435,14 +340,20 @@ function fetch_alsa_outputinterfaces() {
 		    debug "#####: replace line with \`${line}'"
 	    fi
 	fi
-	    
+
+	## match the current line with the regexp
 	if [[ "${line}" =~ ${brm_template} ]]; then
 	    [[ ! -z "${BASH_REMATCH[1]}" ]] && \
 		alsa_dev_nr="${BASH_REMATCH[1]}" || \
 		    errors+=("could not fetch device number")
-	    [[ ! -z "${BASH_REMATCH[2]}" ]] && \
-		alsa_dev_name="${BASH_REMATCH[2]}" || \
-		    errors+=("could not fetch device name")
+	    if [[ ! -z "${BASH_REMATCH[2]}" ]]; then 
+		alsa_dev_name="${BASH_REMATCH[2]}"
+		## reconstruct original name if it contained square brackets
+		alsa_dev_name="${alsa_dev_name//${seperator_start}/\[}"
+		alsa_dev_name="${alsa_dev_name//${seperator_end}/\]}"
+	    else
+		errors+=("could not fetch device name")
+	    fi
 	    [[ ! -z "${BASH_REMATCH[3]}" ]] && \
 		alsa_dev_label="${BASH_REMATCH[3]}" || \
 		    errors+=("could not fetch device label")
@@ -468,6 +379,7 @@ function fetch_alsa_outputinterfaces() {
 		debug "$(printf "errors: %s\n" "${errors[@]}")"
 	    fi
 
+	    declare -a alsa_if_formats=()
 	    alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
 	    ## construct the path to the character device for the
 	    ## interface (ie `/dev/snd/xxx')
@@ -479,39 +391,34 @@ function fetch_alsa_outputinterfaces() {
 	    if [[ ! -c "${alsa_if_chardev}" ]]; then 
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "alsa_if_chardev \`${alsa_if_chardev}' is not a chardev."
-		alsa_if_chardev="${alsa_if_chardev} (error: not accessible)"
-		alsa_if_formats="(can't determine: character device error)"
+		alsa_if_chardev="${alsa_if_chardev} (${MSG_ERROR_CHARDEV_NOT_ACCESSIBLE})"
+		alsa_if_formats+=("(${MSG_ERROR_CHARDEV_NOFORMATS})")
 		alsa_if_monitorfile="${alsa_if_hwparamsfile} (error: not accessible)"
 	    else
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
 		if [[ "$(< ${alsa_if_statusfile})" != "closed" ]]; then
-		    ## device is being used, get the lociking pid
+		    ## device is being used, get the locking pid
 		    res="$(get_locking_process "${alsa_if_chardev}")"
 		    if [[ $? -ne 0 ]]; then
 			## can't determine
 			[[ ! -z ${DEBUG} ]] && \
 			    debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
 			
-			alsa_if_chardev="${alsa_if_chardev} (is locked by an unknown process; run the script as root or using sudo to see which)"
-			alsa_if_formats="(can't determine because device is locked)"
+			alsa_if_chardev="${alsa_if_chardev} (${MSG_ERROR_LOCKED_UNKNOWN}"
+			alsa_if_formats+=("(${MSG_ERROR_DEVICE_LOCKED})")
 		    else
 			if [[ ! -z "${res}" ]]; then
 			    alsa_if_chardev="${alsa_if_chardev} ${res}"
 			fi
-			alsa_if_formats="(error: can't determine)"
 			## can determine; get the formats the interface
     			## natively handles or return the process id and
     			## name blocking the interface
+			alsa_if_formats+=("(${MSG_ERROR_DETERMINE_FORMATS})")
 		    fi
 		else
-		    alsa_if_formats="$(return_alsa_formats "${alsa_if_hwaddress}")"
-		    if [[ "${alsa_if_formats}" == "${MSG_DEVICE_BUSY}" ]]; then
-			alsa_if_formats="(error: can't determine because device is in use)"
-		    fi
+		    alsa_if_formats+=("$(return_alsa_formats "${alsa_if_hwaddress}")")
 		fi
-		    
-
 	    fi
 
 	    ## check if the hwparams file exists
@@ -603,20 +510,16 @@ ${MSG_ERROR_UNEXPECTED}"
 	esac
 
 	if [[ ! -z "${match}" ]]; then
-
 	    alsa_if_title_label="${ALSA_IF_LABELS[${alsa_if_type}]}"
 	    if [[ "${alsa_dev_label}" =~ .*${seperator_start}.* ]]; then
 		alsa_dev_label="${alsa_dev_label//\*##/\[}"
 		alsa_dev_label="${alsa_dev_label//##\*/\]}"
 	    fi
-	
-
 	    ## construct the display title
 	    alsa_if_display_title=$(printf " %s) %s \`%s'" \
 					   "${#ALSA_AIF_HWADDRESSES[@]}" \
 					   "${alsa_if_title_label}" \
 					   "${alsa_if_hwaddress}")
-
 	    ## store the details of the current interface in global arrays
 	    ALSA_AIF_HWADDRESSES+=("${alsa_if_hwaddress}")
 	    ALSA_AIF_MONITORFILES+=("${alsa_if_monitorfile}")
@@ -624,19 +527,10 @@ ${MSG_ERROR_UNEXPECTED}"
 	    ALSA_AIF_DEVLABELS+=("${alsa_dev_label}")
 	    ALSA_AIF_LABELS+=("${alsa_if_label}")
 	    ALSA_AIF_UACCLASSES+=("${alsa_if_uacclass}")
-	    ALSA_AIF_FORMATS+=("${alsa_if_formats}")
+	    ALSA_AIF_FORMATS="${alsa_if_formats[@]}"
 	    ALSA_AIF_CHARDEVS+=("${alsa_if_chardev}")
 	fi
 
-	alsa_if_samplerates="$(return_alsa_samplerates \
-"${alsa_dev_nr}" "${alsa_if_nr}" "${alsa_if_type}" "${alsa_if_label}")"
-	if [[ $? -ne 0 ]]; then
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "error getting samplerates"
-	else
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "alsa_if_samplerates: \`${alsa_if_samplerates}'."
-	fi
 	
 	## construct a list with the properties of the current
 	## interface if `OPT_QUIET' is not set
@@ -645,7 +539,12 @@ ${MSG_ERROR_UNEXPECTED}"
 	msg_alsa_ifname="interface name"
 	msg_alsa_uacclass="usb audio class"
 	msg_alsa_chardev="character device"
-	msg_alsa_encodingformats="encoding formats"
+	if [[ -z ${OPT_SAMPLERATES} ]]; then
+	    ## for compatibility with older versions of the script
+	    msg_alsa_encodingformats="encoding formats"
+	else 
+	    msg_alsa_encodingformats="rates per format"
+	fi 
 	msg_alsa_packingformats="packing formats"
 	msg_alsa_samplerates="sample rates"
 	msg_alsa_monitorfile="monitor file"
@@ -660,8 +559,28 @@ ${MSG_ERROR_UNEXPECTED}"
 		   "${msg_alsa_uacclass}" "${alsa_if_uacclass}" 1>&2;
 	    printf " - %-17s = %-60s\n" \
 		   "${msg_alsa_chardev}" "${alsa_if_chardev}" 1>&2;
-	    printf " - %-17s = %-60s\n" \
-		   "${msg_alsa_encodingformats}" "${alsa_if_formats}" 1>&2;
+	    ## when OPT_SAMPLERATES is set alsa_if_formats might
+	    ## contain multiple lines so print the header first
+	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+		formatcounter=0
+		printf " - %-17s = " \
+		       "${msg_alsa_encodingformats}" 1>&2;
+		while IFS="\n" read -r line; do
+		    (( formatcounter++ ))
+		    if [[ ${formatcounter} -gt 1 ]]; then 
+			printf "%-23s" " " 1>&2;
+		    fi
+		    printf "%-60s\n" "${line}" 1>&2;
+		done<<<"${alsa_if_formats[@]}"
+	    else
+		formats=$(printf "%s, " ${alsa_if_formats[@]})
+		## strip the last comma
+		formats=${formats%,*}
+		printf " - %-17s = %-60s\n" \
+		       "${msg_alsa_encodingformats}" \
+		       "${formats}" 1>&2;		
+	    fi
+	    
 	    printf " - %-17s = %-60s\n" \
 		   "${msg_alsa_monitorfile}" "${alsa_if_monitorfile}" 1>&2;
 	    printf "\n"
@@ -676,7 +595,7 @@ function get_locking_process() {
     ## may be a file or a socket. Returns a descriptive string or a
     ## notice with error.
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
 
     chardev_path="$1"
@@ -723,72 +642,54 @@ ps returned: \`${pnamepid}"
 }
 
 function return_alsa_samplerates() {
-    ## fetch and return a comma separated string of playback sample
-    ## rates for the card specified by its cardnr in $1, device number
-    ## in $2 and type in $3.
+    ## use aplay to get supported sample rates for playback for
+    ## specified interface ($1 and $2) and encoding format
+    ## ($3). Returns space seperated list of valid rates.
+
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
-
-    ## structure of codec file:
-    #Codec: Bla die bla
-    #Address: x (same as last number in file name ./codec#x)
-    #Default PCM: (capabilities of the codec/chip, ie interface independant)
-    #  rates [hex]:  32000 44100 48000 88200 96000 192000 ..
-    #  bits [hex]: 16 20 24
-    #  formats
-    #...
-    #Node 0x10 [Audio Output] wcaps 0x611: Stereo Digital
-    #  #Device: name="ALC887-VD Digital", type="SPDIF", device=1
-    #  PCM:  (capabilities of the codec/chip coupled with the interface)
-    #   rates [0x5f0]: 32000 44100 48000 96000 192000
+	debug_function_ac "${FUNCNAME}" "$*"
     
-    #non-uac: "rates" in /proc/asound/cardx/codec#0
-    #uac:     "Rates" in /proc/asound/cardx/stream0
-    alsa_dev_nr="$1"
-    alsa_if_nr="$2"
-    ## uo = uac, else non-uac
-    alsa_if_type="$3"
-    alsa_if_name="$4"
-    samplerates=""
-    rates_file=""
-    
-    if [[ "${alsa_if_type}" == "uo" ]]; then 
-	rates_regexp="Rates:[[:space:]](.*)$"
-	rates_file="/proc/asound/card${alsa_dev_nr}/stream${alsa_if_nr}"
-    else
-	rates_regexp="rates[[:space:]]\[[0-9a-z]*\]:[[:space:]](.*)$"
-	rates_file="/proc/asound/card${alsa_dev_nr}/codec#${alsa_if_nr}"
-    fi 
+    alsa_if_hwaddress="$1"
+    format="$2"
 
-    if [[ ! -f "${rates_file}" ]]; then
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "invalid ${rates_file}: \`${rates_file}'."
-	return 1
-    else
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "using rates_file \`${rates_file}' and \
-rates_regexp \`${rates_regexp}'"
-	while read -r line; do
-	    #debug "line: ${line}"
-	    if [[ "${line}" =~ ${rates_regexp} ]]; then
-		debug "matching line: ${line}"
-		samplerates="${BASH_REMATCH[1]}"
-		break
-	    fi
-	    
-	done<"${rates_file}"
-    fi
-    if [[ -z "${samplerates}" ]]; then
-	## some error
-	return 1
-    else 
-	if [[ ! "${alsa_if_type}" == "uo" ]]; then 
-	    ## replace spaces with `, '
-	    samplerates="${samplerates// /, }"
+    [[ ! -z ${DEBUG} ]] && debug "format: ${format}"
+    
+    hw=""
+    [[ ! -z ${DEBUG} ]] && debug "using device: ${alsa_if_hwaddress}"
+    declare -a aplay_opts_pre
+    aplay_opts_pre+=(-D "${alsa_if_hwaddress}")
+    aplay_opts_pre+=(-f "MPEG")
+    aplay_opts_pre+=(-c "2")
+    declare -a aplay_opts_post
+    rate_notaccurate_re=".*Warning:.*not[[:space:]]accurate[[:space:]]\(requested[[:space:]]=[[:space:]]([0-9]+)Hz,[[:space:]]got[[:space:]]=[[:space:]]([0-9]+)Hz\).*"
+    badspeed_re=".*bad[[:space:]]speed[[:space:]]value.*"
+    sampleformat_nonavailable_re=".*Sample[[:space:]]format[[:space:]]non[[:space:]]available.*"
+    wrongformat_re=".*wrong[[:space:]]extended[[:space:]]format.*"
+    default_re=".*Playing[[:space:]]raw[[:space:]]data.*"
+    
+    errors=()
+    noerror=
+    for rate in ${SAMPLERATES[@]}; do
+	# [[ ! -z ${DEBUG} ]] && debug "trying format ${format} @ rate ${rate}"
+	unset aplay_opts_post
+	aplay_opts_post=(-f "${format}")
+	aplay_opts_post+=(-r "${rate}")
+	aplay_out="$(echo "${PSEUDO_RANDOM_NOISE}" | \
+LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1 >/dev/null)"
+	if [[ $? -eq 0 ]]; then
+	    linescount="$(printf "%s\n" "${aplay_out[@]}" | wc -l)"
+	    #printf "rate %s aplaylines: %s\n" "${rate}" "${linescount}" 1>&2;
+	    while read -r line; do
+		if [[ "${line}" =~ ${default_re} ]] && [[ ${linescount} -eq 1 ]]; then
+		    printf "%sHz\n" "${rate}"			    
+		fi
+	    done<<<"${aplay_out}"
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "aplay returned an error using format ${format} @ rate ${rate}: \`${aplay_out}'"
 	fi
-	printf "${samplerates}"
-    fi
-   
+    done
+  
 }
 
 function return_alsa_formats() {
@@ -800,23 +701,43 @@ function return_alsa_formats() {
     ## needs address of alsa output device in `hw:x,y' format 
     ## as single argument ($1)
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
     alsa_hw_device="$1"
     aplay_opts=(-D ${alsa_hw_device})
     aplay_opts+=(-f MPEG)
-    format=""
-    pseudo_random="30985218341569576428057261168568123489906994"
+    format=
+    rawformat=
+    declare -a formats
 
-    ## throw psuedo random but non-audio data to aplay to determine formats
-    aplay_out="$(echo ${pseudo_random} | \
+    ## throw psuedo random but non-audio data to aplay while capturing
+    ## error lines starting with `- ' to determine formats
+    aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
 LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null | grep '^- ')"
     while read -r line; do 
-	format="${format}, ${line/- /}"
+	rawformat="${line/- /}"
+	if [[ -z ${OPT_SAMPLERATES} ]]; then
+	    formats+=(${rawformat})
+	else 
+	    declare -a sorted_rates
+	    declare -a rates_supported
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "#### try to get samplerates for format \`${rawformat}'"
+	    rates_supported+=("$(return_alsa_samplerates \
+"${alsa_if_hwaddress}" "${rawformat}")")
+	    
+	    IFS=$'\n' sorted_rates=($(sort -u -n <<<"${rates_supported[*]}"))
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "#### sorted_rates returned: $(printf "%s " "${sorted_rates[@]}")"
+	    rates="$(printf "%s " "${sorted_rates[@]}")"
+	    format="$(printf "%-18s" "${rawformat}"): ${rates}"
+	    formats+=(${format})
+	fi
     done <<< "${aplay_out}"
-    formats="${format#, }"
-    [[ ! -z "${formats}" ]] && \
-	printf "${formats}" || printf "${MSG_DEVICE_BUSY}"
+    #formats+=("${format#\n}")
+
+    [[ ${#formats[@]} -gt 0 ]] && \
+	printf "%s\n" "${formats[@]}" || printf "${MSG_DEVICE_BUSY}"
 
 }
 
@@ -825,7 +746,7 @@ function return_alsa_uac_ep() {
     ## returns/echoes the usb audio class endpoint as a fixed number.
     ## needs path to stream file as single argument ($1)
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
     
     ## based on ./sound/usb/proc.c:
     ##  printf "    Endpoint: %d %s (%s)\n",
@@ -878,7 +799,7 @@ function return_alsa_uac_ep() {
 function analyze_opt_limit() {
     ## check if the argument for the `-l' (limit) option is proper
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
     opt_limit="$1"
     case ${opt_limit} in
@@ -912,16 +833,14 @@ following arguments:\
 function display_usageinfo() {
     ## display syntax and exit
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
     msg=$(cat <<EOF
 Usage:
-$0 [ -l a|d|u ]  [ -c <filter> ] [-a <hwaddress>] [ -q ]
+$0 [ -l a|d|u ]  [ -c <filter> ] [-a <hwaddress>] [-s] [ -q ]
 
-Displays a list of alsa audio output interfaces with their details and
-ends with the hardware address (\`hw:x,y') for the first available
-interface. When the \`-q (quiet)' option is set, the list is
-surpressed, ie only the hardware address is displayed.
+Displays a list of each alsa audio output interface with its details 
+including its alsa hardware address (\`hw:x,y'). 
 
 The list may be filtered by using the limit option \`-l' with an
 argument, either \`a' (or \`analog'), \`d' (or \`digital') or \`u' (or
@@ -929,34 +848,40 @@ argument, either \`a' (or \`analog'), \`d' (or \`digital') or \`u' (or
 addition, a custom filter may be specified as an argument for the \`c'
 option.
 
-The \`a' option is for usage in scripts, and expects a valid alsa
-hardware address (eg. hw:0,1).
+The \`-q (quiet)' and \`-a (address)' options are meant for usage in
+other scripts. While \`quiet' surpresses the output (to std_err), the
+\`address' option limits the output to the interface specified
+with its alsa hardware address (eg. \`hw:0,1').
 
-Returns 0 if an interface is available or 1 in case of no matches.
+Returns 0  or 1 in case of no matches or other errors.
 
   -l a | analog     Limit the interfaces to analog ones.
-  -l u | usb | uac  Limit the available output devices to those that
-                    support USB Audio Class.
+  -l u | usb | uac  Limit the interfaces to those that support 
+                    USB Audio Class (UAC1 or UAC2).
   -l d | digital    Limit the available interfaces to digital ones using
                     a static (and arbitrary) filter.
-  -c <regexp>       Limit the available interfaces further to match
+  -c <regexp>       Limit the available interfaces (further) to match
                     \`<regexp>'.
-  -a <hwaddress>    Limit the returned interface to the one specified with 
-                    \`<hwaddress>', eg. hw:0,1
+  -a <hwaddress>    Limit the returned interface (further) to the one
+                    specified with \`<hwaddress>', eg. \`hw:0,1'
+  -s, --samplerates Adds a listing of the supported sample rates 
+                    for each format an interface supports. 
+                    CAUTION: Besides being slow this option 
+                    PLAYS NOISE ON EACH OUTPUT!
   -q, --quiet       Surpress listing each interface with its details,
                     ie only store the details of each card in the
                     appropriate arrays.
   -h, --help        Show this help message
 EOF
 )
-    inform "${msg}"
+    printf "%s\n" "${msg}" 1>&2;
     exit 1
 }
 
 function analyze_command_line() {
     ## parse command line arguments using bash getopts
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
     ## put characters in the array in a string
     shortopts=":${SHORT_OPTS[@]/ /}"
@@ -965,24 +890,30 @@ function analyze_command_line() {
         case "$option" in
             l) 
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`l' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
+		    debug "option \`l' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
 		OPT_LIMIT="True"
 		analyze_opt_limit "${OPTARG}"
 		;;
             q)
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`q' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
+		    debug "option \`q' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
 		OPT_QUIET=true
 		;;
             c) 
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`c' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
+		    debug "option \`c' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
 		OPT_FILTER="${OPTARG}"
 		;;
             a) 
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`a' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
+		    debug "option \`a' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
 		OPT_HWFILTER="${OPTARG}"
+		;;
+	    
+            s) 
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "option \`s' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
+		OPT_SAMPLERATES=true
 		;;
            h|\?) 
 		done_opts=true
@@ -1000,7 +931,7 @@ function analyze_command_line() {
 function return_alsa_interface() {
     ## main function; see display_usageinfo()
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$@"
+	debug_function_ac "${FUNCNAME}" "$*"
 
     profile_file=""
     ## start profiling
@@ -1025,9 +956,9 @@ function return_alsa_interface() {
 	   [[ ! -z ${OPT_DISABLE_PULSEAUDIO} ]]; then 
 	## analyse pulseaudio when requested
 	if [[ ! -f pulseaudio-helper ]]; then
-	    inform "option \`OPT_STOP_PULSEAUDIO' and/or \
-OPT_DISABLE_PULSEAUDIO are set, but helper script \
-\`pulseaudio-helper' not found."
+	    printf "option \`OPT_STOP_PULSEAUDIO' and/or \
+OPT_DISABLE_PULSEAUDIO set, but helper script \
+\`pulseaudio-helper' not found.\n" 1>&2;
 	else
 	    source pulseaudio-helper
 	    pulseaudio_evaluate_stopping
@@ -1049,7 +980,7 @@ OPT_DISABLE_PULSEAUDIO are set, but helper script \
 	[[ ! ${NR_AIFS_BEFOREFILTERING} == 0 ]] && \
 	    msg=$(printf "${MSG_MATCH_IF_NONE_LIMITED}" \
 			 "${NR_AIFS_BEFOREFILTERING}")
-	inform "\n${msg}"
+	printf "%s\n" "${msg}" 1>&2;
     fi
     
     [[ ! -z ${DEBUG} ]] && \
@@ -1106,6 +1037,17 @@ usb
 EOF
     )"
 
+## construct static list of sample rates
+SAMPLERATES=()
+for baserate in 44100 48000; do
+    for i in 8 4 2 1; do
+	SAMPLERATES+=($(( baserate * $i )))
+    done 
+
+done
+
+## pseudo random data to generate noise
+PSEUDO_RANDOM_NOISE="30985218341569576428057261168568123489906994"
 declare -a DO_INTERFACE_FILTER=($(printf -- '%s' "${DO_FILTER_LIST// /" "}"))
 
 ## construction for displayed output 
@@ -1159,14 +1101,17 @@ MSG_MARGIN="${MSG_TAB//\*/ }"
 MSG_MATCH_IF_NONE_UNLIMITED="${MSG_TAB}No ${ALSA_IF_LABEL}s found."
 MSG_MATCH_IF_NONE_LIMITED="${MSG_TAB}From the %s available ${ALSA_IF_LABEL}s, \
 none matched your filter."
+MSG_ERROR_LOCKED_UNKNOWN="locked by an unknown process; run the script as root or using sudo to see which."
+MSG_ERROR_DEVICE_LOCKED="can't determine because device is locked"
+MSG_ERROR_DEVICE_BUSY="error: can't determine because device is in use"
+MSG_ERROR_DETERMINE_FORMATS="error: can't determine"
+MSG_ERROR_CHARDEV_NOFORMATS="can't determine: character device error"
+MSG_ERROR_CHARDEV_NOT_ACCESSIBLE="error: not accessible"
 
 ## command line options
 ### optional input parameters, the ones with `:' need an argument
 declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb" "uac")
-SHORT_OPTS=("l:" "c:" "a:" "q" "h")
-
-OPT_FILTER="${OPT_FILTER:-}"
-OPT_HWFILTER="${OPT_HWFILTER:-}"
+SHORT_OPTS=("l:" "c:" "a:" "s" "q" "h")
 
 OPT_LIMIT_AO=${OPT_LIMIT_AO:-}
 OPT_LIMIT_DO=${OPT_LIMIT_DO:-}
@@ -1174,6 +1119,7 @@ OPT_LIMIT_UO=${OPT_LIMIT_UO:-}
 OPT_QUIET=${OPT_QUIET:-}
 OPT_FILTER=${OPT_FILTER:-}
 OPT_HWFILTER=${OPT_HWFILTER:-}
+OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
 
 ## currently unused
 OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
