@@ -623,19 +623,24 @@ ps returned: \`${pnamepid}"
 
 function return_alsa_samplerates() {
     ## use aplay to get supported sample rates for playback for
-    ## specified interface ($1 and $2) and encoding format
-    ## ($3). Returns space seperated list of valid rates.
+    ## specified non-uac interface ($1) and encoding format ($2)
+    ## between minimum ($3) and maximum ($4) supported rates. returns
+    ## space seperated list of valid rates.
 
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
     
     alsa_if_hwaddress="$1"
     format="$2"
+    rate_min="$3"
+    rate_max="$4"
+    rates=(${SAMPLERATES[@]})
+    rates=${rates[@]/$rate_min}
+    rates=${rates[@]/$rate_max}
 
-    [[ ! -z ${DEBUG} ]] && debug "format: ${format}"
-    
     hw=""
-    [[ ! -z ${DEBUG} ]] && debug "using device: ${alsa_if_hwaddress}"
+    [[ ! -z ${DEBUG} ]] && \
+	debug "getting sample rates for device \`${alsa_if_hwaddress}' using format \`${format}'."
     declare -a aplay_opts_pre
     aplay_opts_pre+=(-D "${alsa_if_hwaddress}")
     aplay_opts_pre+=(-f "MPEG")
@@ -649,24 +654,25 @@ function return_alsa_samplerates() {
     
     errors=()
     noerror=
-    for rate in ${SAMPLERATES[@]}; do
-	# [[ ! -z ${DEBUG} ]] && debug "trying format ${format} @ rate ${rate}"
-	unset aplay_opts_post
-	aplay_opts_post=(-f "${format}")
-	aplay_opts_post+=(-r "${rate}")
-	aplay_out="$(echo "${PSEUDO_RANDOM_NOISE}" | \
+    for rate in ${rates[@]}; do
+	if [[ ${rate} -gt ${rate_min} ]] && [[ ${rate} -lt ${rate_max}  ]]; then 
+	    unset aplay_opts_post
+	    aplay_opts_post=(-f "${format}")
+	    aplay_opts_post+=(-r "${rate}")
+	    aplay_out="$(echo "${PSEUDO_RANDOM_NOISE}" | \
 LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1 >/dev/null)"
-	if [[ $? -eq 0 ]]; then
-	    linescount="$(printf "%s\n" "${aplay_out[@]}" | wc -l)"
-	    #printf "rate %s aplaylines: %s\n" "${rate}" "${linescount}" 1>&2;
-	    while read -r line; do
-		if [[ "${line}" =~ ${default_re} ]] && [[ ${linescount} -eq 1 ]]; then
-		    printf "%sHz\n" "${rate}"			    
-		fi
-	    done<<<"${aplay_out}"
-	else
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "aplay returned an error using format ${format} @ rate ${rate}: \`${aplay_out}'"
+	    if [[ $? -eq 0 ]]; then
+		linescount="$(printf "%s\n" "${aplay_out[@]}" | wc -l)"
+		#printf "rate %s aplaylines: %s\n" "${rate}" "${linescount}" 1>&2;
+		while read -r line; do
+		    if [[ "${line}" =~ ${default_re} ]] && [[ ${linescount} -eq 1 ]]; then
+			printf "%sHz\n" "${rate}"			    
+		    fi
+		done<<<"${aplay_out}"
+	    else
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "aplay returned an error using format ${format} @ rate ${rate}: \`${aplay_out}'"
+	    fi
 	fi
     done
   
@@ -685,12 +691,13 @@ function return_alsa_formats() {
     alsa_if_streamfile="$3"
     aplay_opts=(-D ${alsa_hw_device})
     aplay_opts+=(-f MPEG)
+    aplay_opts+=(--dump-hw-params)
     format=
     rawformat=
     declare -a formats
 
     if [[ "${alsa_if_type}" = "uo" ]]; then
-	## uac type
+	## uac type interface: use its streamfile
 	interface_re="^[[:space:]]*Interface[[:space:]]([0-9])"
 	format_re="^[[:space:]]*Format:[[:space:]](.*)"
 	rates_re="^[[:space:]]*Rates:[[:space:]](.*)"
@@ -734,36 +741,54 @@ function return_alsa_formats() {
 	done<"${alsa_if_streamfile}" 
 
     else 
-	## non-uac type: throw psuedo random but non-audio data to
+	## non-uac type: play psuedo random non-audio data using
 	## aplay while capturing error lines starting with `- ' to
 	## determine formats
+	rawformats=()
+	format_re="^FORMAT:[[:space:]]*(.*)"
+	rate_re="^RATE:[[:space:]]+\[([0-9]+)[[:space:]]([0-9]+)\]"
 	aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
-LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null | grep '^- ')"
-	while read -r line; do 
-	    rawformat="${line/- /}"
-	    if [[ -z ${OPT_SAMPLERATES} ]]; then
-		formats+=(${rawformat})
-	    else 
-		declare -a sorted_rates
-		declare -a rates_supported
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "#### try to get samplerates for format \`${rawformat}'"
-		rates_supported+=("$(return_alsa_samplerates \
-"${alsa_if_hwaddress}" "${rawformat}")")
-		
-		IFS=$'\n' sorted_rates=($(sort -u -n <<<"${rates_supported[*]}"))
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "#### sorted_rates returned: $(printf "%s " "${sorted_rates[@]}")"
-		rates="$(printf "%s " "${sorted_rates[@]}")"
-		format="$(printf "%-18s" "${rawformat}"): ${rates}"
-		formats+=(${format})
+LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null)"
+	while read -r line; do
+	    if [[ "${line}" =~ ${format_re} ]]; then
+		rawformats+=(${BASH_REMATCH[1]})
+		if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+		    continue
+		else
+		    break
+		fi
+	    fi
+	    if [[ "${line}" =~ ${rate_re} ]]; then
+		## set minimum and maximum rates
+		rate_min="${BASH_REMATCH[1]}"
+		rate_max="${BASH_REMATCH[2]}"
+		break
 	    fi
 	done <<< "${aplay_out}"
-	#formats+=("${format#\n}")
-	
+
+	if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+	    declare -a sorted_rates
+	    ## put the minimum and maximum rates in the array
+	    rates_supported=("${rate_min}Hz" "${rate_max}Hz")
+	    rates_supported+=("$(return_alsa_samplerates \
+"${alsa_if_hwaddress}" "${rawformats[1]}" "${rate_min}" "${rate_max}")")
+	    IFS=$'\n' sorted_rates=($(sort -u -n <<<"${rates_supported[*]}"))
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "#### sorted_rates returned: $(printf "%s " "${sorted_rates[@]}")"
+	    rates="$(printf "%s " "${sorted_rates[@]}")"
+	    for rawformat in ${rawformats[@]}; do 
+		format="$(printf "%-18s" "${rawformat}"): ${rates}"
+		formats+=(${format})
+	    done
+	else
+	    formats=(${rawformats[@]})
+	fi 
     fi
-    [[ ${#formats[@]} -gt 0 ]] && \
-	printf "%s\n" "${formats[@]}" || printf "${MSG_DEVICE_BUSY}"
+    if [[ ${#formats[@]} -gt 0 ]]; then 
+	printf "%s\n" "${formats[@]}"
+    else
+	printf "${MSG_ERROR_GETTINGFORMATS}"
+    fi
     
 }
 
@@ -1109,7 +1134,7 @@ declare -A UO_EP_LABELS=( ["${UO_EP_NONE_FILTER}"]="${UO_EP_NONE_LABEL}"
 ## system messages
 MSG_PROP_NOTAPPLICABLE="(n/a)"
 MSG_PROP_NOTAVAILABLE="(none)"
-MSG_DEVICE_BUSY="can't detect"
+MSG_ERROR_GETTINGFORMATS="can't detect formats and rates"
 MSG_ERROR_NOFILE="is not a file or is not accessible."
 MSG_ERROR_UNEXPECTED="THIS SHOULD NOT HAPPEN."
 MSG_APLAY_ERROR_NOSOUNDCARDS="aplay did not find any soundcard."
