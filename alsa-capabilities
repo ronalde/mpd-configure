@@ -414,29 +414,7 @@ function fetch_alsa_outputinterfaces() {
 		else
 		    [[ ! -z ${DEBUG} ]] && \
 			debug "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
-		    if [[ "$(< ${alsa_if_statusfile})" != "closed" ]]; then
-			## device is being used, get the locking pid
-			alsa_if_closed=1
-			res="$(get_locking_process "${alsa_if_chardev}")"
-			if [[ $? -ne 0 ]]; then
-			    ## can't determine
-			    [[ ! -z ${DEBUG} ]] && \
-				debug "${FUNCNAME}: get_locking_process returned error: \`${res}'"
-			    
-			    alsa_if_chardev="${alsa_if_chardev} (${MSG_ERROR_LOCKED_UNKNOWN}"
-			    alsa_if_formats+=("(${MSG_ERROR_DEVICE_LOCKED})")
-			else
-			    if [[ ! -z "${res}" ]]; then
-				alsa_if_chardev="${alsa_if_chardev} ${res}"
-			    fi
-			    ## can determine; get the formats the interface
-    			    ## natively handles or return the process id and
-    			    ## name blocking the interface
-			    alsa_if_formats+=("(${MSG_ERROR_DETERMINE_FORMATS})")
-			fi
-		    fi
 		fi
-		## device is real and not being used
 		## check whether the monitor file exists; it always should
 		if [[ ! -f ${alsa_if_monitorfile} ]]; then
 		    msg="${alsa_if_monitorfile} ${MSG_ERROR_NOFILE} (${MSG_ERROR_UNEXPECTED})"
@@ -995,7 +973,6 @@ function return_alsa_interface() {
     if [[ $? -ne 0 ]]; then
 	die "The script cannot continue without aplay."
     fi
-    CMD_FUSER=$(which fuser || command_not_found "fuser" "psmisc")
 
     ## parse command line arguments
     analyze_command_line "$@"
@@ -1008,6 +985,7 @@ function return_alsa_interface() {
 OPT_DISABLE_PULSEAUDIO set, but helper script \
 \`pulseaudio-helper' not found.\n" 1>&2;
 	else
+	    CMD_FUSER=$(which fuser || command_not_found "fuser" "psmisc")
 	    source pulseaudio-helper
 	    pulseaudio_evaluate_stopping
 	fi
@@ -1086,13 +1064,13 @@ EOF
     )"
 
 ## construct static list of sample rates
-SAMPLERATES=()
+SAMPLERATES=(32000)
 for baserate in 44100 48000; do
     for i in 8 4 2 1; do
 	SAMPLERATES+=($(( baserate * $i )))
     done 
-
 done
+
 
 ## pseudo random data to generate noise
 PSEUDO_RANDOM_NOISE="30985218341569576428057261168568123489906994"
@@ -1134,7 +1112,6 @@ MSG_PROP_NOTAVAILABLE="(none)"
 MSG_DEVICE_BUSY="can't detect"
 MSG_ERROR_NOFILE="is not a file or is not accessible."
 MSG_ERROR_UNEXPECTED="THIS SHOULD NOT HAPPEN."
-MSG_RUN_AS_ROOT="device in use, run as root to display process."
 MSG_APLAY_ERROR_NOSOUNDCARDS="aplay did not find any soundcard."
 MSG_APLAY_ERROR_GENERAL="aplay reported the following error:\n\`%s'"
 MSG_APLAY_ERROR_UNSPECIFIED="aplay returned no results."
@@ -1148,9 +1125,6 @@ MSG_MARGIN="${MSG_TAB//\*/ }"
 MSG_MATCH_IF_NONE_UNLIMITED="${MSG_TAB}No ${ALSA_IF_LABEL}s found."
 MSG_MATCH_IF_NONE_LIMITED="${MSG_TAB}From the %s available ${ALSA_IF_LABEL}s, \
 none matched your filter."
-MSG_ERROR_LOCKED_UNKNOWN="locked by an unknown process; run the script as root or using sudo to see which."
-MSG_ERROR_DEVICE_LOCKED="can't determine because device is locked"
-MSG_ERROR_DEVICE_BUSY="error: can't determine because device is in use"
 MSG_ERROR_DETERMINE_FORMATS="error: can't determine"
 MSG_ERROR_CHARDEV_NOFORMATS="can't determine: character device error"
 MSG_ERROR_NOT_CHARDEV="error: is not a character device or not accessible"
