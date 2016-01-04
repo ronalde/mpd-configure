@@ -208,9 +208,6 @@ function handle_doublebrackets() {
 }
 
 
-
-
-
 function fetch_alsa_outputinterfaces() {
     ## parses each output interface returned by `get_aplay_output'
     ## after filtering (when the appropriate commandline options are
@@ -460,7 +457,7 @@ function fetch_alsa_outputinterfaces() {
 		## set interface to usb out
 		alsa_if_type="uo"
 		## uac devices will use the stream file instead of
-		## hwaparams file to monitor
+		## hwparams file to monitor
 		alsa_if_monitorfile="${alsa_streamfile}"
 		## get the type of uac endpoint
 		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_streamfile}")"
@@ -531,40 +528,23 @@ ${MSG_ERROR_UNEXPECTED}"
 	    ALSA_AIF_CHARDEVS+=("${alsa_if_chardev}")
 	fi
 
-	
-	## construct a list with the properties of the current
-	## interface if `OPT_QUIET' is not set
-	msg_alsa_devname="device name"
-	msg_alsa_codecname="codec name"
-	msg_alsa_ifname="interface name"
-	msg_alsa_uacclass="usb audio class"
-	msg_alsa_chardev="character device"
-	if [[ -z ${OPT_SAMPLERATES} ]]; then
-	    ## for compatibility with older versions of the script
-	    msg_alsa_encodingformats="encoding formats"
-	else 
-	    msg_alsa_encodingformats="rates per format"
-	fi 
-	msg_alsa_packingformats="packing formats"
-	msg_alsa_samplerates="sample rates"
-	msg_alsa_monitorfile="monitor file"
-	
 	if [[ -z "${OPT_QUIET}" ]]; then
 	    printf "%s\n" "${alsa_if_display_title}" 1>&2;
 	    printf " - %-17s = %-60s\n" \
-		   "${msg_alsa_devname}" "${alsa_dev_label}" 1>&2;
+		   "${MSG_ALSA_DEVNAME}" "${alsa_dev_label}" 1>&2;
 	    printf " - %-17s = %-60s\n" \
-		   "${msg_alsa_ifname}" "${alsa_if_label}" 1>&2;
+		   "${MSG_ALSA_IFNAME}" "${alsa_if_label}" 1>&2;
 	    printf " - %-17s = %-60s\n" \
-		   "${msg_alsa_uacclass}" "${alsa_if_uacclass}" 1>&2;
+		   "${MSG_ALSA_UACCLASS}" "${alsa_if_uacclass}" 1>&2;
 	    printf " - %-17s = %-60s\n" \
-		   "${msg_alsa_chardev}" "${alsa_if_chardev}" 1>&2;
+		   "${MSG_ALSA_CHARDEV}" "${alsa_if_chardev}" 1>&2;
 	    ## when OPT_SAMPLERATES is set alsa_if_formats might
 	    ## contain multiple lines so print the header first
 	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
 		formatcounter=0
+		MSG_ALSA_ENCODINGFORMATS="rates per format"
 		printf " - %-17s = " \
-		       "${msg_alsa_encodingformats}" 1>&2;
+		       "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
 		while IFS="\n" read -r line; do
 		    (( formatcounter++ ))
 		    if [[ ${formatcounter} -gt 1 ]]; then 
@@ -577,17 +557,16 @@ ${MSG_ERROR_UNEXPECTED}"
 		## strip the last comma
 		formats=${formats%,*}
 		printf " - %-17s = %-60s\n" \
-		       "${msg_alsa_encodingformats}" \
+		       "${MSG_ALSA_ENCODINGFORMATS}" \
 		       "${formats}" 1>&2;		
 	    fi
 	    
 	    printf " - %-17s = %-60s\n" \
-		   "${msg_alsa_monitorfile}" "${alsa_if_monitorfile}" 1>&2;
+		   "${MSG_ALSA_MONITORFILE}" "${alsa_if_monitorfile}" 1>&2;
 	    printf "\n"
 	fi
 
     done
-
 }
 
 function get_locking_process() {
@@ -1060,7 +1039,6 @@ ALSA_IF_LABELS+=(["uo"]="${UAC} ${ALSA_IF_LABELS[do]}")
 ALSA_NON_DO_IF="${ALSA_IF_LABELS[ao]}"
 ALSA_NON_UO_IF="Non-UAC ${ALSA_IF_LABELS[do]}"
 
-
 ## USB_SYNC_TYPEs
 ## strings alsa uses for UAC endpoint descriptors.
 ## one of *sync_types "NONE", "ASYNC", "ADAPTIVE" or "SYNC" according
@@ -1107,6 +1085,17 @@ MSG_ERROR_DEVICE_BUSY="error: can't determine because device is in use"
 MSG_ERROR_DETERMINE_FORMATS="error: can't determine"
 MSG_ERROR_CHARDEV_NOFORMATS="can't determine: character device error"
 MSG_ERROR_CHARDEV_NOT_ACCESSIBLE="error: not accessible"
+## construct a list with the properties of the current
+## interface if `OPT_QUIET' is not set
+MSG_ALSA_DEVNAME="device name"
+MSG_ALSA_CODECNAME="codec name"
+MSG_ALSA_IFNAME="interface name"
+MSG_ALSA_UACCLASS="usb audio class"
+MSG_ALSA_CHARDEV="character device"
+MSG_ALSA_ENCODINGFORMATS="encoding formats"
+MSG_ALSA_PACKINGFORMATS="packing formats"
+MSG_ALSA_SAMPLERATES="sample rates"
+MSG_ALSA_MONITORFILE="monitor file"
 
 ## command line options
 ### optional input parameters, the ones with `:' need an argument
