@@ -37,27 +37,20 @@ CONF_MPD_NETWORK_PORT_DEFAULT="6600"
 MAX_PLAYLIST_LENGTH_DEFAULT="16384"
 
 
-function echo_stderr() {
-    printf "%s\n" "$@" 1>&2; 
-}
-
 function die() {
-    echo_stderr "\nError in ${APP_NAME_MPDCONFIGURE} (v${APP_VERSION}): $@"
+    printf "\nError in %s (v%s): %s\n" \
+	   "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "$@" 1>&2;
     exit 1
 }
 
 function debug_configure() {
-    echo_stderr "DEBUG ${APP_NAME_MPDCONFIGURE} *** $@"    
+    printf "DEBUG %s *** %s.\n"  "${APP_NAME_MPDCONFIGURE}" "$@" 1>&2;
 }
 
 function debug_function() {
     printf "DEBUG %-18s:\n" "${APP_NAME_MPDCONFIGURE}" 1>&2;
     printf "\tentering function \`%s',\n" "$1" 1>&2;
-    printf "\twith arguments \`%s'\n" "$2" 1>&2;
-}
-
-function inform() {
-    echo_stderr "$@\n"
+    printf "\twith arguments \`%s'.\n" "$2" 1>&2;
 }
 
 
@@ -79,7 +72,7 @@ function write_error() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_configure "${msg}\n${MSG_TAB}Will display the generated contents instead."
 
-    inform "${CONF_CONTENTS}"
+    printf "%s\n" "${CONF_CONTENTS}" 1>&2;
     die "${msg}"
 }
 
@@ -138,7 +131,7 @@ but is not writable."
 	fi
 	## is writable, prompt to overwrite
 	msg="${MSG_TAB}Original ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' exists."
-	inform "${msg}"
+	printf "%s\n" "${msg}" 1>&2;
 	## only prompt when OVERWRITE_EXISTING_CONFFILE is not set
 	[[ ! -z "${DEBUG}" ]] && \
 	    debug_configure "OVERWRITE_EXISTING_CONFFILE: \`${OVERWRITE_EXISTING_CONFFILE}'"
@@ -149,7 +142,8 @@ echo -e "${overwrite}")"
 	    ## if prompt returns (downcased) `yes' then overwrite the file
 	    if ! [[ "${overwrite,,}" = "yes" ]]; then
 		## user choose no to overwrite; exit with message
-		inform "Not overwriting existing ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}'."
+		printf "NOTE:\n  Not overwriting existing %s \`%s'.\n" \
+		       "${MSG_MPD_CONFFILE}" "${MPD_CONFFILE}" 1>&2;
 		exit 0
 	    fi
 	fi
@@ -188,61 +182,93 @@ function fetch_alsa_hwaddresses() {
     ## ALSA_AIF_HWADDRESS and ALSA_AIF_DEVLABEL.
     [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
     
-    ## prompt when multiple alsa interfaces are found
-    msg_multiple_alsahw="${MSG_TAB}Multiple interfaces found."
-
     ## when more than one matching output device is found and
-    ## USER_PROMPTS is not set, prompt the user to select one,
-    ## defaults to the first device found.
-
-    ## put the result of alsa-capabilities in an array
-    return_alsa_interface
-
-    [[ ! -z ${DEBUG} ]] && \
-	debug_configure "number of returned alsa interfaces: ${#ALSA_AIF_HWADDRESSES[@]}"
-
+    ## DISABLE_PROMPTS is not set, prompt the user to select one,
+    ## otherwise use the first device found.
     prompt_messages=()
-    selectedkey=
-    default_aif_hwaddress="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
+    selected_key=0
+    
+    ## call alsa-capabilities for filling up the array ALSA_AIF_HWADDRESSES
+    return_alsa_interface
+    if [[ $? -ne 0 ]]; then
+	## something went wrong in return_alsa_interface
+	printf "Error getting results from \`return_alsa_interface'.\n" 1>&2;
+	return 1
+    else
+	interface_count=${#ALSA_AIF_HWADDRESSES[@]}
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "number of returned alsa interfaces: \`${interface_count}'."
+	case ${interface_count} in
+	    0)
+		printf "\`return_alsa_interface' returned zero (0) interfaces.\n" "${res}" 1>&2;
+		return 1
+		;;
+	    1)
+		## single interface found; use it
+		selected_key=0
+		;;
+	    *)
+		## multiple interfaces found; prompt the user or use
+		## the first one if DISABLE_PROMPTS is set
+		if [[ ! -z "${DISABLE_PROMPTS}" ]]; then
+		    selected_key=0
+		else
+		    ## display instructions for multiple interfaces and prompt
+		    ## to use that of the first available interface
+		        ## prompt when multiple alsa interfaces are found
+		    prompt_messages+=("Multiple interfaces found:")
 
-    if [[ ${#ALSA_AIF_HWADDRESSES[@]} -gt 1 ]]; then
-	if [[ -z "${USER_PROMPTS}" ]]; then
-	    ## display instructions for multiple interfaces and prompt
-	    #echo_stderr "${msg_multiple_alsahw}"
-	    #prompt="${MSG_MARGIN}>> Interface to use: "
-	    prompt_messages+=("Specify the hardware address of the interface you wish to use")
-	    prompt_messages+=("and press [ENTER] to confirm: ")
-	    msg_prompt="$(printf "\t%s\n" "${prompt_messages[@]}")"
-	    prompt="$(printf '%s\n%s\n' "${msg_multiple_alsahw}" \
-"${MSG_MARGIN}${msg_prompt}")"
-	    ## prompt the user to select a interface
-	    alsa_aif_hwaddress="$(read -e -p "${prompt}" \
+		    default_aif_hwaddress="${ALSA_AIF_HWADDRESSES[0]}"
+		    prompt_messages+=("   specify the hardware address of the interface you wish to use")
+		    prompt_messages+=("   for mpd and press [ENTER] to confirm: ")
+		    ## format the message
+		    prompt="$(printf "  %s\n" "${prompt_messages[@]}")"
+		    ## prompt the user to select a interface
+		    alsa_aif_hwaddress="$(read -e -p "${prompt}" \
 -i "${default_aif_hwaddress}" alsa_aif_hwaddress && \
 echo -e "${alsa_aif_hwaddress}")"
 
-	    [[ ! -z ${DEBUG} ]] && debug "user entered \`${alsa_aif_hwaddress}'."
-	    for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
-		## set the user selected key and exit loop
-		if [[ "${ALSA_AIF_HWADDRESSES[$key]}" = "${alsa_aif_hwaddress}" ]]; then
-		   let selectedkey=${key}
-		   break
+		    [[ ! -z ${DEBUG} ]] && debug "user entered \`${alsa_aif_hwaddress}'."
+		    for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
+			## set the user selected key and exit loop
+			if [[ "${ALSA_AIF_HWADDRESSES[$key]}" = "${alsa_aif_hwaddress}" ]]; then
+			    let selected_key=${key}
+			    break
+			fi
+		    done
+
+		    ## handle empty or invalid input
+		    msg=""
+		    if [[ "${ALSA_AIF_HWADDRESSES[$selected_key]}" \
+			      != "${alsa_aif_hwaddress}" ]]; then
+			prompt_messages=("  NOTE:")			
+			if [[ -z ${alsa_aif_hwaddress} ]]; then
+			    [[ ! -z ${DEBUG} ]] && debug "no hwaddress entered"
+			    msg="no hardware address "
+			else
+			    [[ ! -z ${DEBUG} ]] && \
+				debug "an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
+			    msg="an invalid hardware address (${alsa_aif_hwaddress})"
+			fi
+			prompt_messages+=("     Because ${msg} was entered, the script will use")
+			prompt_messages+=("     the first available audio interface: \`${ALSA_AIF_HWADDRESSES[${selected_key}]}'")
+			prompt_messages+=("  Please press [ENTER] to continue")
+			prompt="$(printf "%s\n" "${prompt_messages[@]}")"
+			res="$(read -e -p "${prompt}")"
+		    else
+			[[ ! -z ${DEBUG} ]] && \
+			    debug "chosen key \`${selected_key}' for \
+interface \`${ALSA_AIF_HWADDRESSES[${selected_key}]}'"
+		    fi
 		fi
-	    done
-	fi
+		;;	
+	esac
     fi
 
     ## store the hardware address and label for usage in audio_conf
-    if [[ -z ${selectedkey} ]]; then
-	[[ ! -z ${DEBUG} ]] && debug "no key selected, defaulting to 0"
-	let selectedkey=0
-	inform "The hardware address you've entered (${alsa_aif_hwaddress}) is invalid."
-	inform "Defaulting to the first available interface (${ALSA_AIF_HWADDRESSES[0]})"
-    fi
-    [[ ! -z ${DEBUG} ]] && \
-	debug "chosen key \`${selectedkey}' for interface \`${ALSA_AIF_HWADDRESSES[${selectedkey}]}'"
-    CONF_ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selectedkey}]}"
-    CONF_ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selectedkey}]} - \
-${ALSA_AIF_LABELS[${selectedkey}]}"
+    CONF_ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selected_key}]}"
+    CONF_ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selected_key}]} - \
+${ALSA_AIF_LABELS[${selected_key}]}"
 
 }
 
@@ -708,6 +734,9 @@ declare -a ALSA_AIF_LABELS=()
 
 ## for storing (potential) problems 
 declare -a PROBLEMS=()
+
+## set to non empty to disable prompting 
+DISABLE_PROMPTS="${DISABLE_PROMPTS:-}"
 
 ## source the config file if its present
 PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
