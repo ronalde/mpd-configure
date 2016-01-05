@@ -130,13 +130,21 @@ function check_existing_conffile() {
 	    return 1
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "conffile \`${mpd_conf_file}' exists and is writable"
+		debug_configure "conffile \`${mpd_conf_file}' exists and is writable"
+
+	    ## create a backup of the current config file
+	    if [[ ! -z ${NO_CONF_BACKUP} ]]; then 
+		TEMP_CONF_BACKUP="$(mktemp -p /tmp ${mpd_conf_file##*/}.XXXX)"
+		res="$(cp -av "${mpd_conf_file}" "${TEMP_CONF_BACKUP}")"
+		[[ ! -z ${DEBUG} ]] && \
+		    debug_configure "backup of existing conf file created in \`${TEMP_CONF_BACKUP}'."
+	    fi
 	    ## return the path to indicate it does exits and is writable
 	    printf "%s" "${mpd_conf_file}"
 	fi
     else
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "conffile \`${mpd_conf_file}' does not exist"
+	    debug_configure "conffile \`${mpd_conf_file}' does not exist"
 	## return success (but no path)
 	return 0
     fi
@@ -219,6 +227,9 @@ overwrite && echo -e "${overwrite}")"
 		    printf "\nNot overwriting existing %s \`%s'.\n" \
 			   "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
 		    mpd_conf_file="$(make_temp_conf)"
+		else
+		    printf " %s backup of existing %s created in \`%s'\n" \
+			   "-" "${MSG_MPD_CONFFILE}" "${TEMP_CONF_BACKUP}" 1>&2;
 		fi
 	    fi
 	fi
@@ -827,6 +838,7 @@ DISABLE_PROMPTS="${DISABLE_PROMPTS:-}"
 ## set to non empty to prevent the script form making an automic
 ## backup of an existing conf file
 NO_CONF_BACKUP="${NO_CONF_BACKUP:-}"
+TEMP_CONF_BACKUP=""
 
 ## source the config file if its present
 PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
