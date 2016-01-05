@@ -26,7 +26,7 @@ LANG=C
 APP_NAME_MPDCONFIGURE="mpd-configure"
 APP_URL="https://github.com/ronalde/${APP_NAME_MPDCONFIGURE}/"
 # version gets filled by sourcing alsa-capabilities
-APP_VERSION="${APP_VERSION:-0.7}"
+APP_VERSION="${APP_VERSION:-0.8}"
 
 ### defaults
 ## default network address to listen to
@@ -38,7 +38,7 @@ MAX_PLAYLIST_LENGTH_DEFAULT="16384"
 
 
 function die_configure() {
-    printf "\nError in %s (v%s): %s\n" \
+    printf "\nError in %s (v%s):\n%s\n" \
 	   "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "$@" 1>&2;
     exit 1
 }
@@ -54,103 +54,186 @@ function debug_function() {
 }
 
 
-function write_error() {
-    ## the conf file or dir ($1) is not writable and exists if ($2) is set. 
-    ## echo the contents of the generated conf file to std_out and
-    ## exit with error
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
-
-    path_notwritable="${1}"
-    path_exists="${2}"
-
-    if [[ -z ${path_exists} ]]; then
-	msg="\n${MSG_TAB}can't write to ${path_notwritable}"
-    else
-	msg="\n${MSG_TAB}although ${path_notwritable} exists, it is not writable."
-    fi
-    msg="${msg}\n${MSG_MARGIN}the ${MSG_MPD_CONFFILE} can't be saved."
-    [[ ! -z ${DEBUG} ]] && \
-	debug_configure "${msg}\n${MSG_TAB}Will display the generated contents instead."
-
-    printf "%s\n" "${CONF_CONTENTS}" 1>&2;
-    die_configure "${msg}"
-}
-
-
 function really_write() {
-    ## writes the contents of CONF_CONTENTS to MPD_CONFFILE
+    ## writes the contents of CONF_CONTENTS to the file specified in $1.
+    ## returns success or error with descriptive string
     [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
 
-    if [[ -z "${DRYRUN}" ]]; then
-	## do the actual writing
-	echo -e "${CONF_CONTENTS}" > "${MPD_CONFFILE}" && \
-	    msg="${MSG_DONE}" || die_configure "Could not write to \`${MPD_CONFFILE}': $?"
+    mpd_conffile="$1"
+    ## do the actual writing
+    #debug_configure "${CONF_CONTENTS}"
+    res="$(echo -e "${CONF_CONTENTS}" > "${mpd_conffile}")"
+    if [[ $? -ne 0 ]]; then
+	## return an error with descriptive message
+	printf "Could not write to \`%s'" "${mpd_conffile}"
+	return 1
     else
-	## dryrun enabled: display the contents of mpd_conffile
-	msg="DRYRUN: Not writing to ${MPD_CONFFILE}: \
-\n${CONF_CONTENTS} \
-\n${MSG_DONE_DRYRUN}"
+	## return the result
+	printf "\ndone! mpd configuration successfully file saved in \`%s'.\n" \
+	       "${mpd_conffile}"
     fi
-
-    ## display the result
-    printf "%s\n" "${msg}"
-
-    [[ ! -z "${DEBUG}" ]] && debug_configure "result: \`${msg}'"
-
 }
+
+function check_or_create_targetdir() {
+    ## checks if the parent directory for target mpd configuration $1
+    ## exists and is writable, otherwise attempts to create
+    ## it.
+    ## returns success or an error with descriptive string.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+
+    mpd_conf_file="$1"
+    mpd_conf_dir="$(dirname "${mpd_conf_file}")"
+    errors=()
+    
+    if [[ ! -d "${mpd_conf_dir}" ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "conf dir \`${mpd_conf_dir}' does not exist, try to create it"
+	res="$(mkdir -p "${mpd_conf_dir}" 2>&1)"
+	if [[ $? -ne 0 ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "error creating mpd_conf_dir \`${mpd_conf_dir}': \`${err}'"
+	    printf " %s can't create parent directory \`%s'.\n" \
+		   "-" "${mpd_conf_dir}"
+	    return 1
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "successfully created mpd_conf_dir \`${mpd_conf_dir}'"
+	    printf "%s" "${mpd_conf_dir}"
+	fi
+    else
+	[[ ! -z ${DEBUG} ]] && \
+		debug_configure "mpd_conf_dir \`${mpd_conf_dir}' already exists"
+	## conf dir exists, check if it writable
+	if [[ ! -w "${mpd_conf_dir}" ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "mpd_conf_dir \`${mpd_conf_dir}' already exists"
+	    printf " - no write permission in target directory \`%s'." "${mpd_conf_dir}"
+	    return 1
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "conf dir \`${mpd_conf_dir}' is writable"
+	    printf "%s" "${mpd_conf_dir}"
+	fi
+    fi
+}
+
+function check_existing_conffile() {
+    ## checks if target mpd configuration file $1 exists and is
+    ## writable.
+    ## returns success or an error with descriptive string.
+    mpd_conf_file="$1"
+    if [[ -f "${mpd_conf_file}" ]]; then
+	if  [[ ! -w "${mpd_conf_file}" ]]; then
+	    ## not writable, exit with error 
+	    printf " %s existing file \`%s' is present, but is not writable.\n" \
+		   "-" "${mpd_conf_file}"
+	    return 1
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "conffile \`${mpd_conf_file}' exists and is writable"
+	    ## return the path to indicate it does exits and is writable
+	    printf "%s" "${mpd_conf_file}"
+	fi
+    else
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "conffile \`${mpd_conf_file}' does not exist"
+	## return success (but no path)
+	return 0
+    fi
+}
+
+function make_temp_conf() {
+    ## makes a temporary file for storing the mpd configuration file.
+    ## returns the path to the created file or error.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+
+    ## try to make a temp file in /tmp 
+    tempfile="$(mktemp -p /tmp mpd.XXXX.conf)"
+    if [[ $? -ne 0 ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "Unable to create a temporary file \`${tempfile}'"
+	printf "  %s unable to create a temporary file \`%s'\n" \
+	       "-" "${tempfile}" 1>&2;
+	# TODO: print to std_out
+	die "Unable to create a temporary file \`${tempfile}'"
+    else
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "temporary file \`${tempfile}' created"
+	printf " %s will store it in a temporary file instead.\n"\
+	       "-" 1>&2;
+	## set a new target path 
+	mpd_conf_file="${tempfile}"
+	printf "%s" "${mpd_conf_file}"
+    fi
+}
+
+
 
 function write_conffile() {
-    ## prepares to write to the mpd configuration file.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    ## prepares to write to the target mpd configuration file specified by $1.
+    ## returns success or an error with descriptive string.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
-    msg=""
-    mpd_conf_dir="$(dirname ${MPD_CONFFILE})"
-
-    if [[ ! -d "${mpd_conf_dir}" ]]; then
-	[[ ! -z "${DEBUG}" ]] && debug_configure "conf dir does not exist, try to create it"
-	dirok="$(mkdir -p "${mpd_conf_dir}" 2>&1 >/dev/null)"
-	[[ ! -z ${dirok} ]] && \
-	    msg="Can't create directory \`${mpd_conf_dir}' which is necessary for storing \
-\n${MSG_MARGIN}${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}'."
+    declare -a errors
+    error_message=""
+    mpd_conf_file="$1"
+    existing_file=
+    mpd_confdir=""
+    maketemp=
+    existing_file="$(check_existing_conffile "${mpd_conf_file}")"
+    ## check if the file exists
+    if [[ $? -ne 0 ]]; then
+	## the file exists but is not writable
+	maketemp="${existing_file}"
     else
-	## conf dir exists, check if it writable
-	[[ -w "${mpd_conf_dir}" ]] || \
-	    msg="No write permission in directory \`${mpd_conf_dir}'."
-    fi
-
-    ## exit with error if this failed
-    [[ ! -z "${msg}" ]] && die_configure "\n${MSG_TAB}${msg}"
-    [[ ! -z "${DEBUG}" ]] && debug_configure "mpd_conf_dir ok: \`${mpd_conf_dir}'"
-    if [[ -f "${MPD_CONFFILE}" ]]; then
-	## conf file exists, check if its writable
-	if [[ ! -w "${MPD_CONFFILE}" ]]; then
-	    ## not writable, exit with error 
-	    msg="\n${MSG_TAB}Existing ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' is present, \
-but is not writable."
-	    die_configure "${msg}"
-	fi
-	## is writable, prompt to overwrite
-	msg="${MSG_TAB}Original ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' exists."
-	printf "%s\n" "${msg}" 1>&2;
-	## only prompt when OVERWRITE_EXISTING_CONFFILE is not set
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug_configure "OVERWRITE_EXISTING_CONFFILE: \`${OVERWRITE_EXISTING_CONFFILE}'"
-	if [[ -z ${OVERWRITE_EXISTING_CONFFILE} ]]; then
-	    prompt="${MSG_MARGIN}>> Overwrite it?: "
-	    overwrite="$(read -e -p "${prompt}" -i "Yes" overwrite && \
-echo -e "${overwrite}")"
-	    ## if prompt returns (downcased) `yes' then overwrite the file
-	    if ! [[ "${overwrite,,}" = "yes" ]]; then
-		## user choose no to overwrite; exit with message
-		printf "NOTE:\n  Not overwriting existing %s \`%s'.\n" \
-		       "${MSG_MPD_CONFFILE}" "${MPD_CONFFILE}" 1>&2;
-		exit 0
+	if [[ -z "${existing_file}" ]]; then
+	    ## new file, check the (parent) path
+	    target_dir_writable="$(check_or_create_targetdir "${mpd_conf_file}")"
+	    if [[ $? -ne 0 ]]; then 
+		maketemp="${target_dir_writable}"
 	    fi
 	fi
     fi
 
+    if [[ ! -z ${maketemp} ]]; then
+	## either existing file or new target directory is not writable
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "can't write to target file \`${mpd_conf_file}': \`${maketemp}'"
+	printf "\nError: unable to write to %s \`%s':\n" \
+	       "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
+	printf "%s\n" "${maketemp}" 1>&2;
+	mpd_conf_file="$(make_temp_conf)"
+    else 
+	## only prompt when OVERWRITE_EXISTING_CONFFILE is not set
+	if [[ ! -z ${existing_file} ]]; then 
+	    [[ ! -z "${DEBUG}" ]] && \
+		debug_configure "OVERWRITE_EXISTING_CONFFILE: \`${OVERWRITE_EXISTING_CONFFILE}'"
+	    if [[ -z ${OVERWRITE_EXISTING_CONFFILE} ]]; then
+		prompt="${MSG_MARGIN}>> Overwrite it?: "
+		overwrite="$(read -e -p "${prompt}" -i "Yes" \
+overwrite && echo -e "${overwrite}")"
+		## if prompt returns (downcased) `yes' then overwrite the file
+		if ! [[ "${overwrite,,}" =~ yes ]]; then
+		    ## user choose no to overwrite; try to save in temporary file, otherwise
+		    ## exit with message
+		    printf "\nNot overwriting existing %s \`%s'.\n" \
+			   "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
+		    mpd_conf_file="$(make_temp_conf)"
+		fi
+	    fi
+	fi
+    fi
     ## do the actual writing
-    fileok="$(really_write)"
+    fileok="$(really_write "${mpd_conf_file}")"
+    if [[ $? -ne 0 ]]; then
+	die "unspecified error"
+    else
+	printf " %s done ... the resulting %s saved in:\n" \
+	       "-" "${MSG_MPD_CONFFILE}" 1>&2;
+	## return the resulting file to the calling function
+	printf "%s" "${mpd_conf_file}"
+    fi 
+
 }
 
 
@@ -671,9 +754,13 @@ function do_configure() {
 
     ## displays the contents of CONF_CONTENTS or write them to
     ## `MPD_CONFFILE` if set
-    [[ -z "${MPD_CONFFILE}" ]] && \
-	printf "%s\n" "${CONF_CONTENTS}" ||  \
-	write_conffile
+    if [[ ! -z "${MPD_CONFFILE}" ]]; then
+	res="$(write_conffile "${MPD_CONFFILE}")"
+	printf "%s\n" "${res}"
+    else
+	## display the results (print to std_out)
+	printf "%s\n" "${CONF_CONTENTS}"
+    fi
 
 }
 
@@ -737,6 +824,9 @@ declare -a PROBLEMS=()
 
 ## set to non empty to disable prompting 
 DISABLE_PROMPTS="${DISABLE_PROMPTS:-}"
+## set to non empty to prevent the script form making an automic
+## backup of an existing conf file
+NO_CONF_BACKUP="${NO_CONF_BACKUP:-}"
 
 ## source the config file if its present
 PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
@@ -792,8 +882,7 @@ CONF_CONTENTS=""
 
 ## general messages and fixed strings
 MSG_MPD_CONFFILE="mpd configuration file"
-MSG_DONE="\n\n${MSG_MPD_CONFFILE} saved in \`${MPD_CONFFILE}'.\n"
-MSG_DONE_DRYRUN="\ndryrun mpd configuration done (not saved).\n"
+MSG_DONE="${MSG_MPD_CONFFILE} saved in \`${MPD_CONFFILE}'."
 MSG_TAB=" * "
 MSG_MARGIN="${MSG_TAB//\*/ }"
 MSG_CONF_LINESEP="$(printf '#%.0s' {1..76})"
