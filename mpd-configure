@@ -37,7 +37,7 @@ CONF_MPD_NETWORK_PORT_DEFAULT="6600"
 MAX_PLAYLIST_LENGTH_DEFAULT="16384"
 
 
-function die() {
+function die_configure() {
     printf "\nError in %s (v%s): %s\n" \
 	   "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "$@" 1>&2;
     exit 1
@@ -73,7 +73,7 @@ function write_error() {
 	debug_configure "${msg}\n${MSG_TAB}Will display the generated contents instead."
 
     printf "%s\n" "${CONF_CONTENTS}" 1>&2;
-    die "${msg}"
+    die_configure "${msg}"
 }
 
 
@@ -84,7 +84,7 @@ function really_write() {
     if [[ -z "${DRYRUN}" ]]; then
 	## do the actual writing
 	echo -e "${CONF_CONTENTS}" > "${MPD_CONFFILE}" && \
-	    msg="${MSG_DONE}" || die "Could not write to \`${MPD_CONFFILE}': $?"
+	    msg="${MSG_DONE}" || die_configure "Could not write to \`${MPD_CONFFILE}': $?"
     else
 	## dryrun enabled: display the contents of mpd_conffile
 	msg="DRYRUN: Not writing to ${MPD_CONFFILE}: \
@@ -119,7 +119,7 @@ function write_conffile() {
     fi
 
     ## exit with error if this failed
-    [[ ! -z "${msg}" ]] && die "\n${MSG_TAB}${msg}"
+    [[ ! -z "${msg}" ]] && die_configure "\n${MSG_TAB}${msg}"
     [[ ! -z "${DEBUG}" ]] && debug_configure "mpd_conf_dir ok: \`${mpd_conf_dir}'"
     if [[ -f "${MPD_CONFFILE}" ]]; then
 	## conf file exists, check if its writable
@@ -127,7 +127,7 @@ function write_conffile() {
 	    ## not writable, exit with error 
 	    msg="\n${MSG_TAB}Existing ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' is present, \
 but is not writable."
-	    die "${msg}"
+	    die_configure "${msg}"
 	fi
 	## is writable, prompt to overwrite
 	msg="${MSG_TAB}Original ${MSG_MPD_CONFFILE} \`${MPD_CONFFILE}' exists."
@@ -169,7 +169,7 @@ function command_not_found() {
 \n sudo apt-get install ${package}" || \
 	msg+="${instructions}"
 
-    die "${msg}"
+    die_configure "${msg}"
 
 }
 
@@ -365,7 +365,7 @@ function source_enabled_confs() {
     sed 's/^\([[:alnum:][:space:]_]*\)[[:space:]]*"\${\(.*\):-\(.*\)}"$/export \2="\${\2:-\3}"/' \
 	${SCRIPT_DIR}/confs-enabled/*.conf | grep -E ^export > "${tempconfs}"
     ## source it (needed for variable expansion)
-    source "${tempconfs}" || die "could not source \`${tempconfs}'"
+    source "${tempconfs}" || die_configure "could not source \`${tempconfs}'"
     ## remove it when DEBUG_CONFIGURE is not set
     [[ ! -z "${DEBUG}" ]] && \
 	debug_configure "sourced configuration values stored in \`${tempconfs}'.\n" || \
@@ -648,19 +648,19 @@ function do_configure() {
 
     ## get an array with available alsa hardware addresses
     fetch_alsa_hwaddresses
-    [[ $? -eq 0 ]] || die "error in fetch_alsa_hwaddresses."
+    [[ $? -eq 0 ]] || die_configure "error in fetch_alsa_hwaddresses."
 
     ## get and check paths
     get_mpd_musicdir
-    [[ $? -eq 0 ]] || die "error in get_mpd_musicdir."
+    [[ $? -eq 0 ]] || die_configure "error in get_mpd_musicdir."
 
     ## get and check paths
     get_mpd_userdir
-    [[ $? -eq 0 ]] || die "error in get_mpd_userdir."
+    [[ $? -eq 0 ]] || die_configure "error in get_mpd_userdir."
 
     ### perform automagic configuration
     perform_automagic
-    [[ $? -eq 0 ]] || die "error in perform_automagic."
+    [[ $? -eq 0 ]] || die_configure "error in perform_automagic."
 
     ## store conf snippets in `CONF_CONTENTS`
     header="$(conf_header)"
@@ -713,10 +713,10 @@ if [[ -f "${ALSA_CAPABILITIES_SCRIPT}" ]]; then
     if [[ $? -eq 0 ]]; then
 	[[ ! -z ${DEBUG} ]] && debug_configure "... done."
     else
-	die "error sourcing ALSA_CAPABILITIES_SCRIPT \`${ALSA_CAPABILITIES_SCRIPT}'."
+	die_configure "error sourcing ALSA_CAPABILITIES_SCRIPT \`${ALSA_CAPABILITIES_SCRIPT}'."
     fi
 else
-    die "required script \`${ALSA_CAPABILITIES_SCRIPT}' not found."
+    die_configure "required script \`${ALSA_CAPABILITIES_SCRIPT}' not found."
 fi
 
 ## ugly temporary hack; see github issue #8
@@ -749,7 +749,7 @@ fi
 
 ## for backwards compatibility
 [[ ! -z "${CONF_ZEROCONF_ENABLED}" ]] || [[ ! -z "${ENABLE_LASTFM}" ]] && \
-    die "configuration settings \`CONF_ZEROCONF_ENABLED' and
+    die_configure "configuration settings \`CONF_ZEROCONF_ENABLED' and
     \`ENABLE_LASTFM' \nare no longer valid. please consult \`README'."
 
 ## for backwards compatibility
