@@ -34,7 +34,7 @@
 LANG=C
 
 APP_NAME_AC="alsa-capabilities"
-APP_VERSION="0.6"
+APP_VERSION="0.7"
 
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
@@ -497,11 +497,18 @@ ${MSG_ERROR_UNEXPECTED}"
 	if [[ ! -z ${match} ]]; then
 	    ## put each encoding format and possibily the sample rates
 	    ## in an array
-	    alsa_if_formats+=("$(return_alsa_formats \
-"${alsa_if_hwaddress}" \
+	    alsa_if_formats=()
+	    formats_res_err=
+	    formats_res="$(return_alsa_formats \
+"${alsa_dev_nr}" \
+"${alsa_if_nr}" \
 "${alsa_if_type}" \
-"${alsa_if_streamfile}")")
-
+"${alsa_if_streamfile}" \
+"${alsa_if_chardev}")"
+	    if [[ $? -ne 0 ]]; then
+		formats_res_err=1
+	    fi 
+	    alsa_if_formats+=("${formats_res[@]}")
 	    alsa_if_title_label="${ALSA_IF_LABELS[${alsa_if_type}]}"
 	    ## reconstruct the label if it contained square brackets
 	    if [[ "${alsa_dev_label}" =~ .*${seperator_start}.* ]]; then
@@ -535,27 +542,38 @@ ${MSG_ERROR_UNEXPECTED}"
 		   "${MSG_ALSA_UACCLASS}" "${alsa_if_uacclass}" 1>&2;
 	    printf " - %-17s = %-60s\n" \
 		   "${MSG_ALSA_CHARDEV}" "${alsa_if_chardev}" 1>&2;
-	    ## when OPT_SAMPLERATES is set alsa_if_formats might
-	    ## contain multiple lines so print the header first
-	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
-		formatcounter=0
-		MSG_ALSA_ENCODINGFORMATS="rates per format"
-		printf " - %-17s = " \
-		       "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
-		while IFS="\n" read -r line; do
-		    (( formatcounter++ ))
-		    if [[ ${formatcounter} -gt 1 ]]; then 
-			printf "%-23s" " " 1>&2;
-		    fi
-		    printf "%-60s\n" "${line}" 1>&2;
-		done<<<"${alsa_if_formats[@]}"
-	    else
-		formats=$(printf "%s, " ${alsa_if_formats[@]})
-		## strip the last comma
-		formats=${formats%,*}
+	    if [[ ! -z ${formats_res_err} ]]; then 
+		## device is locked by an unspecified process
 		printf " - %-17s = %-60s\n" \
 		       "${MSG_ALSA_ENCODINGFORMATS}" \
-		       "${formats}" 1>&2;		
+		       "${MSG_ERROR_GETTINGFORMATS}"  1>&2;
+		printf "   %-17s   %-60s\n" \
+		       " " \
+		       "${formats_res[@]}"  1>&2;
+	    else
+		## when OPT_SAMPLERATES is set alsa_if_formats might
+		## contain multiple lines so print the header first
+		if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+		    formatcounter=0
+		    MSG_ALSA_ENCODINGFORMATS="rates per format"
+		    printf " - %-17s = " \
+			   "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
+		    while IFS="\n" read -r line; do
+			(( formatcounter++ ))
+			if [[ ${formatcounter} -gt 1 ]]; then 
+			    printf "%-23s" " " 1>&2;
+			fi
+			printf "%-60s\n" "${line}" 1>&2;
+		    done<<<"${alsa_if_formats[@]}"
+		else
+		    ## no sample rates
+		    formats=$(printf "%s, " ${alsa_if_formats[@]})
+		    ## strip the last comma
+		    formats=${formats%,*}
+		    printf " - %-17s = %-60s\n" \
+			   "${MSG_ALSA_ENCODINGFORMATS}" \
+			   "${formats}" 1>&2;		
+		fi
 	    fi
 	    printf " - %-17s = %-60s\n" \
 		   "${MSG_ALSA_MONITORFILE}" "${alsa_if_monitorfile}" 1>&2;
@@ -565,53 +583,84 @@ ${MSG_ERROR_UNEXPECTED}"
 }
 
 function get_locking_process() {
-    ## get the pid and name of the process accessing chardev $1, which
-    ## may be a file or a socket. Returns a descriptive string or a
-    ## notice with error.
+    ## return a string describing the parent command and PID of the
+    ## process locking the audio interface with card nr $1 and dev nr
+    ## $2 as indicated by its status file in /proc/asound. Only called
+    ## when there's an indication the device is actually locked.
+    ## returns an error status when its unable to find the parent process.
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
-    chardev_path="$1"
-    ## try fuser which returns the pid in std_out.
-    res="$(${CMD_FUSER} -v ${chardev_path} 2>&1)"
-    if [[ $? -ne 0 ]]; then
-	## real error; return it to calling function
-	printf "%s" "${res}"
+    alsa_card_nr="$1"
+    alsa_if_nr="$2"
+    proc_statusfile="/proc/asound/card${alsa_card_nr}/pcm${alsa_if_nr}p/sub0/status"
+    owner_pid=
+    parent_pid=
+    parent_cmd=
+
+    ## locking process indicated by `owner_pid` in /proc/asound/cardX/pcmYp/sub0/status
+    ## example `owner_pid   : 28022' is a child of the mpd parent process:
+    ##mpd(28017,mpd)-+-{decoder:flac}(28021)
+    ##               |-{io}(28019)
+    ##               |-{output:Peachtre}(28022)
+    ##               `-{player}(28020)
+    owner_pid_re="owner_pid[[:space:]]+:[[:space:]]+([0-9]+)"
+    while read -r line; do
+	if [[ "${line}" =~ ${owner_pid_re} ]]; then
+	    owner_pid="${BASH_REMATCH[1]}"
+	    break
+	fi
+    done<"${proc_statusfile}"
+    if [[ -z ${owner_pid} ]]; then
+	## strange, device seems unused
+	## TODO: handle situation
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME} called, but no owner_pid found in \`${proc_statusfile}'."
 	return 1
-    else   
+    else
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME}: \`${chardev_path}' is accessible"
-	## is in use, run again without v to get the pid
-	## fetch the process name
-	pnamepid=$(ps o cmd=,pid=$(${CMD_FUSER} ${chardev_path} 2>/dev/null))
-	res="$?"
-	## TODO: pnamedpid is always empty (2>/dev/null)
+	    debug "${FUNCNAME}: found owner_pid: \`${owner_pid}'."
+    fi 
+    ## look up parent process of locking process
+    ## `ps -q ${PID} -ejf` produces
+    ## UID        PID  PPID  PGID   SID  C STIME TTY          TIME CMD
+    ## mpd      28017     1 28017 28017 15 08:39 ?        00:10:36 /usr/bin/mpd --no-daemon
+    ## set arguments for ps command
+    psopts=(-q ${owner_pid})
+    ## we (possibly?) need the parent for the locking process, so both
+    ## e and f are needed
+    psopts+=(-ejf)
+    ## create an array for each output line of ps
+    ## double parenthesis are needed for proper array initialization
+    declare -a "ps_out_raw=($(${CMD_PS} "${psopts[@]}"))"
+    if [[ $? -ne 0 ]]; then
+	## should not happen
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME}: \`${chardev_path}' is in use; \
-ps returned: \`${pnamepid}"
-	if [[ ${res} -ne 0 ]]; then
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: ps returned error \`${res}'"
-	    printf "ps returned error \`%s'" "${res}"
+	    debug "${FUNCNAME}: owner_pid \`${owner_pid}' has no PPID."
+	return 1
+    else
+	## ps returned header line and at least one extra line, each
+	## with 10 values
+	## TODO: bit flaky?
+	if [[ ${#ps_out_raw[@]} -lt 20 ]]; then
+	    ## should not happen
+	    if [[ ! -z ${DEBUG} ]]; then 
+		debug "${FUNCNAME}: ps returned no error but neither a value for owner_pid \`${owner_pid}'."
+		debug "ps_out_raw contains ${#ps_out_raw[@]} items: \`${ps_out_raw[@]}' "
+	    fi
+	    debug "IFS: \`${IFS}'"
 	    return 1
 	else
-	    if [[ -z ${pnamepid} ]]; then
-		## process not found
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME}: ps returned no error and no processes"
-		printf "ps found no processess"
-		return 1
-	    else
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME}: ps returned \`${pnamepid}'"
-		pname="${pnamepid// *}" # return anything before the space
-		pid="${pnamepid//* }"
-		## return the formatted string
-		printf "(in use by \`%s' with pid \`%s')" "$(basename ${pname})" "${pid}"
-	    fi
+	    ## get the array items (fields) containing the ppid and pcmd
+	    parent_pid="${ps_out_raw[-10]}"
+	    parent_cmd="${ps_out_raw[-2]}"
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME}: \`${owner_pid}' has PPID \`${parent_pid}', PCMD \`${parent_cmd}'."
+	    ## return formatted string to calling function
+	    printf "by command %s with PID %s" "${parent_cmd}" "${parent_pid}"
 	fi
-
     fi
+
 }
 
 function return_alsa_samplerates() {
@@ -619,7 +668,7 @@ function return_alsa_samplerates() {
     ## specified non-uac interface ($1) and encoding format ($2)
     ## between minimum ($3) and maximum ($4) supported rates. returns
     ## space seperated list of valid rates.
-
+    ## TODO: document
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
     
@@ -630,8 +679,22 @@ function return_alsa_samplerates() {
     rates=(${SAMPLERATES[@]})
     rates=${rates[@]/$rate_min}
     rates=${rates[@]/$rate_max}
-
     hw=""
+
+    ## sanity checks
+    if [[ ${rate_min} -ge ${rate_max} ]]; then
+	## something went wrong
+	debug "rate_min (${rate_min}) -ge rate_max (${rate_max})."
+	return 1
+    elif [[ -z "${rawformats[0]}" ]]; then
+	## something went wrong
+	debug "empty rawformats[0]: ${rawformats[0]}"
+	for i in "${!rawformats[0]}"; do
+	    debug "$i: ${rawformats[$i]}"
+	done
+	return 1
+    fi
+    
     [[ ! -z ${DEBUG} ]] && \
 	debug "getting sample rates for device \`${alsa_if_hwaddress}' using format \`${format}'."
     declare -a aplay_opts_pre
@@ -677,12 +740,16 @@ function return_alsa_formats() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
-    alsa_hw_device="$1"
-    alsa_if_type="$2"
-    alsa_if_streamfile="$3"
+    alsa_card_nr="$1"
+    alsa_if_nr="$2"
+    alsa_if_type="$3"
+    alsa_if_streamfile="$4"
+    alsa_if_chardev="$5"
     format=
     rawformat=
-    declare -a formats
+    rate_min=0
+    rate_max=0
+    formats=()
 
     if [[ "${alsa_if_type}" = "uo" ]]; then
 	## uac type interface: use its streamfile
@@ -729,26 +796,34 @@ function return_alsa_formats() {
 	done<"${alsa_if_streamfile}" 
 
     else 
-	## non-uac type: play psuedo random non-audio data using
+	## non-uac type: whe interface is not locked, play psuedo random non-audio data using
 	## aplay while capturing error lines starting with `- ' to
 	## determine formats
-	aplay_opts=(-D ${alsa_hw_device})
-	aplay_opts+=(-c 2)
-	aplay_opts+=(-f MPEG)
-	aplay_opts+=(-N)
+	aplay_opts=(--device=hw:${alsa_card_nr},${alsa_if_nr})
+	aplay_opts+=(--channels=2)
+	aplay_opts+=(--format=MPEG)
+	aplay_opts+=(--nonblock)
 	aplay_opts+=(--dump-hw-params)
-	
-	rawformats=()
+	declare -a rawformats
+	device_busy_re=".*aplay.*main.*audio.*error(.*)"
+	device_busy_error=0
 	format_re="^FORMAT:[[:space:]]*(.*)"
 	rate_re="^RATE:[[:space:]]+\[([0-9]+)[[:space:]]([0-9]+)\]"
 	aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
-LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null)"
+LANG=C ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
 	while read -r line; do
-	    if [[ "${line}" =~ ${format_re} ]]; then
+	    if [[ "${line}" =~ ${device_busy_re} ]]; then
+		rawformats+=("dummy")
+		device_busy_error=1
+		break
+	    elif  [[ "${line}" =~ ${format_re} ]]; then
 		rawformats+=(${BASH_REMATCH[1]})
-		if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+		if [[ ! -z ${OPT_SAMPLERATES} ]]; then
+		    ## if sample rates are needed, proceed to the line
+		    ## containing RATE
 		    continue
 		else
+		    ## no sample rates are needed; exit this loop
 		    break
 		fi
 	    fi
@@ -760,30 +835,53 @@ LANG=C ${CMD_APLAY} ${aplay_opts[@]} 2>&1 >/dev/null)"
 	    fi
 	done <<< "${aplay_out}"
 
-	if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
-	    declare -a sorted_rates
-	    ## put the minimum and maximum rates in the array
-	    rates_supported=("${rate_min}Hz" "${rate_max}Hz")
-	    rates_supported+=("$(return_alsa_samplerates \
-"${alsa_if_hwaddress}" "${rawformats[0]}" "${rate_min}" "${rate_max}")")
-	    IFS=$'\n' sorted_rates=($(sort -u -n <<<"${rates_supported[*]}"))
+	if [[ ${device_busy_error} -eq 1 ]]; then 
+	    ## aplay returned an error: device is locked
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "#### sorted_rates returned: $(printf "%s " "${sorted_rates[@]}")"
-	    rates="$(printf "%s " "${sorted_rates[@]}")"
-	    for rawformat in ${rawformats[@]}; do 
-		format="$(printf "%-18s" "${rawformat}"): ${rates}"
-		formats+=(${format})
-	    done
+		debug "aplay returned error indicating device is locked"
+	    res="$(get_locking_process "${alsa_card_nr}" "${alsa_if_nr}")"
+	    if [[ $? -ne 0 ]]; then
+		## received an unexpected error
+		return 1
+	    else
+		## received the (parent) cmd and pid for the locking process
+		printf "%s" "${res}"
+	    fi
+	    return 1
 	else
-	    formats=(${rawformats[@]})
-	fi 
-    fi
-    if [[ ${#formats[@]} -gt 0 ]]; then 
-	printf "%s\n" "${formats[@]}"
-    else
-	printf "${MSG_ERROR_GETTINGFORMATS}"
+	    ## aplay returned no locking error
+	    ## formats (and minimum/maximum sample rates gathered, check if
+	    ## all sample rates should be checked
+	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
+		## warning: slowness ahead
+		declare -a sorted_rates
+		## everything is right
+		rates_supported=("$(return_alsa_samplerates \
+"${alsa_if_hwaddress}" "${rawformats[0]}" "${rate_min}" "${rate_max}")")
+		if [[ $? -ne 0 ]]; then
+		    debug "return_alsa_samplerates returned \`${rates_supported[@]}'"
+		    return 1
+		fi
+		## add the minimum and maximum rates in the array, free of charge
+		rates_supported+=("${rate_min}Hz" "${rate_max}Hz")
+		IFS=$'\n' sorted_rates=($(sort -u -n <<<"${rates_supported[*]}"))
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "#### sorted_rates returned: $(printf "%s " "${sorted_rates[@]}")"
+		rates="$(printf "%s " "${sorted_rates[@]}")"
+		for rawformat in ${rawformats[@]}; do 
+		    format="$(printf "%-18s" "${rawformat}"): ${rates}"
+		    formats+=(${format})
+		done
+		
+	    else
+		formats=(${rawformats[@]})
+	    fi 
+	fi
     fi
     
+    if [[ ${#formats[@]} -gt 0 ]]; then 
+	printf "%s\n" "${formats[@]}"
+    fi
 }
 
 
@@ -992,7 +1090,8 @@ function return_alsa_interface() {
     if [[ $? -ne 0 ]]; then
 	die "The script cannot continue without aplay."
     fi
-
+    CMD_PS=$(which ps || command_not_found "ps" "procps")
+    
     ## parse command line arguments
     analyze_command_line "$@"
 
@@ -1004,7 +1103,6 @@ function return_alsa_interface() {
 OPT_DISABLE_PULSEAUDIO set, but helper script \
 \`pulseaudio-helper' not found.\n" 1>&2;
 	else
-	    CMD_FUSER=$(which fuser || command_not_found "fuser" "psmisc")
 	    source pulseaudio-helper
 	    pulseaudio_evaluate_stopping
 	fi
@@ -1128,7 +1226,7 @@ declare -A UO_EP_LABELS=( ["${UO_EP_NONE_FILTER}"]="${UO_EP_NONE_LABEL}"
 ## system messages
 MSG_PROP_NOTAPPLICABLE="(n/a)"
 MSG_PROP_NOTAVAILABLE="(none)"
-MSG_ERROR_GETTINGFORMATS="can't detect formats and rates"
+MSG_ERROR_GETTINGFORMATS="can't detect formats or rates because device is locked"
 MSG_ERROR_NOFILE="is not a file or is not accessible."
 MSG_ERROR_UNEXPECTED="THIS SHOULD NOT HAPPEN."
 MSG_APLAY_ERROR_NOSOUNDCARDS="aplay did not find any soundcard."
