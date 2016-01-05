@@ -25,7 +25,8 @@
 LANG=C
 APP_NAME_MPDCONFIGURE="mpd-configure"
 APP_URL="https://github.com/ronalde/${APP_NAME_MPDCONFIGURE}/"
-APP_VERSION="0.5"
+# version gets filled by sourcing alsa-capabilities
+APP_VERSION="${APP_VERSION:-0.7}"
 
 ### defaults
 ## default network address to listen to
@@ -626,6 +627,10 @@ function do_configure() {
     ## get and check paths
     get_mpd_musicdir
     [[ $? -eq 0 ]] || die "error in get_mpd_musicdir."
+
+    ## get and check paths
+    get_mpd_userdir
+    [[ $? -eq 0 ]] || die "error in get_mpd_userdir."
 
     ### perform automagic configuration
     perform_automagic
