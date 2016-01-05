@@ -8,38 +8,25 @@ high resolution.
 
 With default settings the script uses the first available audio
 interface, and has automagic procedures for things like the music
-directory, the number of items in the music direcory and the UPNP
-name. When multiple audio interfaces are found, the user is presented
-with a choice
+directory and directory where files are stored, the number of items in
+the music direcory and the UPNP name. When multiple audio interfaces
+are found, the user is presented with a choice.
 
-All configuration parameters for mpd are available in configuration
-snippet files in the `./confs-available/` directory. By symlinking
-them to the `./confs-enabled/` directory, they will be included by the
-`mpd-configure` script in the resulting mpd configuration file. Any
-bash variable in those configuration snippets, will be expanded to
-their calculated values by the script.
+Apart from standard settings all configuration parameters for mpd are
+available in configuration snippet files in the `./confs-available/`
+directory. By symlinking them to the `./confs-enabled/` directory,
+they will be included by the `mpd-configure` script in the resulting
+mpd configuration file. Any bash variable in those configuration
+snippets, will be expanded to their calculated values by the
+script. Any setting may be specified on the command line, using
+(`CONF_MPD_MUSICDIR=/some/path ./mpd-configure` or in the file
+`./mpd-configure.conf`.
 
 It relies on the accompanying bash script `alsa-capabilities` for
 getting information about the available audio output interfaces from
 alsa. Also offered is the `mpd-monitor' script which shows which parts
 of the audio chain are configured for bit perfect audio playback.
 
-
-
-About the mpd-monitor helper script
------------------------------------
-
-The actual configuration of the system may be inspected/monitored by
-the helper script `mpd-monitor`, which can be executed as follows:
-
-    bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")
-
-Or, when mpd is running on a remote host to which you have (key based)
-ssh access, execute:
-
-    ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
-
-The mpd-monitor script is in a development state.
 
 About the alsa-capabilities helper script
 -----------------------------------------
@@ -72,12 +59,28 @@ have ssh access, use:
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")"
 
 Proper detection of the sample rates each format supports on an
-interface currently is very slow. It therefore is a non-default
-option, `-s` or `--samplerates`. It is recommended to mute all output
-interfaces because the script will play (pseudo) random noise on each
-interface. Usage:
+interface currently is very slow for non-USB Audio cards. It therefore
+is a non-default option, `-s` or `--samplerates`. It is recommended to
+mute all output interfaces because the script will play (pseudo)
+random noise on each interface. Usage:
 
     bash alsa-capabilities -s   
+
+
+About the mpd-monitor helper script
+-----------------------------------
+
+The actual configuration of the system may be inspected/monitored by
+the helper script `mpd-monitor`, which can be executed as follows:
+
+    bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")
+
+Or, when mpd is running on a remote host to which you have (key based)
+ssh access, execute:
+
+    ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
+
+The mpd-monitor script is in a development state.
 
 
 Background
