@@ -12,17 +12,45 @@ directory and directory where files are stored, the number of items in
 the music direcory and the UPNP name. When multiple audio interfaces
 are found, the user is presented with a choice.
 
+````
+## run the script will default settings and store the resulting
+## mpd configuration file in mympd.conf:
+bash mpd-configure > mympd.conf
+````
+
+
 Apart from standard settings all configuration parameters for mpd are
 available in configuration snippet files in the `./confs-available/`
 directory. By symlinking them to the `./confs-enabled/` directory,
 they will be included by the `mpd-configure` script in the resulting
 mpd configuration file. Any bash variable in those configuration
 snippets, will be expanded to their calculated values by the
-script. Any setting may be specified on the command line, using
-(`CONF_MPD_MUSICDIR=/some/path ./mpd-configure` or in the file
-`./mpd-configure.conf`.
+script. Any setting may be specified in the file
+`./mpd-configure.conf` or on the command line like so:
 
-It relies on the accompanying bash script `alsa-capabilities` for
+````
+## run the script with two options set on the command line which
+## sets the `music_directory` paramater to `/srv/media/music` and
+## saves the result in `/etc/mpd.conf`:
+CONF_MPD_MUSICDIR="/srv/media/music" \
+CONF_MPD_CONFFILE=/etc/mpd.conf \
+./mpd-configure
+````
+
+By default `mpd-configure` prompts the user when the specified file
+already exists, and makes a backup of any existing file.
+
+A fully automated example which does not prompt the user, uses the
+first available (by setting `DISABLE_PROMPTS`) USB Audio Class
+interface (by setting `OPT_LIMIT_UO`) and sets some paths:
+
+````
+DISABLE_PROMPTS=True OPT_LIMIT_UO=True CONF_MPD_CONFFILE=/etc/mpd.conf \
+CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
+bash mpd-configure
+````
+
+`mpd-configure` relies on the accompanying bash script `alsa-capabilities` for
 getting information about the available audio output interfaces from
 alsa. Also offered is the `mpd-monitor' script which shows which parts
 of the audio chain are configured for bit perfect audio playback.
