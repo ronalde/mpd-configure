@@ -185,7 +185,8 @@ function backup_original_conf() {
 	    printf "error creating a temporary file which should hold the backup."
 	    return 1
 	else
-	    debug_configure "will create backup in \`${TEMP_CONF_BACKUP}'."
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "will create backup in \`${TEMP_CONF_BACKUP}'."
 	fi
     fi
     res="$(cp -av "${mpd_conf_file}" "${TEMP_CONF_BACKUP}")"
@@ -365,7 +366,8 @@ function fetch_alsa_hwaddresses() {
 -i "${default_aif_hwaddress}" alsa_aif_hwaddress && \
 echo -e "${alsa_aif_hwaddress}")"
 
-		    [[ ! -z ${DEBUG} ]] && debug "user entered \`${alsa_aif_hwaddress}'."
+		    [[ ! -z ${DEBUG} ]] && \
+			debug_configure "user entered \`${alsa_aif_hwaddress}'."
 		    for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
 			## set the user selected key and exit loop
 			if [[ "${ALSA_AIF_HWADDRESSES[$key]}" = "${alsa_aif_hwaddress}" ]]; then
@@ -380,11 +382,12 @@ echo -e "${alsa_aif_hwaddress}")"
 			      != "${alsa_aif_hwaddress}" ]]; then
 			prompt_messages=("  NOTE:")			
 			if [[ -z ${alsa_aif_hwaddress} ]]; then
-			    [[ ! -z ${DEBUG} ]] && debug "no hwaddress entered"
+			    [[ ! -z ${DEBUG} ]] && \
+				debug_configure "no hwaddress entered"
 			    msg="no hardware address "
 			else
 			    [[ ! -z ${DEBUG} ]] && \
-				debug "an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
+				debug_configure "an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
 			    msg="an invalid hardware address (${alsa_aif_hwaddress})"
 			fi
 			prompt_messages+=("     Because ${msg} was entered, the script will use")
@@ -394,7 +397,7 @@ echo -e "${alsa_aif_hwaddress}")"
 			res="$(read -e -p "${prompt}")"
 		    else
 			[[ ! -z ${DEBUG} ]] && \
-			    debug "chosen key \`${selected_key}' for \
+			    debug_configure "chosen key \`${selected_key}' for \
 interface \`${ALSA_AIF_HWADDRESSES[${selected_key}]}'"
 		    fi
 		fi
