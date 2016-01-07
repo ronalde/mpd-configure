@@ -284,8 +284,22 @@ run the script and start `mpd` using the script generated
 
 ### Usage from within another bash or sh script
 
-See the file:
-. [./examples/bash-example.sh](https://github.com/ronalde/mpd-configure/tree/master/examples/bash-example.sh)
+
+bash examples/bash-example.sh hw:1,0
+The bash script [./examples/bash-example.sh](https://github.com/ronalde/mpd-configure/tree/master/examples/bash-example.sh) demonstrates the way alsa-capabilities can be used from another bash script.
+
+This demo script returns the monitoring file of the file specified as an argument:
+
+````bash
+bash examples/bash-example.sh hw:1,0
+````
+
+Result:
+````bash
+the audio card with alsa hardware address hw:1,0 can be monitored with:
+/proc/asound/card1/stream0
+````
+
 
 ### Usage from within python
 
