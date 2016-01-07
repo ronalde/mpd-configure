@@ -291,7 +291,7 @@ See the file:
 
 Assuming your in the `mpd-configure` directory, run:
 ````bash
-    pyhton examples/get-interfaces.py
+    python examples/get-interfaces.py
 ````
 
 The python script
