@@ -13,8 +13,25 @@ directory where files are stored, the number of items in the music
 direcory and the UPNP name. When multiple audio interfaces are found,
 the user is presented with a choice.
 
+
 Basic usage
 -----------
+
+### Getting the script
+
+The latest stable version of the script may be cloned from github using git:
+````bash
+git clone https://github.com/ronalde/mpd-configure.git
+````
+
+Or downloaded and untarred in the current directory:
+````bash
+mkdir /tmp/mpd-configure
+cd /tmp/mpd-configure
+wget http://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
+````
+
+### Running the script
 
 Run the script with default settings and print the resulting mpd
 configuration file to stdout:
