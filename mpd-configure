@@ -57,7 +57,7 @@ function debug_function() {
 function really_write() {
     ## writes the contents of CONF_CONTENTS to the file specified in $1.
     ## returns success or error with descriptive string
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     mpd_conffile="$1"
     ## do the actual writing
@@ -131,14 +131,6 @@ function check_existing_conffile() {
 	else
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "conffile \`${mpd_conf_file}' exists and is writable"
-
-	    ## create a backup of the current config file
-	    if [[ ! -z ${NO_CONF_BACKUP} ]]; then 
-		TEMP_CONF_BACKUP="$(mktemp -p /tmp ${mpd_conf_file##*/}.XXXX)"
-		res="$(cp -av "${mpd_conf_file}" "${TEMP_CONF_BACKUP}")"
-		[[ ! -z ${DEBUG} ]] && \
-		    debug_configure "backup of existing conf file created in \`${TEMP_CONF_BACKUP}'."
-	    fi
 	    ## return the path to indicate it does exits and is writable
 	    printf "%s" "${mpd_conf_file}"
 	fi
@@ -173,6 +165,39 @@ function make_temp_conf() {
 	mpd_conf_file="${tempfile}"
 	printf "%s" "${mpd_conf_file}"
     fi
+}
+
+function backup_original_conf() {
+    ## create a backup of the current config file $1
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    
+    mpd_conf_file="$1"
+
+    if [[ ! -z ${TEMP_CONF_BACKUP} ]]; then
+	if [[ -f "${TEMP_CONF_BACKUP}" ]]; then
+	    printf "TEMP_CONF_BACKUP specified to \`%s' but already exists; not overwriting." \
+		   "${TEMP_CONF_BACKUP}"
+	    return 1
+	fi
+    else 
+	TEMP_CONF_BACKUP="$(mktemp -p /tmp ${mpd_conf_file##*/}.XXXX)"
+	if [[ $? -ne 0 ]]; then
+	    printf "error creating a temporary file which should hold the backup."
+	    return 1
+	else
+	    debug_configure "will create backup in \`${TEMP_CONF_BACKUP}'."
+	fi
+    fi
+    res="$(cp -av "${mpd_conf_file}" "${TEMP_CONF_BACKUP}")"
+    if [[ $? -ne 0 ]]; then
+	## error creating a backup with copy
+	printf "${res}"
+	return 1
+    else	    
+	printf "%s" "${TEMP_CONF_BACKUP}"
+    fi
+    
+    
 }
 
 
@@ -213,23 +238,36 @@ function write_conffile() {
 	mpd_conf_file="$(make_temp_conf)"
     else 
 	## only prompt when OVERWRITE_EXISTING_CONFFILE is not set
-	if [[ ! -z ${existing_file} ]]; then 
+	if [[ ! -z ${existing_file} ]]; then
+	    printf " %s existing %s found in \`%s':\n" \
+		   "-" "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
 	    [[ ! -z "${DEBUG}" ]] && \
 		debug_configure "OVERWRITE_EXISTING_CONFFILE: \`${OVERWRITE_EXISTING_CONFFILE}'"
-	    if [[ -z ${OVERWRITE_EXISTING_CONFFILE} ]]; then
-		prompt="${MSG_MARGIN}>> Overwrite it?: "
+	    if [[ ! -z ${OVERWRITE_EXISTING_CONFFILE} ]]; then
+		printf "     user requested overwriting of original conf file.\n" 1>&2;
+	    else 
+		prompt="     overwrite it (while making a backup of the original)?: "
 		overwrite="$(read -e -p "${prompt}" -i "Yes" \
 overwrite && echo -e "${overwrite}")"
 		## if prompt returns (downcased) `yes' then overwrite the file
 		if ! [[ "${overwrite,,}" =~ yes ]]; then
-		    ## user choose no to overwrite; try to save in temporary file, otherwise
+		    ## user chose no to overwrite; try to save in temporary file, otherwise
 		    ## exit with message
 		    printf "\nNot overwriting existing %s \`%s'.\n" \
 			   "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
 		    mpd_conf_file="$(make_temp_conf)"
 		else
-		    printf " %s backup of existing %s created in \`%s'\n" \
-			   "-" "${MSG_MPD_CONFFILE}" "${TEMP_CONF_BACKUP}" 1>&2;
+		    temp_backup_file="$(backup_original_conf "${mpd_conf_file}")"
+		    if [[ $? -ne 0 ]]; then
+			printf "could not create backup of \`%s' (%s).\n" \
+			       "${mpd_conf_file}" "${temp_backup_file}" 1>&2;
+			printf "will print config to stdout instead.\n" 1>&2;
+			return 1
+		    else
+			printf " %s backup of existing %s created in \`%s'\n" \
+			       "-" "${MSG_MPD_CONFFILE}" "${temp_backup_file}" 1>&2;
+		    fi
+
 		fi
 	    fi
 	fi
@@ -239,7 +277,7 @@ overwrite && echo -e "${overwrite}")"
     if [[ $? -ne 0 ]]; then
 	die "unspecified error"
     else
-	printf " %s done ... the resulting %s saved in:\n" \
+	printf " %s done ... the resulting %s is saved in:\n" \
 	       "-" "${MSG_MPD_CONFFILE}" 1>&2;
 	## return the resulting file to the calling function
 	printf "%s" "${mpd_conf_file}"
@@ -251,7 +289,7 @@ overwrite && echo -e "${overwrite}")"
 function command_not_found() {
     ## give installation instructions when a command is not available
     ## and exit with error,
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     command="$1"
     package="$2"
@@ -274,7 +312,7 @@ function fetch_alsa_hwaddresses() {
     ##
     ## stores the hardware address and label in global variables
     ## ALSA_AIF_HWADDRESS and ALSA_AIF_DEVLABEL.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
     
     ## when more than one matching output device is found and
     ## DISABLE_PROMPTS is not set, prompt the user to select one,
@@ -305,6 +343,11 @@ function fetch_alsa_hwaddresses() {
 		## multiple interfaces found; prompt the user or use
 		## the first one if DISABLE_PROMPTS is set
 		if [[ ! -z "${DISABLE_PROMPTS}" ]]; then
+		    printf " %s multiple interfaces found, but user set DISABLE_PROMPTS,\n" \
+			   "-" 1>&2;
+		    printf "     therefore will use the first one found (${ALSA_AIF_HWADDRESSES[0]}).\n" \
+			   "-" 1>&2;
+
 		    selected_key=0
 		else
 		    ## display instructions for multiple interfaces and prompt
@@ -370,14 +413,14 @@ ${ALSA_AIF_LABELS[${selected_key}]}"
 function check_readable_path() {
     ## checks if path ($1), needed for ($2) is readable, or adds
     ## problem description ($2) to problems array.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     path="$1"
     purpose="$2"
     problem="$3"
 
-    msg="\n${MSG_TAB}Can't access or read ${purpose} \`${path}',\
-\n${MSG_MARGIN}you won't be able to ${problem}.\n"
+    msg="\n  - can't access or read ${purpose} \`${path}',\
+\n   you won't be able to ${problem}.\n"
     [[ -d "${path}" || -f "${path}" ]] || PROBLEMS+=("${msg}") 
 }
 
@@ -385,14 +428,14 @@ function check_readable_path() {
 function check_writeable_path() {
     ## checks if path ($1), needed for ($2) is writeable, or adds
     ## problem description ($2) to problems array.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     path="$1"
     purpose="$2"
     problem="$3"
 
-    msg="\n${MSG_TAB}Can't write to ${purpose} \`${path}',\
-\n${MSG_MARGIN}you won't be able to ${problem}.\n"
+    msg="\n  - can't write to ${purpose} \`${path}',\
+\n   you won't be able to ${problem}.\n"
 
     [[ -w "${path}" ]] || PROBLEMS+=("${msg}") 
 }
@@ -401,7 +444,7 @@ function parse_configuration_line() {
     ## parse a line from mpd configuration templates, replacing
     ## variables in those templates with values from this scripts
     ## configuration files and returning them to the calling function.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     line="$@"
 
@@ -451,7 +494,7 @@ function source_enabled_confs() {
     ## source conf snippets in ./confs-enabled/*.conf while
     ## substituting the variables in those conf files with the ones
     ## generated in this script.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     ## temporary file needed to source enabled configuration snippets files
     tempconfs="$(mktemp)"
@@ -504,7 +547,7 @@ function source_enabled_confs() {
 
 function perform_automagic() {
     ### automagic configuration stuff
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     ## client limits
     ## if the directory specified in `CONF_MPD_MUSICDIR` is
@@ -611,7 +654,7 @@ ${hostname_string}through ${CONF_ALSA_AIF_DEVLABEL}}"
 
 function get_mpd_musicdir() {
     ### get and check music dir
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     ## check if user set the music dir configuration parameters
     if [[ ! -z "${CONF_MPD_MUSICDIR}" ]]; then
@@ -656,9 +699,9 @@ function get_mpd_musicdir() {
     
 }
 
-function get_mpd_userdir() {
+function get_mpd_homedir() {
     ### get and check working directory for mpd
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
   
     ## if `CONF_MPD_HOMEDIR` not set by user use `XDG_CONFIG_MPDDIR`
     if [[ -z ${CONF_MPD_HOMEDIR} ]]; then
@@ -685,9 +728,9 @@ function get_mpd_userdir() {
     
     ## check if it is accessible
     check_readable_path "${CONF_MPD_HOMEDIR}" "mpd home directory" \
-	"use ${MSG_MPD_CONFFILE}"
+	"use mpd"
     check_writeable_path "${CONF_MPD_HOMEDIR}" "mpd home directory" \
-	"store ${MSG_MPD_CONFFILE}"
+	"store mpd database, playlist and cache."
     
     ## where to store data
     MPD_DATADIR="${MPD_DATADIR:-${CONF_MPD_HOMEDIR}}"
@@ -715,7 +758,7 @@ function get_mpd_userdir() {
 
 function conf_header() {
     ## construct the byline for the configuration file
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     formatted_date="$(date -Is)"
 
@@ -728,7 +771,7 @@ function conf_header() {
 
 function conf_footer() {
     ## construct the footer for the configuration file
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     printf "\n\n%s\n%s end of %s\n%s" \
 	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" \
@@ -738,7 +781,7 @@ function conf_footer() {
 
 function do_configure() {
     ## main function
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$@"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     ## get an array with available alsa hardware addresses
     fetch_alsa_hwaddresses
@@ -749,13 +792,16 @@ function do_configure() {
     [[ $? -eq 0 ]] || die_configure "error in get_mpd_musicdir."
 
     ## get and check paths
-    get_mpd_userdir
-    [[ $? -eq 0 ]] || die_configure "error in get_mpd_userdir."
+    get_mpd_homedir 
+    [[ $? -eq 0 ]] || die_configure "error in get_mpd_homedir."
 
     ### perform automagic configuration
     perform_automagic
     [[ $? -eq 0 ]] || die_configure "error in perform_automagic."
 
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "done with perform_automagic."
+    
     ## store conf snippets in `CONF_CONTENTS`
     header="$(conf_header)"
     footer="$(conf_footer)"
@@ -764,11 +810,15 @@ function do_configure() {
     CONF_CONTENTS="${header}$(source_enabled_confs)${footer}"
 
     ## displays the contents of CONF_CONTENTS or write them to
-    ## `MPD_CONFFILE` if set
-    if [[ ! -z "${MPD_CONFFILE}" ]]; then
-	res="$(write_conffile "${MPD_CONFFILE}")"
+    ## `CONF_MPD_CONFFILE` if set
+    if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "CONF_MPD_CONFFILE set to \`${CONF_MPD_CONFFILE}'."
+	res="$(write_conffile "${CONF_MPD_CONFFILE}")"
 	printf "%s\n" "${res}"
     else
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "CONF_MPD_CONFFILE left empty; printing to std_out."
 	## display the results (print to std_out)
 	printf "%s\n" "${CONF_CONTENTS}"
     fi
@@ -835,10 +885,9 @@ declare -a PROBLEMS=()
 
 ## set to non empty to disable prompting 
 DISABLE_PROMPTS="${DISABLE_PROMPTS:-}"
-## set to non empty to prevent the script form making an automic
-## backup of an existing conf file
-NO_CONF_BACKUP="${NO_CONF_BACKUP:-}"
-TEMP_CONF_BACKUP=""
+## set to non empty to overwrite an existing conf file without prompt
+OVERWRITE_EXISTING_CONFFILE="${OVERWRITE_EXISTING_CONFFILE:-}"
+TEMP_CONF_BACKUP="${TEMP_CONF_BACKUP:-}"
 
 ## source the config file if its present
 PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
@@ -848,6 +897,8 @@ if [[ -f "${PREFERENCES_FILE}" ]]; then
 else
     [[ ! -z ${DEBUG} ]] && debug_configure "PREFERENCES_FILE \`${PREFERENCES_FILE}' not found."
 fi
+
+CONF_MPD_CONFFILE="${CONF_MPD_CONFFILE:-}"
 
 ## for backwards compatibility
 [[ ! -z "${CONF_ZEROCONF_ENABLED}" ]] || [[ ! -z "${ENABLE_LASTFM}" ]] && \
@@ -894,9 +945,6 @@ CONF_CONTENTS=""
 
 ## general messages and fixed strings
 MSG_MPD_CONFFILE="mpd configuration file"
-MSG_DONE="${MSG_MPD_CONFFILE} saved in \`${MPD_CONFFILE}'."
-MSG_TAB=" * "
-MSG_MARGIN="${MSG_TAB//\*/ }"
 MSG_CONF_LINESEP="$(printf '#%.0s' {1..76})"
 MSG_CONF_SEP="###"
 MSG_CONF_TITLE="mpd configuration file"
