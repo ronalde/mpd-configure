@@ -280,11 +280,25 @@ run the script and start `mpd` using the script generated
     LIMIT_INTERFACE_TYPE="usb" CONF_MPD_CONFFILE=~/.mpd/mpd.conf \
     bash ~/mpd-configure/mpd-configure && \
     systemctl start mpd
-````    
+````
+
+### Usage from within another bash or sh script
+
+See the file:
+. [./examples/bash-example.sh](https://github.com/ronalde/mpd-configure/tree/master/examples/bash-example.sh)
 
 ### Usage from within python
 
-See the [./examples](https://github.com/ronalde/mpd-configure/tree/master/examples) subdirectory.
+Assuming your in the `mpd-configure` directory, run:
+````bash
+    pyhton examples/get-interfaces.py
+````
+
+The python script
+[./examples/get-interfaces.py](https://github.com/ronalde/mpd-configure/tree/master/examples/get-interfaces.py)
+uses a helper bash script
+([./examples/get-interfaces-for-python.sh](https://github.com/ronalde/mpd-configure/tree/master/examples/get-interfaces-for-python.sh)),
+which in turn sources `alsa-capabilities`.
 
 
 Preferences
