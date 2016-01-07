@@ -26,7 +26,7 @@ LANG=C
 APP_NAME_MPDCONFIGURE="mpd-configure"
 APP_URL="https://github.com/ronalde/${APP_NAME_MPDCONFIGURE}/"
 # version gets filled by sourcing alsa-capabilities
-APP_VERSION="${APP_VERSION:-0.8}"
+APP_VERSION="${APP_VERSION:-0.9}"
 
 ### defaults
 ## default network address to listen to
@@ -306,110 +306,146 @@ function command_not_found() {
 
 }
 
+function prompt_select_hwaddress() {
+    ## display instructions for multiple interfaces and prompt the
+    ## user to enter one of the found hwardware addresses, with that
+    ## of the first available interface filled in.
+    ## returns the index number of the item entered in the array or an
+    ## error with description.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+
+    selected_address=0
+    selected_key=
+    prompt_messages+=("Multiple interfaces found:")
+    default_aif_hwaddress="${ALSA_AIF_HWADDRESSES[0]}"
+    prompt_messages+=("   specify the hardware address of the interface you wish to use")
+    prompt_messages+=("   for mpd and press [ENTER] to confirm: ")
+    ## format the message
+    prompt="$(printf "  %s\n" "${prompt_messages[@]}")"
+    ## prompt the user and store the input in alsa_aif_hwaddress
+    alsa_aif_hwaddress="$(read -e -p "${prompt}" \
+-i "${default_aif_hwaddress}" alsa_aif_hwaddress && \
+echo -e "${alsa_aif_hwaddress}")"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "${FUNCNAME}: user entered \`${alsa_aif_hwaddress}'."
+    ## look up the chosen hardware address in the proper array
+    for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
+	## set the user selected key and exit loop
+	if [[ "${ALSA_AIF_HWADDRESSES[$key]}" = \
+					      "${alsa_aif_hwaddress}" ]]; then
+	    let selected_key=${key}
+	    break
+	fi
+    done
+    
+    ## handle empty or invalid input
+    msg=""
+    if [[ "${ALSA_AIF_HWADDRESSES[$selected_key]}" \
+	      != "${alsa_aif_hwaddress}" ]]; then
+	prompt_messages=("  NOTE:")			
+	if [[ -z ${alsa_aif_hwaddress} ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "${FUNCNAME}: no hwaddress entered"
+	    msg="no hardware address "
+	else
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "${FUNCNAME}: an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
+	    msg="an invalid hardware address (${alsa_aif_hwaddress})"
+	fi
+	## return the problem and error code
+	printf "  %s %s was entered." "-" "${msg}"
+	return 1
+    else
+	## a valid addres was entered; return its index number
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "${FUNCNAME}: chosen key \`${selected_key}' for \
+interface \`${selected_address}'"
+
+	printf "%s" "${selected_key}"
+    fi
+}
+
+function select_interface_index() {
+    ## select and the hardware address of one of the number of
+    ## interfaces found ($1) and return its index number in the
+    ## ALSA_AIF_HWADDRESSES array. if one interface is found, use its
+    ## index. In case of multiple interfaces show a list of all
+    ## interfaces and prompt the user to enter one of them, unless
+    ## DISABLE_PROMPTS is set, which defaults to the hardware address
+    ## of the first interface found.
+    ## returns the index of the chosen hardware address or an error
+    ## with description.
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+
+    interface_count="$1"
+    ## variable to hold the index number for the ALSA_AIF_HWADDRESSES
+    ## array holding the chosen hardware address
+    selected_array_index=0
+
+    printf "items: %s = %s ?\n" "${interface_count}" "${#ALSA_AIF_HWADDRESSES[@]}" 1>&2;
+    case ${interface_count} in
+	0)
+	    printf "0 interfaces found (THIS SHOULD NOT HAPPEN)"
+	    return 1
+	    ;;
+	1)
+	    ## single interface found; use it
+	    selected_array_index=0
+	    ;;
+	*)
+	    ## multiple interfaces found
+	    if [[ ! -z "${DISABLE_PROMPTS}" ]]; then
+		## return the address of the first interface
+		## found and inform the user of the decision
+		printf " %s multiple interfaces found, \
+but user set DISABLE_PROMPTS,\n" \
+		       "-" 1>&2;
+		printf "     therefore using the first \
+one found (${ALSA_AIF_HWADDRESSES[0]}).\n" \
+		       "-" 1>&2;
+		selected_array_index=0
+	    else
+		## prompt the user
+		selected_array_index="$(prompt_select_hwaddress)"
+		if [[ $? -ne 0 ]]; then
+		    ## inform the calling function about the error
+		    printf "%s" "${selected_array_index}"
+		    return 1
+		fi
+	    fi
+    	    ;;
+    esac
+    
+    ## return the selected address to the calling function
+    printf "%s" "${selected_array_index}"
+}
+
 function fetch_alsa_hwaddresses() {
-    ## use alsa-capabilities script to get alsa output interfaces; if
-    ## one interface is found, use that, otherwise display all of them
-    ## and ask the user which to use.
-    ##
-    ## stores the hardware address and label in global variables
-    ## ALSA_AIF_HWADDRESS and ALSA_AIF_DEVLABEL.
+    ## use alsa-capabilities script to get alsa output interfaces,
+    ## thereby filling the approriate global arrays.
+    ## returns success or an error.
     [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
     
     ## when more than one matching output device is found and
     ## DISABLE_PROMPTS is not set, prompt the user to select one,
     ## otherwise use the first device found.
     prompt_messages=()
-    selected_key=0
+    selected_array_index=0
     
-    ## call alsa-capabilities for filling up the array ALSA_AIF_HWADDRESSES
-    return_alsa_interface
+    ## call return_alsa_interface from the sourced alsa-capabilities
+    ## for filling up the array ALSA_AIF_HWADDRESSES
+    return_alsa_interface 1>&2;
     if [[ $? -ne 0 ]]; then
 	## something went wrong in return_alsa_interface
-	printf "Error getting results from \`return_alsa_interface'.\n" 1>&2;
+	printf "error in return_alsa_interface." 1>&2;
 	return 1
     else
-	interface_count=${#ALSA_AIF_HWADDRESSES[@]}
+	interface_count="${#ALSA_AIF_HWADDRESSES[@]}"
 	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "number of returned alsa interfaces: \`${interface_count}'."
-	case ${interface_count} in
-	    0)
-		printf "\`return_alsa_interface' returned zero (0) interfaces.\n" "${res}" 1>&2;
-		return 1
-		;;
-	    1)
-		## single interface found; use it
-		selected_key=0
-		;;
-	    *)
-		## multiple interfaces found; prompt the user or use
-		## the first one if DISABLE_PROMPTS is set
-		if [[ ! -z "${DISABLE_PROMPTS}" ]]; then
-		    printf " %s multiple interfaces found, but user set DISABLE_PROMPTS,\n" \
-			   "-" 1>&2;
-		    printf "     therefore will use the first one found (${ALSA_AIF_HWADDRESSES[0]}).\n" \
-			   "-" 1>&2;
-
-		    selected_key=0
-		else
-		    ## display instructions for multiple interfaces and prompt
-		    ## to use that of the first available interface
-		        ## prompt when multiple alsa interfaces are found
-		    prompt_messages+=("Multiple interfaces found:")
-
-		    default_aif_hwaddress="${ALSA_AIF_HWADDRESSES[0]}"
-		    prompt_messages+=("   specify the hardware address of the interface you wish to use")
-		    prompt_messages+=("   for mpd and press [ENTER] to confirm: ")
-		    ## format the message
-		    prompt="$(printf "  %s\n" "${prompt_messages[@]}")"
-		    ## prompt the user to select a interface
-		    alsa_aif_hwaddress="$(read -e -p "${prompt}" \
--i "${default_aif_hwaddress}" alsa_aif_hwaddress && \
-echo -e "${alsa_aif_hwaddress}")"
-
-		    [[ ! -z ${DEBUG} ]] && \
-			debug_configure "user entered \`${alsa_aif_hwaddress}'."
-		    for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
-			## set the user selected key and exit loop
-			if [[ "${ALSA_AIF_HWADDRESSES[$key]}" = "${alsa_aif_hwaddress}" ]]; then
-			    let selected_key=${key}
-			    break
-			fi
-		    done
-
-		    ## handle empty or invalid input
-		    msg=""
-		    if [[ "${ALSA_AIF_HWADDRESSES[$selected_key]}" \
-			      != "${alsa_aif_hwaddress}" ]]; then
-			prompt_messages=("  NOTE:")			
-			if [[ -z ${alsa_aif_hwaddress} ]]; then
-			    [[ ! -z ${DEBUG} ]] && \
-				debug_configure "no hwaddress entered"
-			    msg="no hardware address "
-			else
-			    [[ ! -z ${DEBUG} ]] && \
-				debug_configure "an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
-			    msg="an invalid hardware address (${alsa_aif_hwaddress})"
-			fi
-			prompt_messages+=("     Because ${msg} was entered, the script will use")
-			prompt_messages+=("     the first available audio interface: \`${ALSA_AIF_HWADDRESSES[${selected_key}]}'")
-			prompt_messages+=("  Please press [ENTER] to continue")
-			prompt="$(printf "%s\n" "${prompt_messages[@]}")"
-			res="$(read -e -p "${prompt}")"
-		    else
-			[[ ! -z ${DEBUG} ]] && \
-			    debug_configure "chosen key \`${selected_key}' for \
-interface \`${ALSA_AIF_HWADDRESSES[${selected_key}]}'"
-		    fi
-		fi
-		;;	
-	esac
+	    debug_configure "${FUNCNAME}:  \
+audio interfaces after filtering: \`${interface_count}'."
     fi
-
-    ## store the hardware address and label for usage in audio_conf
-    CONF_ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selected_key}]}"
-    CONF_ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selected_key}]} - \
-${ALSA_AIF_LABELS[${selected_key}]}"
-
+    return 0
 }
 
 
@@ -783,9 +819,30 @@ function do_configure() {
     ## main function
     [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
-    ## get an array with available alsa hardware addresses
+    ## fill the ALSA_AIF_HWADDRESSES and ALSA_AIF_DEVLABELS arrays and
+    ## get a count of number of audio output interfaces
     fetch_alsa_hwaddresses
-    [[ $? -eq 0 ]] || die_configure "error in fetch_alsa_hwaddresses."
+    if [[ $? -ne 0 ]]; then
+	die_configure "${FUNCNAME}: error running \`fetch_alsa_hwaddresses'"
+    else
+	interface_count=${#ALSA_AIF_HWADDRESSES[@]}
+    fi
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "${FUNCNAME}: fetch_alsa_hwaddresses returned ${interface_count} interfaces."
+
+    ## get the index number of the selected hardware address in the
+    ## ALSA_AIF_HWADDRESSES array
+    selected_array_index="$(select_interface_index "${interface_count}")"
+    if [[ $? -ne 0 ]]; then
+	die_configure "${selected_array_index}"
+    else
+	## store the hardware address and label for usage in audio_conf
+	CONF_ALSA_AIF_HWADDRESS="${ALSA_AIF_HWADDRESSES[${selected_array_index}]}"
+	CONF_ALSA_AIF_DEVLABEL="${ALSA_AIF_DEVLABELS[${selected_array_index}]} - \
+${ALSA_AIF_LABELS[${selected_array_index}]}"
+    fi
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "${FUNCNAME}: CONF_ALSA_AIF_HWADDRESS=\`${CONF_ALSA_AIF_HWADDRESS}'."
 
     ## get and check paths
     get_mpd_musicdir
