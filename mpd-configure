@@ -125,7 +125,7 @@ function check_existing_conffile() {
     if [[ -f "${mpd_conf_file}" ]]; then
 	if  [[ ! -w "${mpd_conf_file}" ]]; then
 	    ## not writable, exit with error 
-	    printf " %s existing file \`%s' is present, but is not writable.\n" \
+	    printf " %s existing file \`%s' is present, but is not writable,\n" \
 		   "-" "${mpd_conf_file}"
 	    return 1
 	else
@@ -159,8 +159,7 @@ function make_temp_conf() {
     else
 	[[ ! -z ${DEBUG} ]] && \
 	    debug_configure "temporary file \`${tempfile}' created"
-	printf " %s will store it in a temporary file instead.\n"\
-	       "-" 1>&2;
+	printf "   will store the generated file in a temporary file instead.\n" 1>&2;
 	## set a new target path 
 	mpd_conf_file="${tempfile}"
 	printf "%s" "${mpd_conf_file}"
@@ -238,26 +237,37 @@ function write_conffile() {
 	printf "%s\n" "${maketemp}" 1>&2;
 	mpd_conf_file="$(make_temp_conf)"
     else 
-	## only prompt when OVERWRITE_EXISTING_CONFFILE is not set
+	## only prompt when both OVERWRITE_EXISTING_CONFFILE and
+	## DISABLE_PROMPTS are not set
 	if [[ ! -z ${existing_file} ]]; then
-	    printf " %s existing %s found in \`%s':\n" \
+	    printf " %s existing %s found in \`%s',\n" \
 		   "-" "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug_configure "OVERWRITE_EXISTING_CONFFILE: \`${OVERWRITE_EXISTING_CONFFILE}'"
-	    if [[ ! -z ${OVERWRITE_EXISTING_CONFFILE} ]]; then
-		printf "     user requested overwriting of original conf file.\n" 1>&2;
-	    else 
+	    ## check if a prompt is needed
+	    if [[ ! -z ${SKIP_BACKUP} ]] || [[ ! -z ${DISABLE_PROMPTS} ]]; then
+		## prompt not needed
+		printf "     but user requested overwriting of original conf file\n" 1>&2;
+		printf "     by setting either SKIP_BACKUP or DISABLE_PROMPTS.\n" 1>&2;
+		overwrite="yes"
+	    else
+		## prompt needed
 		prompt="     overwrite it (while making a backup of the original)?: "
 		overwrite="$(read -e -p "${prompt}" -i "Yes" \
 overwrite && echo -e "${overwrite}")"
-		## if prompt returns (downcased) `yes' then overwrite the file
-		if ! [[ "${overwrite,,}" =~ yes ]]; then
-		    ## user chose no to overwrite; try to save in temporary file, otherwise
-		    ## exit with message
-		    printf "\nNot overwriting existing %s \`%s'.\n" \
-			   "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
-		    mpd_conf_file="$(make_temp_conf)"
+	    fi
+	    ## if settings or prompt returns (downcased) `yes' then overwrite the file
+	    if ! [[ "${overwrite,,}" =~ yes ]]; then
+		## user chose no to overwrite; try to save in temporary file, otherwise
+		## exit with message
+		printf "\nNot overwriting existing %s \`%s'.\n" \
+		       "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
+		mpd_conf_file="$(make_temp_conf)"
+	    else
+		## original file needs to be overwritten, check if a backup is needed
+		if [[ ! -z ${SKIP_BACKUP} ]]; then
+		    printf "  %s will overwrite existing conffile without making a backup,\n" 1>&2;
+		    printf "     as requested by the user by setting SKIP_BACKUP.\n" 1>&2;
 		else
+		    ## backup is needed
 		    temp_backup_file="$(backup_original_conf "${mpd_conf_file}")"
 		    if [[ $? -ne 0 ]]; then
 			printf "could not create backup of \`%s' (%s).\n" \
@@ -268,7 +278,7 @@ overwrite && echo -e "${overwrite}")"
 			printf " %s backup of existing %s created in \`%s'\n" \
 			       "-" "${MSG_MPD_CONFFILE}" "${temp_backup_file}" 1>&2;
 		    fi
-
+		    
 		fi
 	    fi
 	fi
@@ -382,7 +392,6 @@ function select_interface_index() {
     ## array holding the chosen hardware address
     selected_array_index=0
 
-    printf "items: %s = %s ?\n" "${interface_count}" "${#ALSA_AIF_HWADDRESSES[@]}" 1>&2;
     case ${interface_count} in
 	0)
 	    printf "0 interfaces found (THIS SHOULD NOT HAPPEN)"
@@ -834,6 +843,7 @@ function do_configure() {
     ## ALSA_AIF_HWADDRESSES array
     selected_array_index="$(select_interface_index "${interface_count}")"
     if [[ $? -ne 0 ]]; then
+	## select_interface_index returned a descriptive error
 	die_configure "${selected_array_index}"
     else
 	## store the hardware address and label for usage in audio_conf
@@ -942,8 +952,9 @@ declare -a PROBLEMS=()
 
 ## set to non empty to disable prompting 
 DISABLE_PROMPTS="${DISABLE_PROMPTS:-}"
-## set to non empty to overwrite an existing conf file without prompt
-OVERWRITE_EXISTING_CONFFILE="${OVERWRITE_EXISTING_CONFFILE:-}"
+## set to non empty to overwrite an existing conf file without making
+## a backup, which it does when only DISABLE_PROMPTS is set
+SKIP_BACKUP="${SKIP_BACKUP:-}"
 TEMP_CONF_BACKUP="${TEMP_CONF_BACKUP:-}"
 
 ## source the config file if its present
