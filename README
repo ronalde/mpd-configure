@@ -62,7 +62,7 @@ script. Any setting may be specified in the file
 ## sets the `music_directory` paramater to `/srv/media/music` and
 ## saves the result in `/etc/mpd.conf`:
 CONF_MPD_MUSICDIR="/srv/media/music" \
-CONF_MPD_CONFFILE=/etc/mpd.conf \
+CONF_MPD_CONFFILE="/etc/mpd.conf" \
 ./mpd-configure
 ````
 
@@ -77,7 +77,7 @@ A fully automated example which does not prompt the user (by setting
 creating a backup of the original `/etc/mpd.conf` in case it exists:
 
 ````bash
-DISABLE_PROMPTS=True LIMIT_INTERFACE_TYPE=usb CONF_MPD_CONFFILE=/etc/mpd.conf \
+DISABLE_PROMPTS="True" LIMIT_INTERFACE_TYPE="usb" CONF_MPD_CONFFILE="/etc/mpd.conf" \
 CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
 bash mpd-configure
 ````
@@ -105,30 +105,41 @@ The interfaces returned by the script may be reduced by setting
 prefab or custom filters. These options can be displayed by running
 the script with the `-h` help option, eg:
 
-
+````bash
     bash alsa-capabilities -h
+````    
 
 The script can also run 'directly' from github using:
 
+````bash
     bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")
+````
 
 To specify an option (like `-l usb`) use the following syntax:
 
+````bash
     bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities") -l usb    
+````
 
 To display the alsa playback interfaces on a remote host to which you
 have ssh access, use:
 
+````bash
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")"
+````
 
 Proper detection of the sample rates each format supports on an
 interface currently is very slow for non-USB Audio cards. It therefore
-is a non-default option, `-s` or `--samplerates`. It is recommended to
-mute all output interfaces because the script will play (pseudo)
-random noise on each interface. Usage:
+is a non-default option, `-s` or `--samplerates`.
 
-    bash alsa-capabilities -s   
+. It is recommended to *mute all output interfaces* because the script
+will play (pseudo) random noise on each interface.
 
+Usage:
+
+````bash
+bash alsa-capabilities -s   
+````
 
 About the mpd-monitor helper script
 -----------------------------------
@@ -136,14 +147,18 @@ About the mpd-monitor helper script
 The actual configuration of the system may be inspected/monitored by
 the helper script `mpd-monitor`, which can be executed as follows:
 
+````bash
     bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")
+````
 
 Or, when mpd is running on a remote host to which you have (key based)
 ssh access, execute:
 
+````bash
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
+````
 
-The mpd-monitor script is in a development state.
+. The mpd-monitor script is in (an unstable) development state.
 
 
 Background
@@ -162,9 +177,17 @@ For systems with a fixed configuration --eg a PC with a locally
 installed mpd connected to some USB DAC or with a internal soundcard--
 the script may be invoked manually:
 
+````bash
     bash mpd-configure > mpd.conf
+````
 
-This will create the file `mpd.conf` in the current directory,
+or
+
+````bash
+    CONF_MPD_CONFFILE="mpd.conf" bash mpd-configure
+````
+
+Both will create the file `mpd.conf` in the current directory,
 configured to use the first available audio output interface in bit
 perfect mode. If more than one output interface (or DAC) is found, it
 will prompt you to specify which one to use. As bitperfect mode
@@ -174,29 +197,41 @@ script will notify the user if its in use.
 After creating such a configuration file, `mpd` can be told to use this
 configuration file with:
 
-    mpd ~/mpd.conf
+````bash
+    mpd ./mpd.conf
+````
 
 To use the generated configuration file system wide, it can be copied
 to the system wide mpd configuration file when you want to run `mpd`
 as a system daemon:
 
+````bash
     sudo cp ~/mpd.conf /etc/mpd.conf
-    sudo service mpd restart
+    sudo systemctl restart mpd
+````
 
+or directly from the script:
+````bash
+    sudo CONF_MPD_CONFFILE="/etc/mpd.conf" bash mpd-configure
+    sudo systemctl restart mpd
+````
 
-Suppose you're PC is configured with an internal (embedded) soundcard
+Suppose your PC is configured with an internal (embedded) soundcard
 and a (single) USB Audio Class external DAC, you may specify the
 `LIMIT_INTERFACE_TYPE="usb"` parameter in the `mpd-configure.conf`
 file or on the command line, and it will automagically and without
 questions configure mpd to use that DAC:
 
+````bash
     LIMIT_INTERFACE_TYPE="usb" bash mpd-configure > ~/mpd.conf
+````
 
 Or, when you want to store the results in the system wide mpd
 configuration file:
-
-    LIMIT_INTERFACE_TYPE="usb" bash mpd-configure | sudo tee /etc/mpd.conf
-
+````bash
+    sudo LIMIT_INTERFACE_TYPE="usb" CONF_MPD_CONFFILE="/etc/mpd.conf" \
+    bash mpd-configure
+````
 
 
 More complex usage
@@ -206,7 +241,9 @@ For debugging or testing purposes one may set the `INCLUDE_COMMENTS`
 and/or `DEBUG` parameters through the `mpd-configure.conf` file or on
 the command line, eg:
 
-    DEBUG=True INCLUDE_COMMENTS=True bash mpd-configure
+````bash
+    DEBUG="True" INCLUDE_COMMENTS="True" bash mpd-configure
+````    
 
 In dynamic environments --for example a network booted ltsp client,
 which hardware may be altered each boot, connected to whatever DAC--
