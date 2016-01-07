@@ -616,25 +616,18 @@ function perform_automagic() {
 	
 	hostname_string=""
 	## only try to get hostname if it isn't link local
-	if [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "127" ]] || [[ "${CONF_MPD_NETWORK_ADRESS}" != "0.0.0.0" ]] || \
-	    [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "*::*"  ]]; then
+	if [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "127" ]] || \
+	       [[ "${CONF_MPD_NETWORK_ADRESS}" != "0.0.0.0" ]] || \
+	       [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "*::*"  ]]; then
 	    ## mpd is configured to use a 'real' ip address; try to get fqdn name
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "mpd is configured to use a 'real' ip address ..."
 	    if [[ -x $(which hostname) ]]; then
-	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "hostname command is available"
-		hostname="$(hostname --fqdn)"
-		if [[ -z "${hostname}" ]]; then
-		    ## fallback to 'short' hostname
-		    hostname="$(hostname)"
-		    [[ ! -z ${DEBUG} ]] && \
-			debug_configure "mpd hostname set by script and hostname to short name \`${hostname}'."
-		else
-		    [[ ! -z ${DEBUG} ]] && \
-			debug_configure "mpd hostname set by script and hostname to fqdn \`${hostname}'."
-		fi
-	    else
+		[[ ! -z ${DEBUG} ]] && \
+		    debug_configure "hostname command is available"
+		hostname="$(hostname)"
+	    fi
+	    if [[ -z "${hostname}" ]]; then
 		# use bash's internal hostname
 		hostname="${HOSTNAME}"
 		[[ ! -z ${DEBUG} ]] && \
@@ -649,9 +642,13 @@ function perform_automagic() {
 	## set string to use if hostname contains something
 	[[ ! -z ${hostname} ]] && hostname_string="on ${hostname} "
 	G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD \
-${hostname_string}through ${CONF_ALSA_AIF_DEVLABEL}}"
+${hostname_string}(${CONF_ALSA_AIF_DEVLABEL})}"
 	
     fi
+
+    ## cap to the maximum nr of characters (64)
+    G_ZEROCONF_ZEROCONFNAME="$(printf "%.*s\n" 64 "${G_ZEROCONF_ZEROCONFNAME}")"
+    
 
 }
 
