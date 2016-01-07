@@ -43,7 +43,7 @@ detect if the file `mympd.conf` already exists, in which case the user
 is prompted to overwrite it, while making an automated *backup* of the
 original file:
 ````bash
-CONF_MPD_CONFFILE=mympd.conf bash mpd-configure
+CONF_MPD_CONFFILE="mympd.conf" bash mpd-configure
 ````
 
 ### More advanced usage example
@@ -55,12 +55,13 @@ they will be included by the `mpd-configure` script in the resulting
 mpd configuration file. Any bash variable in those configuration
 snippets, will be expanded to their calculated values by the
 script. Any setting may be specified in the file
-`./mpd-configure.conf` or on the command line like so:
+`./mpd-configure.conf` or on the command line.
 
+For example to specify `CONF_MPD_MUSICDIR` which sets the
+`music_directory` and `CONF_MPD_CONFFILE` which specifies the path to
+store the resulting configuration file in, run it as follows:
 ````bash
-## run the script with two options set on the command line which
-## sets the `music_directory` paramater to `/srv/media/music` and
-## saves the result in `/etc/mpd.conf`:
+
 CONF_MPD_MUSICDIR="/srv/media/music" \
 CONF_MPD_CONFFILE="/etc/mpd.conf" \
 ./mpd-configure
