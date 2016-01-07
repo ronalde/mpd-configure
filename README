@@ -16,7 +16,7 @@ the user is presented with a choice.
 Basic usage
 -----------
 
-Run the script will default settings and print the resulting mpd
+Run the script with default settings and print the resulting mpd
 configuration file to stdout:
 
 ````bash
@@ -26,24 +26,24 @@ bash mpd-configure
 ### Storing the output of the script in a file
 
 The output can simply be redirected to a file (in this example
-`mympd.conf`) using bash:
+`mympd.conf`):
 ````bash
 bash mpd-configure > mympd.conf
 ````
 
-or, in case the script was downloaded correctly with the execute bit set:
-
-````bash
-./mpd-configure > mympd.conf
-````
-
 Although the same may be achieved by setting `CONF_MPD_CONFFILE` on
-the command line, with the *gained benefit* of having the script
-detect if the file `mympd.conf` already exists, in which case the user
+the command line. This has the *benefit* of having the script
+detect if the file `mympd.conf` exists, in which case the user
 is prompted to overwrite it, while making an automated *backup* of the
 original file:
 ````bash
 CONF_MPD_CONFFILE="mympd.conf" bash mpd-configure
+````
+
+Or, in case the script was downloaded correctly with the execute bit set:
+
+````bash
+CONF_MPD_CONFFILE="mympd.conf" ./mpd-configure
 ````
 
 ### More advanced usage example
