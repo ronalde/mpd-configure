@@ -95,8 +95,10 @@ CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
 bash mpd-configure
 ````
 
-. See [Detailed usage instructions](#detailed-usage-instructions) for
+Also see
+- [Detailed usage instructions](#detailed-usage-instructions) for
 more information on the usage and available settings.
+- [Usage a as systemd service](#usage-a-as-systemd-service)
 
 
 About the alsa-capabilities helper script
@@ -147,8 +149,8 @@ Proper detection of the sample rates each format supports on an
 interface currently is very slow for non-USB Audio cards. It therefore
 is a non-default option, `-s` or `--samplerates`.
 
-. It is recommended to *mute all output interfaces* because the script
-will play (pseudo) random noise on each interface.
+- It is recommended to *mute all output interfaces* because the script
+  will play (pseudo) random noise on each interface.
 
 Usage:
 
@@ -173,7 +175,7 @@ ssh access, execute:
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
 ````
 
-. The mpd-monitor script is in a development state and unstable.
+- The mpd-monitor script is in a development state and unstable.
 
 
 Background
@@ -282,7 +284,7 @@ the command line, eg:
 
 In dynamic environments --for example a network booted ltsp client,
 which hardware may be altered each boot, connected to whatever DAC--
-the script should be put in a logon script or an init script.
+the script should be put in a logon script or systemd service file.
 
 ## Usage a as systemd service
 
@@ -291,25 +293,7 @@ service. By setting `Before=mpd.service` and `Wants=mpd.service` in
 the service file systemd makes sure mpd-configure is run before mpd is started, and
 tries to start mpd.
 
-. See: [./examples/systemd_mpd-configure.service](./examples/systemd_mpd-configure.service)
-
-### LTSP-specific auto logon sample
-
-For my LTPS-environment I therefore copy the script directory to the
-home directory of the auto logon user specified in
-`/var/lib/tftpboot/ltsp/i386/lts.conf` and edit it's `~/.profile` to
-run the script and start `mpd` using the script generated
-`~/.mpd/mpd.conf`, ie:
-
-````bash
-    systemctl stop mpd && \
-    LIMIT_INTERFACE_TYPE="usb" \
-    DISABLE_PROMPTS="True " SKIP_BACKUP="True" OPT_QUIET="True"
-    CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd"
-    CONF_MPD_CONFFILE=~/.mpd/mpd.conf \
-    bash ~/mpd-configure/mpd-configure && \
-    systemctl start mpd
-````
+- See: [./examples/systemd_mpd-configure.service](./examples/systemd_mpd-configure.service)
 
 ### Usage from within another bash or sh script
 
@@ -344,6 +328,25 @@ The python script
 uses a helper bash script
 ([./examples/get-interfaces-for-python.sh](./examples/get-interfaces-for-python.sh)),
 which in turn sources `alsa-capabilities`.
+
+
+### LTSP-specific auto logon sample
+
+For my LTPS-environments the script directory can be copied to the
+home directory of the auto logon user specified in
+`/var/lib/tftpboot/ltsp/i386/lts.conf`. It's `~/.profile` should be
+edited to run the script and start `mpd` using the script generated
+`~/.mpd/mpd.conf`, ie:
+
+````bash
+    systemctl stop mpd && \
+    LIMIT_INTERFACE_TYPE="usb" \
+    DISABLE_PROMPTS="True " SKIP_BACKUP="True" OPT_QUIET="True" \
+    CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
+    CONF_MPD_CONFFILE=~/.mpd/mpd.conf \
+    bash ~/mpd-configure/mpd-configure && \
+    systemctl start mpd
+````
 
 
 Preferences
