@@ -443,6 +443,7 @@ function fetch_alsa_hwaddresses() {
     
     ## call return_alsa_interface from the sourced alsa-capabilities
     ## for filling up the array ALSA_AIF_HWADDRESSES
+    
     return_alsa_interface 1>&2;
     if [[ $? -ne 0 ]]; then
 	## something went wrong in return_alsa_interface
