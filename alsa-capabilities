@@ -200,7 +200,6 @@ function handle_doublebrackets() {
     
 }
 
-
 function fetch_alsa_outputinterfaces() {
     ## parses each output interface returned by `get_aplay_output'
     ## after filtering (when the appropriate commandline options are
@@ -944,7 +943,8 @@ function analyze_opt_limit() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
-    opt_limit="$1"
+    option="$1"
+    opt_limit="${2-}"
     case ${opt_limit} in
         a|analog) 
 	    OPT_LIMIT_AO="True"
@@ -966,9 +966,9 @@ function analyze_opt_limit() {
 	    ;;
 	*)
 	    args=$(printf "\"%s\", " "${OPT_LIMIT_ARGS[@]}")
-	    die "the \`-l' (limit) option requires one of the \
-following arguments:\
-\n${args%*, }"
+	    printf "the limit option (specified with \`%s'), requires one of the following arguments:\n" "${option}" 1>&2;
+	    printf "${args%*, }\n" 1>&2;
+	    exit 1
     esac
 }
 
@@ -986,90 +986,120 @@ Displays a list of each alsa audio output interface with its details
 including its alsa hardware address (\`hw:x,y'). 
 
 The list may be filtered by using the limit option \`-l' with an
-argument, either \`a' (or \`analog'), \`d' (or \`digital') or \`u' (or
-\`usb' or \`uac') to only show interfaces fitting that limit. In
+argument to only show interfaces fitting that limit. In
 addition, a custom filter may be specified as an argument for the \`c'
-option.
+option. 
 
 The \`-q (quiet)' and \`-a (address)' options are meant for usage in
-other scripts. While \`quiet' surpresses the output (to std_err), the
-\`address' option limits the output to the interface specified
-with its alsa hardware address (eg. \`hw:0,1').
+other scripts. 
 
 Returns 0  or 1 in case of no matches or other errors.
 
-  -l a | analog     Limit the interfaces to analog ones.
-  -l u | usb | uac  Limit the interfaces to those that support 
-                    USB Audio Class (UAC1 or UAC2).
-  -l d | digital    Limit the available interfaces to digital ones using
-                    a static (and arbitrary) filter.
-  -c <regexp>       Limit the available interfaces (further) to match
-                    \`<regexp>'.
-  -a <hwaddress>    Limit the returned interface (further) to the one
-                    specified with \`<hwaddress>', eg. \`hw:0,1'
-  -s, --samplerates Adds a listing of the supported sample rates 
-                    for each format an interface supports. 
-                    CAUTION: Besides being slow this option 
-                    PLAYS NOISE ON EACH OUTPUT!
-  -q, --quiet       Surpress listing each interface with its details,
-                    ie only store the details of each card in the
-                    appropriate arrays.
-  -h, --help        Show this help message
+  -l, --limit  a | analog     Limit the interfaces to analog ones.
+  -l, --limit  u | usb | uac  Limit the interfaces to those that
+                              support USB Audio Class (UAC1 or UAC2).
+  -l, --limit  d | digital    Limit the available interfaces to
+                              digital ones using a static (and
+                              arbitrary) filter.
+  -c, --customfilter <regexp> Limit the available interfaces (further)
+                              to match \`<regexp>'.
+  -a, --address <hwaddress>   Limit the returned interface (further)
+                              to the one specified with
+                              \`<hwaddress>', eg. \`hw:0,1'
+  -s, --samplerates           Adds a listing of the supported sample
+                              rates for each format an interface
+                              supports.  CAUTION: Besides being slow
+                              this option PLAYS NOISE ON EACH OUTPUT!
+  -q, --quiet                 Surpress listing each interface with its
+                              details, ie. only store the details of
+                              each card in the appropriate arrays.
+  -h, --help                  Show this help message
 EOF
 )
     printf "%s\n" "${msg}" 1>&2;
-    exit 1
 }
 
+
 function analyze_command_line() {
-    ## parse command line arguments using bash getopts
+    ## parse command line arguments using the `manual loop` method
+    ## described in http://mywiki.wooledge.org/BashFAQ/035.
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
-    ## put characters in the array in a string
-    shortopts=":${SHORT_OPTS[@]/ /}"
-
-    while getopts "${shortopts}" option; do
-        case "$option" in
-            l) 
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`l' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
-		OPT_LIMIT="True"
-		analyze_opt_limit "${OPTARG}"
+    while :; do
+        case "${1:-}" in
+            -l|--limit)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "$(printf "option \`%s' set to \`%s'.\n" "$1" "$2")"
+		    OPT_LIMIT="True"
+		    analyze_opt_limit "$1" "$2"
+		    shift 2
+                    continue
+		else
+		    analyze_opt_limit "$1"
+                    exit 1
+		fi
 		;;
-            q)
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`q' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
-		OPT_QUIET=true
+	    -c|--customfilter)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "$(printf "option \`%s' set to \`%s'.\n" "$1" "$2")"
+		    OPT_FILTER="${2}"
+		    shift 2
+                    continue
+		else
+                    printf "ERROR: option \`%s' requires a non-empty argument.\n" "$1" 1>&2
+                    exit 1
+		fi
 		;;
-            c) 
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`c' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
-		OPT_FILTER="${OPTARG}"
+            -a|--address)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "option \`$1' set to \`$2'"
+		    OPT_HWFILTER="$2"
+		    shift 2
+                    continue
+		else
+                    printf "ERROR: option \`%s' requires a alsa hardware address \
+as an argument (eg \`hw:x,y')\n" "$1" 1>&2
+                    exit 1
+		fi
 		;;
-            a) 
+            -s|--samplerates)
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`a' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
-		OPT_HWFILTER="${OPTARG}"
-		;;
-	    
-            s) 
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`s' (${OPTIND}): \`${option}' set to \`${OPTARG:-}'"
+		    debug "option \`$1' set"
 		OPT_SAMPLERATES=true
+		shift 
+                continue
 		;;
-           h|\?) 
-		done_opts=true
-		display_usageinfo
-		;;
-            *) 
+	    -q|--quiet|--silent)
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "option \`other' (${OPTIND}): \`${option}' set to \`${OPTARG}'"
-		done_opts=true
+		    debug "option \`$1' set"
+		OPT_QUIET=true
+		shift 
+                continue
+		;;
+	    -h|-\?|--help) 
 		display_usageinfo
+		exit
+		;;
+           --)
+	       shift
+	       break
+	       ;;
+	   -?*)
+	       printf "Notice: unknown option \`%s' ignored\n\n." "$1" 1>&2
+               display_usageinfo
+	       exit
+               ;;
+           *)
+               break
         esac
     done
+
 }
+
 
 function return_alsa_interface() {
     ## main function; see display_usageinfo()
