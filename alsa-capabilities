@@ -1300,10 +1300,7 @@ MSG_ALSA_SAMPLERATES="sample rates"
 MSG_ALSA_MONITORFILE="monitor file"
 
 ## command line options
-### optional input parameters, the ones with `:' need an argument
-declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb" "uac")
-SHORT_OPTS=("l:" "c:" "a:" "s" "q" "h")
-
+## also see analyze_command_line
 OPT_LIMIT_AO=${OPT_LIMIT_AO:-}
 OPT_LIMIT_DO=${OPT_LIMIT_DO:-}
 OPT_LIMIT_UO=${OPT_LIMIT_UO:-}

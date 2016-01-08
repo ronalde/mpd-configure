@@ -835,6 +835,8 @@ function do_configure() {
     ## main function
     [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
+    analyze_command_line_conf "$@" || exit 
+
     ## fill the ALSA_AIF_HWADDRESSES and ALSA_AIF_DEVLABELS arrays and
     ## get a count of number of audio output interfaces
     fetch_alsa_hwaddresses
@@ -899,6 +901,166 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
 
     exit
 }
+
+function display_usageinfo_conf() {
+    ## display syntax and exit
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$*"
+
+    msg=$(cat <<EOF
+Usage:
+$0 [-o PATH] [ -l a|d|u ]  [ -c REGEXP ] [-a HWADDRESS] [-s] [-q] [--nobackup]
+
+Creates a valid mpd configuration file based on the audio playback
+interfaces avaliable to alsa. Without settings it prints the results
+to stdout. 
+
+When multiple alsa playback devices are found, the scripts prompts the
+user to enter the alsa hardware address of device to be used. The
+\`-l' (\`--limit'), \`-c' (\`--customfilter') and \`-a' (\`--address')
+may be used to filter the returned alsa devices.
+
+The \`-q' (\`--quiet'), \`-n' (\`--noprompts') and \`--nobackup'
+options are meant for fully automated usage, for instance as a systemd
+service.
+
+  -o PATH, --outputfile PATH    
+                     Saves the result in the file specified with
+                     \`PATH'. When this is an existing file, the
+                     scripts prompts the user to overwrite it, and
+                     makes a backup of the original file unless the
+                     \`--nobackup' option is used).
+  -l TYPEFILTER, --limit TYPEFILTER   
+                     Limit the interfaces to TYPEFILTER. Can be one of
+                     \`a' (or \`analog'), \`d' (or \`digital'), 
+                     \`u' (or \`usb', for USB Audio Class (UAC1 or UAC2)
+                     devices).
+  -c REGEXP, --customlimit REGEXP 
+                     Limit the available interfaces (further) to match
+                     \`REGEXP'.
+  -a HWADDRESS, --address HWADDRESS   
+                     Limit the returned interface (further) to the one
+                     specified with HWADDRESS, eg. \`hw:0,1'
+  -q, --quiet        Surpress listing each interface with its details,
+                     ie. only store the details of each card in the
+                     appropriate arrays.
+  -n, --noprompts    Surpress prompting for the interface to use
+                     and/or to overwrite an existing conffile. Use the
+                     first available interface (matching the filters)
+                     instead.
+  --nobackup         By default the scripts backs up an existing conf
+                     file (specified with \`-o' or
+                     \`--outputfile'). Setting this option prevents
+                     that and overwrites the file without making a
+                     backup.
+  -h, --help         Show this help message
+EOF
+)
+    printf "%s\n" "${msg}" 1>&2;
+}
+
+
+function analyze_command_line_conf() {
+    ## parse command line arguments using the `manual loop` method
+    ## described in http://mywiki.wooledge.org/BashFAQ/035.
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function_ac "${FUNCNAME}" "$*"
+
+    while :; do
+        case "${1:-}" in
+            -o|--output)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "$(printf "option \`%s' set to \`%s'.\n" "$1" "$2")"
+		    CONF_MPD_CONFFILE="${2}"
+		    shift 2
+                    continue
+		else
+		    ## in alsa-capabilities
+		    analyze_opt_limit "$1"
+                    exit 1
+		fi
+		;;
+            -l|--limit)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "$(printf "option \`%s' set to \`%s'.\n" "$1" "$2")"
+		    OPT_LIMIT="True"
+		    analyze_opt_limit "$1" "$2"
+		    shift 2
+                    continue
+		else
+		    ## in alsa-capabilities
+		    analyze_opt_limit "$1"
+                    exit 1
+		fi
+		;;
+	    -c|--customfilter)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "$(printf "option \`%s' set to \`%s'.\n" "$1" "$2")"
+		    OPT_FILTER="${2}"
+		    shift 2
+                    continue
+		else
+                    printf "ERROR: option \`%s' requires a non-empty argument.\n" "$1" 1>&2
+                    exit 1
+		fi
+		;;
+            -a|--address)
+		if [ -n "${2:-}" ]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "option \`$1' set to \`$2'"
+		    OPT_HWFILTER="$2"
+		    shift 2
+                    continue
+		else
+                    printf "ERROR: option \`%s' requires a alsa hardware address \
+as an argument (eg \`hw:x,y')\n" "$1" 1>&2
+                    exit 1
+		fi
+		;;
+	    -q|--quiet|--silent)
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "option \`$1' set"
+		OPT_QUIET=true
+		shift 
+                continue
+		;;
+	    -n|--noprompts|--noprompt)
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "option \`$1' set"
+		DISABLE_PROMPTS=true
+		shift 
+                continue
+		;;
+	    --nobackup|--no-backup)
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "option \`$1' set"
+		SKIP_BACKUP=true
+		shift 
+                continue
+		;;	    
+	    -h|-\?|--help) 
+		display_usageinfo_conf
+		exit
+		;;
+           --)
+	       shift
+	       break
+	       ;;
+	   -?*)
+	       printf "Notice: unknown option \`%s' ignored\n\n." "$1" 1>&2
+               display_usageinfo_conf
+	       exit
+               ;;
+           *)
+               break
+        esac
+    done
+
+}
+
 
 ### program start
 
@@ -1069,7 +1231,7 @@ if [[ -z "${SOURCED}" ]]; then
     [[ ! -z ${DEBUG} ]] && \
 	debug_configure "start main function \`do_configure' ..."
 
-    do_configure
+    do_configure "$@"
 
     [[ ! -z ${DEBUG} ]] && \
 	debug_configure "... main function \`do_configure' done."

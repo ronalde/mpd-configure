@@ -12,6 +12,8 @@
 ## proper settings).
 ## Also make sure that the `User` specified below has access to the
 ## target file specified by `CONF_MPD_CONFFILE`.
+## In this example the first available USB Audio Class playback device
+   recognized by alsa will be used.
 ## 
 ## After copying the file it can be managed using systemd. For example
 ## to start it manually:
@@ -38,14 +40,10 @@ Wants=mpd.service
 
 [Service]
 User=mpd
-Environment="LIMIT_INTERFACE_TYPE=usb"
-Environment="DISABLE_PROMPTS=True"
-Environment="SKIP_BACKUP=True"
-Environment="OPT_QUIET=True"
 Environment="CONF_MPD_MUSICDIR=/srv/media/music"
 Environment="CONF_MPD_HOMEDIR=/var/lib/mpd"
-Environment="CONF_MPD_CONFFILE=/etc/mpd.conf"
-ExecStart=/var/lib/mpd/mpd-configure/mpd-configure
+ExecStart=/var/lib/mpd/mpd-configure/mpd-configure \
+ --limit usb --noprompts --nobackup --quiet --output /etc/mpd.conf
 
 [Install]
 WantedBy=default.target

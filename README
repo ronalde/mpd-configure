@@ -48,51 +48,50 @@ The output can simply be redirected to a file (in this example
 bash mpd-configure > mympd.conf
 ````
 
-Although the same may be achieved by setting `CONF_MPD_CONFFILE` on
+Although the same may be achieved by using the `-o` or `--output` command line parameters or setting `CONF_MPD_CONFFILE` on
 the command line. This has the benefit that the script detects if the
 target file exists, in which case the user is prompted to overwrite
 it, while making an automated *backup* of the original file:
 ````bash
-CONF_MPD_CONFFILE="mympd.conf" bash mpd-configure
-# or, in case the script was downloaded correctly with the execute bit set:
+bash mpd-configure -o "mympd.conf"
+# or:
 CONF_MPD_CONFFILE="mympd.conf" ./mpd-configure
 ````
 
-
 ### More advanced usage example
 
-Apart from standard settings all configuration parameters for mpd are
-available in configuration snippet files in the [`./confs-available/`](./confs-available) directory. By symlinking them to the [`./confs-enabled/`](./confs-enabled) directory,
-they will be included by the `mpd-configure` script in the resulting
-mpd configuration file. Any bash variable in those configuration
-snippets, will be expanded to their calculated values by the
-script. Any setting may be specified in the file
-`./mpd-configure.conf` or on the command line.
-
-For example to specify `CONF_MPD_MUSICDIR` which sets the
-`music_directory` and `CONF_MPD_CONFFILE` which specifies the path to
-store the resulting configuration file in, run it as follows:
+To see all available command line options run the script with `-h` or `--help`:
 ````bash
-
-CONF_MPD_MUSICDIR="/srv/media/music" \
-CONF_MPD_CONFFILE="/etc/mpd.conf" \
-./mpd-configure
+bash mpd-configure -h
 ````
 
-By default `mpd-configure` prompts the user when the specified file
-already exists, and makes a backup of any existing file.
+Additional setting are available using environment variables or using
+the file [`./mpd-configure.conf`](./mpd-configure.conf) and
+configuration snippet files in the
+[`./confs-available/`](./confs-available) directory. By symlinking
+them to the [`./confs-enabled/`](./confs-enabled) directory, they will
+be included by the `mpd-configure` script in the resulting mpd
+configuration file. Any bash variable in those configuration snippets,
+will be expanded to their calculated values by the script.
+
+For example to specify `CONF_MPD_MUSICDIR` which sets the
+`music_directory` and saving the resulting mpd configuration file in `mympd.conf`, use:
+````bash
+CONF_MPD_MUSICDIR="/srv/media/music" ./mpd-configure -o "/etc/mpd.conf"
+````
+
+By default `mpd-configure` prompts the user to overwrite the specified
+file if it exists, and makes a backup of it.
 
 ### Fully automated usage example
 
-A fully automated example which does not prompt the user (by setting
-`DISABLE_PROMPTS`), uses the first available USB Audio Class interface
-(by setting `LIMIT_INTERFACE_TYPE=usb`) and sets some paths, while
+A fully automated example which does not prompt the user (`-n`), uses the
+first available USB Audio Class interface (`-l u`) and sets some paths, while
 creating a backup of the original `/etc/mpd.conf` in case it exists:
 
 ````bash
-DISABLE_PROMPTS="True" LIMIT_INTERFACE_TYPE="usb" CONF_MPD_CONFFILE="/etc/mpd.conf" \
 CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
-bash mpd-configure
+bash mpd-configure -l u -n -o "/etc/mpd.conf"
 ````
 
 Also see
@@ -210,28 +209,7 @@ mixer_type                 "none"
 Detailed usage instructions
 ---------------------------
 
-For systems with a fixed configuration --eg a PC with a locally
-installed mpd connected to some USB DAC or with an internal soundcard--
-the script may be invoked manually:
-
-````bash
-    bash mpd-configure > mpd.conf
-````
-
-or
-
-````bash
-    CONF_MPD_CONFFILE="mpd.conf" bash mpd-configure
-````
-
-Both will create the file `mpd.conf` in the current directory,
-configured to use the first available audio output interface in bit
-perfect mode. If more than one alsa output interface (or DAC) is found, it
-will prompt you to specify which one to use. As bitperfect mode
-assumes that `mpd` has exclusive access to this output interface, the
-script will notify the user if its in use.
-
-After creating such a configuration file, `mpd` can be told to use this
+After creating a mpd configuration file, `mpd` can be told to use this
 configuration file with:
 
 ````bash
@@ -243,33 +221,9 @@ to the system wide mpd configuration file when you want to run `mpd`
 as a system daemon:
 
 ````bash
-    sudo cp ~/mpd.conf /etc/mpd.conf
+    sudo bash mpd-configure -o "/etc/mpd.conf"
     sudo systemctl restart mpd
 ````
-
-or directly from the script:
-````bash
-    sudo CONF_MPD_CONFFILE="/etc/mpd.conf" bash mpd-configure
-    sudo systemctl restart mpd
-````
-
-Suppose your PC is configured with an internal (embedded) soundcard
-and a (single) USB Audio Class external DAC, you may specify the
-`LIMIT_INTERFACE_TYPE="usb"` parameter in the `mpd-configure.conf`
-file or on the command line, and it will automagically and without
-questions configure mpd to use that DAC:
-
-````bash
-    LIMIT_INTERFACE_TYPE="usb" bash mpd-configure > ~/mpd.conf
-````
-
-Or, when you want to store the results in the system wide mpd
-configuration file:
-````bash
-    sudo LIMIT_INTERFACE_TYPE="usb" CONF_MPD_CONFFILE="/etc/mpd.conf" \
-    bash mpd-configure
-````
-
 
 More complex usage
 ------------------
@@ -282,9 +236,9 @@ the command line, eg:
     DEBUG="True" INCLUDE_COMMENTS="True" bash mpd-configure
 ````    
 
-In dynamic environments --for example a network booted ltsp client,
-which hardware may be altered each boot, connected to whatever DAC--
-the script should be put in a logon script or systemd service file.
+In dynamic environments in which hardware may be altered each boot,
+connected to whatever USB DAC, the script could be put in a logon script
+or systemd service file.
 
 ## Usage a as systemd service
 
@@ -340,11 +294,8 @@ edited to run the script and start `mpd` using the script generated
 
 ````bash
     systemctl stop mpd && \
-    LIMIT_INTERFACE_TYPE="usb" \
-    DISABLE_PROMPTS="True " SKIP_BACKUP="True" OPT_QUIET="True" \
     CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
-    CONF_MPD_CONFFILE=~/.mpd/mpd.conf \
-    bash ~/mpd-configure/mpd-configure && \
+    bash ~/mpd-configure/mpd-configure -l usb -n -q --nobackup -o "~/.mpd/mpd.conf"  && \
     systemctl start mpd
 ````
 
@@ -356,7 +307,7 @@ Preferences can be set in the file `mpd-configure.conf`. By default all
 preferences are commented out.
 
 
-### General parameters
+### General environment variables
 
 `DEBUG`
 Output values of variables and program flow to std_err for easier
@@ -372,7 +323,7 @@ the generated mpd configuration file:
 - `1` (or non-empty): enabled
 
 
-`MPD_CONFFILE`
+`CONF_MPD_CONFFILE`
 Path to where the generated mpd configuration file will be
 written. Possible values:
 - commented out: don't write to a file (Default). One may redirect the
