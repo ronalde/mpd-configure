@@ -942,7 +942,7 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
 		printf "in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
 		printf "     mpd [other options] %s\n" \
 		       "${CONF_MPD_CONFFILE}" 1>&2;
-		printf "   or rerun this script and set the \`--output' option to \`%s'\n." \
+		printf "   or rerun this script and set the \`--output' option to \`%s'.\n" \
 		       "${CONF_MPD_CONFFILE}"
 	    fi
 	fi
