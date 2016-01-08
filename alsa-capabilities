@@ -1214,11 +1214,20 @@ EOF
 ##  - audio standard: 22.5792 (mHz) * 1000000 / 512 = 44100Hz
 ## initialize array with 32000 (seems commonly supported but not advisable
 ## to use)
+
 SAMPLERATES=(32000)
-for basefrequency in 44100 48000; do
-    ## add rates to array up to basefrequency*n<=8
-    for n in 8 4 2 1; do
-	SAMPLERATES+=($(( basefrequency * ${n} )))
+## max multiplier: fs*n
+max_fs_n=8
+samplerate=0
+base_fs_audio=$(( 24576000 / 512 ))
+base_fs_video=$(( 22579200 / 512 ))
+for base_samplefrequency in ${base_fs_audio} ${base_fs_video}; do
+    ## add rates to array up to basefrequency*n<=max_fsn
+    n=1
+    while [[ ${n} -le ${max_fs_n} ]]; do
+	samplerate=$(( base_samplefrequency * ${n} ))
+	SAMPLERATES+=(${samplerate})
+	n=$(( n * 2 ));
     done 
 done
 
