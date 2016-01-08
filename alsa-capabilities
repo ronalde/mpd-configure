@@ -986,34 +986,32 @@ Displays a list of each alsa audio output interface with its details
 including its alsa hardware address (\`hw:x,y'). 
 
 The list may be filtered by using the limit option \`-l' with an
-argument to only show interfaces fitting that limit. In
-addition, a custom filter may be specified as an argument for the \`c'
-option. 
+argument to only show interfaces that fit the limit. In addition, a
+custom filter may be specified as an argument for the \`c' option.
 
 The \`-q (quiet)' and \`-a (address)' options are meant for usage in
-other scripts. 
+other scripts. The script returns 0 on success or 1 in case of no
+matches or other errors.
 
-Returns 0  or 1 in case of no matches or other errors.
+  -l, --limit  TYPEFILTER   Limit the interfaces to TYPEFILTER. Can be
+                            one of \`a' (or \`analog'), \`d' (or
+                            \`digital'), \`u' (or \`usb') for USB
+                            Audio Class (UAC1 or UAC2) devices.
 
-  -l, --limit  a | analog     Limit the interfaces to analog ones.
-  -l, --limit  u | usb | uac  Limit the interfaces to those that
-                              support USB Audio Class (UAC1 or UAC2).
-  -l, --limit  d | digital    Limit the available interfaces to
-                              digital ones using a static (and
-                              arbitrary) filter.
-  -c, --customfilter <regexp> Limit the available interfaces (further)
-                              to match \`<regexp>'.
-  -a, --address <hwaddress>   Limit the returned interface (further)
-                              to the one specified with
-                              \`<hwaddress>', eg. \`hw:0,1'
-  -s, --samplerates           Adds a listing of the supported sample
-                              rates for each format an interface
-                              supports.  CAUTION: Besides being slow
-                              this option PLAYS NOISE ON EACH OUTPUT!
-  -q, --quiet                 Surpress listing each interface with its
-                              details, ie. only store the details of
-                              each card in the appropriate arrays.
-  -h, --help                  Show this help message
+  -c, --customlimit REGEXP  Limit the available interfaces (further)
+                            to match \`<regexp>'.
+  -a, --address HWADDRESS   Limit the returned interface (further) to
+                            the one specified with HWADDRESS,
+                            eg. \`hw:0,1'
+  -s, --samplerates         Adds a listing of the supported sample
+                            rates for each format an interface
+                            supports.  
+                            CAUTION: Besides being slow this option
+                            PLAYS NOISE ON EACH OUTPUT!
+  -q, --quiet               Surpress listing each interface with its
+                            details, ie. only store the details of
+                            each card in the appropriate arrays.
+  -h, --help                Show this help message
 EOF
 )
     printf "%s\n" "${msg}" 1>&2;
