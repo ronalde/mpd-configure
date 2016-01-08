@@ -49,25 +49,20 @@ bash mpd-configure > mympd.conf
 ````
 
 Although the same may be achieved by setting `CONF_MPD_CONFFILE` on
-the command line. This has the *benefit* of having the script
-detect if the file `mympd.conf` exists, in which case the user
-is prompted to overwrite it, while making an automated *backup* of the
-original file:
+the command line. This has the benefit that the script detects if the
+target file exists, in which case the user is prompted to overwrite
+it, while making an automated *backup* of the original file:
 ````bash
 CONF_MPD_CONFFILE="mympd.conf" bash mpd-configure
-````
-
-Or, in case the script was downloaded correctly with the execute bit set:
-
-````bash
+# or, in case the script was downloaded correctly with the execute bit set:
 CONF_MPD_CONFFILE="mympd.conf" ./mpd-configure
 ````
+
 
 ### More advanced usage example
 
 Apart from standard settings all configuration parameters for mpd are
-available in configuration snippet files in the `./confs-available/`
-directory. By symlinking them to the `./confs-enabled/` directory,
+available in configuration snippet files in the [`./confs-available/`](./confs-available) directory. By symlinking them to the [`./confs-enabled/`](./confs-enabled) directory,
 they will be included by the `mpd-configure` script in the resulting
 mpd configuration file. Any bash variable in those configuration
 snippets, will be expanded to their calculated values by the
@@ -107,10 +102,12 @@ more information on the usage and available settings.
 About the alsa-capabilities helper script
 -----------------------------------------
 
-`mpd-configure` relies on the accompanying bash script `alsa-capabilities` for
-getting information about the available audio output interfaces from
-alsa. Also offered is the `mpd-monitor' script which shows which parts
-of the audio chain are configured for bit perfect audio playback.
+[`mpd-configure`](./mpd-configure) relies on the accompanying bash
+script [`alsa-capabilities`](./alsa-capabilities) for getting
+information about the available audio output interfaces from
+alsa. Also offered is the [`mpd-monitor'](./mpd-monitor) script which
+shows which parts of the audio chain are configured for bit perfect
+audio playback. `mpd-monitor` is currently in development and unstable.
 
 `alsa-capabilities` may be run from the commandline. It will then
 display each alsa audio output interface with its capabilities, like
@@ -176,7 +173,7 @@ ssh access, execute:
     ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
 ````
 
-. The mpd-monitor script is in (an unstable) development state.
+. The mpd-monitor script is in a development state and unstable.
 
 
 Background
@@ -187,12 +184,32 @@ digital music player. See the article [How to turn Music Player Daemon
 (mpd) into an audiophile music
 player](http://lacocina.nl/audiophile-mpd).
 
+It does this by creating a proper formatted `audio_output`
+configuration snippet for mpd's [alsa audio output
+plugin](http://www.musicpd.org/doc/user/config_audio_outputs.html)
+using the sound cards hardware address and turning all options off
+which might cause mpd to alter the incoming sound. For example:
+
+````bash
+## start processing `01_output-audio-alsa.conf'
+audio_output {
+        type             "alsa"
+        name             "Peachtree 24/192 USB X - USB Audio"
+        device           "hw:1,0"
+        auto_resample    "no"
+        auto_format      "no"
+        auto_channels    "no"
+}
+replaygain                 "off"
+mixer_type                 "none"
+## done processing
+````
 
 Detailed usage instructions
 ---------------------------
 
 For systems with a fixed configuration --eg a PC with a locally
-installed mpd connected to some USB DAC or with a internal soundcard--
+installed mpd connected to some USB DAC or with an internal soundcard--
 the script may be invoked manually:
 
 ````bash
@@ -207,7 +224,7 @@ or
 
 Both will create the file `mpd.conf` in the current directory,
 configured to use the first available audio output interface in bit
-perfect mode. If more than one output interface (or DAC) is found, it
+perfect mode. If more than one alsa output interface (or DAC) is found, it
 will prompt you to specify which one to use. As bitperfect mode
 assumes that `mpd` has exclusive access to this output interface, the
 script will notify the user if its in use.
@@ -285,11 +302,12 @@ run the script and start `mpd` using the script generated
 ### Usage from within another bash or sh script
 
 The bash script
-[./examples/bash-example.sh](https://github.com/ronalde/mpd-configure/tree/master/examples/bash-example.sh)
+[./examples/bash-example.sh](./examples/bash-example.sh)
 demonstrates the way alsa-capabilities can be used from another bash
 script.
 
-This demo script returns the monitoring file of the file specified as an argument:
+This demo script returns the monitoring file of the file specified as
+an argument:
 
 ````bash
 bash examples/bash-example.sh hw:1,0
@@ -310,9 +328,9 @@ Assuming your in the `mpd-configure` directory, run:
 ````
 
 The python script
-[./examples/get-interfaces.py](https://github.com/ronalde/mpd-configure/tree/master/examples/get-interfaces.py)
+[./examples/get-interfaces.py](./examples/get-interfaces.py)
 uses a helper bash script
-([./examples/get-interfaces-for-python.sh](https://github.com/ronalde/mpd-configure/tree/master/examples/get-interfaces-for-python.sh)),
+([./examples/get-interfaces-for-python.sh](./examples/get-interfaces-for-python.sh)),
 which in turn sources `alsa-capabilities`.
 
 
