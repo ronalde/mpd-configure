@@ -1204,7 +1204,7 @@ fi
 
 CONF_MPD_CONFFILE="${CONF_MPD_CONFFILE:-}"
 if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then 
-    default_mpd_conffile="$(get_current_mpdconf_path "${2}")"
+    default_mpd_conffile="$(get_current_mpdconf_path "${CONF_MPD_CONFFILE}")"
     if [[ $? -eq 0 ]]; then
 	if [[ "${CONF_MPD_CONFFILE}" != "${default_mpd_conffile}" ]]; then
 	    printf " %s will save %s to \`%s', but according to system,\n" \
@@ -1213,7 +1213,7 @@ if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then
 		   "${default_mpd_conffile}" 1>&2;
 	    printf "in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
 	    printf "     mpd [other options] %s\n" \
-		   "${CONF_MPD_CONFFILE}" 1>&2;
+		   "${CONF_MPD_CONFFILE}" 1>&2;    
 	fi
     fi
 fi
