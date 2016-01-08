@@ -240,13 +240,17 @@ function write_conffile() {
 	## only prompt when both OVERWRITE_EXISTING_CONFFILE and
 	## DISABLE_PROMPTS are not set
 	if [[ ! -z ${existing_file} ]]; then
-	    printf " %s existing %s found in \`%s',\n" \
-		   "-" "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
+	    if [[ -z ${OPT_QUIET} ]]; then 
+		printf " %s existing %s found in \`%s',\n" \
+		       "-" "${MSG_MPD_CONFFILE}" "${mpd_conf_file}" 1>&2;
+	    fi
 	    ## check if a prompt is needed
 	    if [[ ! -z ${SKIP_BACKUP} ]] || [[ ! -z ${DISABLE_PROMPTS} ]]; then
 		## prompt not needed
-		printf "     but user requested overwriting of original conf file\n" 1>&2;
-		printf "     by setting either SKIP_BACKUP or DISABLE_PROMPTS.\n" 1>&2;
+		if [[ -z ${OPT_QUIET} ]]; then 
+		    printf "     but user requested overwriting of original conf file\n" 1>&2;
+		    printf "     by setting either SKIP_BACKUP or DISABLE_PROMPTS.\n" 1>&2;
+		fi
 		overwrite="yes"
 	    else
 		## prompt needed
@@ -264,8 +268,10 @@ overwrite && echo -e "${overwrite}")"
 	    else
 		## original file needs to be overwritten, check if a backup is needed
 		if [[ ! -z ${SKIP_BACKUP} ]]; then
-		    printf "  %s will overwrite existing conffile without making a backup,\n" 1>&2;
-		    printf "     as requested by the user by setting SKIP_BACKUP.\n" 1>&2;
+		    if  [[ -z ${OPT_QUIET} ]]; then 
+			printf "  %s will overwrite existing conffile without making a backup,\n" 1>&2;
+			printf "     as requested by the user by setting SKIP_BACKUP.\n" 1>&2;
+		    fi
 		else
 		    ## backup is needed
 		    temp_backup_file="$(backup_original_conf "${mpd_conf_file}")"
@@ -288,11 +294,11 @@ overwrite && echo -e "${overwrite}")"
     if [[ $? -ne 0 ]]; then
 	die "unspecified error"
     else
-	printf " %s done ... the resulting %s is saved in:\n" \
-	       "-" "${MSG_MPD_CONFFILE}" 1>&2;
+	printf "mpd-configure succesfully created a %s in:\n" \
+	       "${MSG_MPD_CONFFILE}" 1>&2;
 	## return the resulting file to the calling function
 	printf "%s" "${mpd_conf_file}"
-    fi 
+    fi
 
 }
 
@@ -880,17 +886,18 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
     ## displays the contents of CONF_CONTENTS or write them to
     ## `CONF_MPD_CONFFILE` if set
     if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then
-    [[ ! -z ${DEBUG} ]] && \
-	debug_configure "CONF_MPD_CONFFILE set to \`${CONF_MPD_CONFFILE}'."
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "CONF_MPD_CONFFILE set to \`${CONF_MPD_CONFFILE}'."
 	res="$(write_conffile "${CONF_MPD_CONFFILE}")"
 	printf "%s\n" "${res}"
     else
-    [[ ! -z ${DEBUG} ]] && \
-	debug_configure "CONF_MPD_CONFFILE left empty; printing to std_out."
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "CONF_MPD_CONFFILE left empty; printing to std_out."
 	## display the results (print to std_out)
 	printf "%s\n" "${CONF_CONTENTS}"
     fi
 
+    exit
 }
 
 ### program start
