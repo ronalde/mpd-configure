@@ -58,21 +58,14 @@ bash mpd-configure -o "mympd.conf"
 CONF_MPD_CONFFILE="mympd.conf" ./mpd-configure
 ````
 
-### More advanced usage example
 
-To see all available command line options run the script with `-h` or `--help`:
-````bash
-bash mpd-configure -h
-````
+
+### More advanced usage example
 
 Additional setting are available using environment variables or using
 the file [`./mpd-configure.conf`](./mpd-configure.conf) and
 configuration snippet files in the
-[`./confs-available/`](./confs-available) directory. By symlinking
-them to the [`./confs-enabled/`](./confs-enabled) directory, they will
-be included by the `mpd-configure` script in the resulting mpd
-configuration file. Any bash variable in those configuration snippets,
-will be expanded to their calculated values by the script.
+[`./confs-available/`](./confs-available) directory. 
 
 For example to specify `CONF_MPD_MUSICDIR` which sets the
 `music_directory` and saving the resulting mpd configuration file in `mympd.conf`, use:
@@ -92,6 +85,11 @@ creating a backup of the original `/etc/mpd.conf` in case it exists:
 ````bash
 CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
 bash mpd-configure -l u -n -o "/etc/mpd.conf"
+````
+
+To see all available command line options run the script with `-h` or `--help`:
+````bash
+bash mpd-configure -h
 ````
 
 Also see
@@ -305,6 +303,13 @@ Preferences
 
 Preferences can be set in the file `mpd-configure.conf`. By default all
 preferences are commented out.
+
+The script uses configuration file snippets in the
+[`./confs-available/`](./confs-available) directory. By symlinking
+them to the [`./confs-enabled/`](./confs-enabled) directory, they will
+be included by `mpd-configure` in the resulting mpd configuration
+file. Any bash variable in those configuration snippets, will be
+expanded to their calculated values by the script.
 
 
 ### General environment variables
