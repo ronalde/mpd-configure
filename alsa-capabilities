@@ -1209,13 +1209,18 @@ EOF
     )"
 
 ## construct static list of sample rates
+## based on ground clock frequencies of
+##  - video standard: 24.576  (mHz) * 1000000 / 512 = 48000Hz
+##  - audio standard: 22.5792 (mHz) * 1000000 / 512 = 44100Hz
+## initialize array with 32000 (seems commonly supported but not advisable
+## to use)
 SAMPLERATES=(32000)
-for baserate in 44100 48000; do
-    for i in 8 4 2 1; do
-	SAMPLERATES+=($(( baserate * $i )))
+for basefrequency in 44100 48000; do
+    ## add rates to array up to basefrequency*n<=8
+    for n in 8 4 2 1; do
+	SAMPLERATES+=($(( basefrequency * ${n} )))
     done 
 done
-
 
 ## pseudo random data to generate noise
 PSEUDO_RANDOM_NOISE="30985218341569576428057261168568123489906994"
