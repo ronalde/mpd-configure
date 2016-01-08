@@ -928,6 +928,21 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
     [[ ! -z ${DEBUG} ]] && \
 	debug_configure "${FUNCNAME}: CONF_ALSA_AIF_HWADDRESS=\`${CONF_ALSA_AIF_HWADDRESS}'."
 
+    if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then 
+	default_mpd_conffile="$(get_current_mpdconf_path "${CONF_MPD_CONFFILE}")"
+	if [[ $? -eq 0 ]]; then
+	    if [[ "${CONF_MPD_CONFFILE}" != "${default_mpd_conffile}" ]]; then
+		printf " %s will save %s to \`%s', but according to system,\n" \
+		   "-" "${MSG_MPD_CONFFILE}" "${CONF_MPD_CONFFILE}" 1>&2;
+		printf "   \`%s' will be used by mpd by default. " \
+		       "${default_mpd_conffile}" 1>&2;
+		printf "in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
+		printf "     mpd [other options] %s\n" \
+		       "${CONF_MPD_CONFFILE}" 1>&2;    
+	    fi
+	fi
+    fi
+
     ## get and check paths
     get_mpd_musicdir
     [[ $? -eq 0 ]] || die_configure "error in get_mpd_musicdir."
@@ -1197,26 +1212,14 @@ TEMP_CONF_BACKUP="${TEMP_CONF_BACKUP:-}"
 PREFERENCES_FILE="${SCRIPT_DIR}/mpd-configure.conf"
 if [[ -f "${PREFERENCES_FILE}" ]]; then
     source "${PREFERENCES_FILE}"
-    [[ ! -z ${DEBUG} ]] && debug_configure "PREFERENCES_FILE sourced: \`${PREFERENCES_FILE}'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "PREFERENCES_FILE sourced: \`${PREFERENCES_FILE}'"
 else
-    [[ ! -z ${DEBUG} ]] && debug_configure "PREFERENCES_FILE \`${PREFERENCES_FILE}' not found."
+    [[ ! -z ${DEBUG} ]] && \
+	debug_configure "PREFERENCES_FILE \`${PREFERENCES_FILE}' not found."
 fi
 
 CONF_MPD_CONFFILE="${CONF_MPD_CONFFILE:-}"
-if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then 
-    default_mpd_conffile="$(get_current_mpdconf_path "${CONF_MPD_CONFFILE}")"
-    if [[ $? -eq 0 ]]; then
-	if [[ "${CONF_MPD_CONFFILE}" != "${default_mpd_conffile}" ]]; then
-	    printf " %s will save %s to \`%s', but according to system,\n" \
-		   "-" "${MSG_MPD_CONFFILE}" "${CONF_MPD_CONFFILE}" 1>&2;
-	    printf "   \`%s' will be used by mpd by default. " \
-		   "${default_mpd_conffile}" 1>&2;
-	    printf "in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
-	    printf "     mpd [other options] %s\n" \
-		   "${CONF_MPD_CONFFILE}" 1>&2;    
-	fi
-    fi
-fi
 
 ## for backwards compatibility
 [[ ! -z "${CONF_ZEROCONF_ENABLED}" ]] || [[ ! -z "${ENABLE_LASTFM}" ]] && \
