@@ -993,25 +993,25 @@ The \`-q (quiet)' and \`-a (address)' options are meant for usage in
 other scripts. The script returns 0 on success or 1 in case of no
 matches or other errors.
 
-  -l, --limit  TYPEFILTER   Limit the interfaces to TYPEFILTER. Can be
-                            one of \`a' (or \`analog'), \`d' (or
-                            \`digital'), \`u' (or \`usb') for USB
-                            Audio Class (UAC1 or UAC2) devices.
-
-  -c, --customlimit REGEXP  Limit the available interfaces (further)
-                            to match \`<regexp>'.
-  -a, --address HWADDRESS   Limit the returned interface (further) to
-                            the one specified with HWADDRESS,
-                            eg. \`hw:0,1'
-  -s, --samplerates         Adds a listing of the supported sample
-                            rates for each format an interface
-                            supports.  
-                            CAUTION: Besides being slow this option
-                            PLAYS NOISE ON EACH OUTPUT!
-  -q, --quiet               Surpress listing each interface with its
-                            details, ie. only store the details of
-                            each card in the appropriate arrays.
-  -h, --help                Show this help message
+  -l TYPEFILTER, --limit TYPEFILTER   
+                     Limit the interfaces to TYPEFILTER. Can be one of
+                     \`a' (or \`analog'), \`d' (or \`digital'), 
+                     \`u' (or \`usb', for USB Audio Class (UAC1 or UAC2)
+                     devices).
+  -c REGEXP, --customlimit REGEXP 
+                     Limit the available interfaces (further) to match
+                     \`REGEXP'.
+  -a HWADDRESS, --address HWADDRESS   
+                     Limit the returned interface (further) to the one
+                     specified with HWADDRESS, eg. \`hw:0,1'
+  -s, --samplerates  Adds a listing of the supported sample rates for
+                     each format an interface supports.
+                     CAUTION: Besides being slow this option
+                              PLAYS NOISE ON EACH OUTPUT!
+  -q, --quiet        Surpress listing each interface with its details,
+                     ie. only store the details of each card in the
+                     appropriate arrays.
+  -h, --help         Show this help message
 EOF
 )
     printf "%s\n" "${msg}" 1>&2;
