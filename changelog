@@ -1,4 +1,46 @@
-commit df55384422585b279c462705eb26bba7499a6194 (HEAD -> master, origin/master, origin/HEAD)
+commit 37ada6eb939a04837154bcdd556897ff734f3d4c (HEAD -> master, origin/master, origin/HEAD)
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 12:39:33 2016 +0100
+
+    cleanup of preferences
+
+commit cf117be5fe29a991e8a6be34b76af94d4f9e8366
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 12:31:26 2016 +0100
+
+    added commandline parameters
+
+commit 2c40856d2cfc32e614bbaa13e8dcf9be1f669cb0
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 11:34:33 2016 +0100
+
+    reordered LTSP information
+
+commit 97871bf0727c0e9151304a38872eaa50a590b794
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 11:26:17 2016 +0100
+
+    added example for usage as a systemd service
+
+commit a34a71b3690cf63b9e2e1de540e1c2ff0fec75e2
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 11:21:37 2016 +0100
+
+    fixed OPT_QUIET and enhanced succesful exit message
+
+commit 7521d0a5295d9958ca1a0fbc6ae4b8b69609bdeb
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 10:27:44 2016 +0100
+
+    added internal links and some extra background information
+
+commit d032d53b02899826081649a532115df5163ccde8
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Jan 8 10:01:37 2016 +0100
+
+    updated with `git log --decorate >changelog`
+
+commit df55384422585b279c462705eb26bba7499a6194
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Fri Jan 8 10:00:16 2016 +0100
 
