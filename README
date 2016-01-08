@@ -284,6 +284,15 @@ In dynamic environments --for example a network booted ltsp client,
 which hardware may be altered each boot, connected to whatever DAC--
 the script should be put in a logon script or an init script.
 
+## Usage a as systemd service
+
+The script is fast and stable enough to function as a systemd
+service. By setting `Before=mpd.service` and `Wants=mpd.service` in
+the service file systemd makes sure mpd-configure is run before mpd is started, and
+tries to start mpd.
+
+. See: [./examples/systemd_mpd-configure.service](./examples/systemd_mpd-configure.service)
+
 ### LTSP-specific auto logon sample
 
 For my LTPS-environment I therefore copy the script directory to the
@@ -294,7 +303,10 @@ run the script and start `mpd` using the script generated
 
 ````bash
     systemctl stop mpd && \
-    LIMIT_INTERFACE_TYPE="usb" CONF_MPD_CONFFILE=~/.mpd/mpd.conf \
+    LIMIT_INTERFACE_TYPE="usb" \
+    DISABLE_PROMPTS="True " SKIP_BACKUP="True" OPT_QUIET="True"
+    CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd"
+    CONF_MPD_CONFFILE=~/.mpd/mpd.conf \
     bash ~/mpd-configure/mpd-configure && \
     systemctl start mpd
 ````
