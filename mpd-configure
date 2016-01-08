@@ -69,8 +69,7 @@ function really_write() {
 	return 1
     else
 	## return the result
-	printf "\ndone! mpd configuration successfully file saved in \`%s'.\n" \
-	       "${mpd_conffile}"
+	printf "${mpd_conffile}"
     fi
 }
 
@@ -87,31 +86,34 @@ function check_or_create_targetdir() {
     
     if [[ ! -d "${mpd_conf_dir}" ]]; then
 	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "conf dir \`${mpd_conf_dir}' does not exist, try to create it"
+	    debug_configure "${FUNCNAME}: conf dir \`${mpd_conf_dir}' does not exist, \
+try to create it"
 	res="$(mkdir -p "${mpd_conf_dir}" 2>&1)"
 	if [[ $? -ne 0 ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "error creating mpd_conf_dir \`${mpd_conf_dir}': \`${err}'"
+		debug_configure "${FUNCNAME}: error creating mpd_conf_dir \
+ \`${mpd_conf_dir}': \`${err}'"
 	    printf " %s can't create parent directory \`%s'.\n" \
 		   "-" "${mpd_conf_dir}"
 	    return 1
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "successfully created mpd_conf_dir \`${mpd_conf_dir}'"
+		debug_configure "${FUNCNAME}: successfully created \
+mpd_conf_dir \`${mpd_conf_dir}'"
 	    printf "%s" "${mpd_conf_dir}"
 	fi
     else
 	[[ ! -z ${DEBUG} ]] && \
-		debug_configure "mpd_conf_dir \`${mpd_conf_dir}' already exists"
+		debug_configure "${FUNCNAME}: mpd_conf_dir \`${mpd_conf_dir}' already exists"
 	## conf dir exists, check if it writable
 	if [[ ! -w "${mpd_conf_dir}" ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "mpd_conf_dir \`${mpd_conf_dir}' already exists"
+		debug_configure "${FUNCNAME}: mpd_conf_dir \`${mpd_conf_dir}' already exists"
 	    printf " - no write permission in target directory \`%s'." "${mpd_conf_dir}"
 	    return 1
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "conf dir \`${mpd_conf_dir}' is writable"
+		debug_configure "${FUNCNAME}: conf dir \`${mpd_conf_dir}' is writable"
 	    printf "%s" "${mpd_conf_dir}"
 	fi
     fi
@@ -294,8 +296,8 @@ overwrite && echo -e "${overwrite}")"
     if [[ $? -ne 0 ]]; then
 	die "unspecified error"
     else
-	printf "mpd-configure succesfully created a %s in:\n" \
-	       "${MSG_MPD_CONFFILE}" 1>&2;
+	printf " %s mpd-configure succesfully created a %s in:\n" \
+	       "-" "${MSG_MPD_CONFFILE}" 1>&2;
 	## return the resulting file to the calling function
 	printf "%s" "${mpd_conf_file}"
     fi
@@ -751,6 +753,69 @@ function get_mpd_musicdir() {
     
 }
 
+function get_current_mpdconf_path() {
+    ## get and retrun the mpd.conf file in use
+
+    default_re="[[:space:]]*MPDCONF[[:space:]]*=[[:space:]]*(.*)"
+    conffile=""
+    declare -a mpd_confs
+    
+    if [[ ! -z ${CONF_MPD_CONFFILE} ]]; then
+	if [[ -f /etc/default/mpd ]]; then
+	    while read -r line; do
+		if [[ "${line}" =~ ${default_re} ]]; then
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug_configure "${FUNCNAME}: default ${MSG_MPDCONF}: \`${conffile}'."
+		    conffile="${BASH_REMATCH[1]}"
+		    break
+		fi
+	    done
+	fi
+
+	if [[ ! -z "${conffile}" ]]; then
+	    if [[ ! -f "${conffile}" ]]; then
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug_configure "${FUNCNAME}: default ${MSG_MPDCONF} \`${conffile}' \
+does not exist."
+		## default conffile does not exist
+		return 1
+	    else
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug_configure "${FUNCNAME}: default ${MSG_MPDCONF} \`${conffile}' exists."
+	    fi
+	else
+	    ## no default conffile, try usual suspects
+	    mpd_confs=("$XDG_CONFIG_HOME/mpd/mpd.conf")
+	    mpd_confs+=("~/.mpdconf")
+	    mpd_confs+=("~/.mpd/mpd.conf")
+	    mpd_confs+=("/etc/mpd.conf")
+	    
+	    for conffile in "${mpd_confs[@]}"; do
+		if [[ -f "${conffile}" ]]; then
+		    [[ ! -z "${DEBUG}" ]] && \
+			debug_configure "${FUNCNAME}: non-default ${MSG_MPDCONF} \`${conffile}' found."
+		    break
+		fi
+	    done
+	fi
+    fi
+
+    if [[ ! -z "${conffile}" ]] && [[ -f "${conffile}" ]]; then
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug_configure "${FUNCNAME}: returning ${MSG_MPDCONF} \`${conffile}'."
+	printf "%s" "${conffile}"
+	return 0
+    else
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug_configure "${FUNCNAME}: found ${MSG_MPDCONF} \`${conffile}' \
+does not exist (THIS SHOULD NOT HAPPEN)."
+	return 1
+    fi
+	
+}
+
+
+
 function get_mpd_homedir() {
     ### get and check working directory for mpd
     [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
@@ -890,6 +955,7 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
     if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then
 	[[ ! -z ${DEBUG} ]] && \
 	    debug_configure "CONF_MPD_CONFFILE set to \`${CONF_MPD_CONFFILE}'."
+	 
 	res="$(write_conffile "${CONF_MPD_CONFFILE}")"
 	printf "%s\n" "${res}"
     else
@@ -972,7 +1038,19 @@ function analyze_command_line_conf() {
 		if [ -n "${2:-}" ]; then
 		    [[ ! -z ${DEBUG} ]] && \
 			debug "$(printf "option \`%s' set to \`%s'.\n" "$1" "$2")"
-		    CONF_MPD_CONFFILE="${2}"
+		    CONF_MPD_CONFFILE="$2"
+		    default_mpd_conffile="$(get_current_mpdconf_path "${2}")"
+		    if [[ $? -eq 0 ]]; then
+			if [[ "${CONF_MPD_CONFFILE}" != "${default_mpd_conffile}" ]]; then
+			    printf " %s will save %s to \`%s', but according to system,\n" \
+				   "-" "${MSG_MPD_CONFFILE}" "${CONF_MPD_CONFFILE}" 1>&2;
+			    printf "   \`%s' will be used by mpd by default. " \
+				   "${default_mpd_conffile}" 1>&2;
+			    printf "in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
+			    printf "     mpd [other options] %s\n" \
+				    "${CONF_MPD_CONFFILE}" 1>&2;
+			fi
+		    fi
 		    shift 2
                     continue
 		else
