@@ -754,7 +754,8 @@ function get_mpd_musicdir() {
 }
 
 function get_current_mpdconf_path() {
-    ## get and retrun the mpd.conf file in use
+    ## get and retrun the mpd.conf file in use by the system
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
 
     default_re="[[:space:]]*MPDCONF[[:space:]]*=[[:space:]]*(.*)"
     conffile=""
@@ -785,7 +786,7 @@ does not exist."
 	    fi
 	else
 	    ## no default conffile, try usual suspects
-	    mpd_confs=("$XDG_CONFIG_HOME/mpd/mpd.conf")
+	    mpd_confs=("${XDG_CONFIG_HOME}/mpd/mpd.conf")
 	    mpd_confs+=("~/.mpdconf")
 	    mpd_confs+=("~/.mpd/mpd.conf")
 	    mpd_confs+=("/etc/mpd.conf")
@@ -794,6 +795,7 @@ does not exist."
 		if [[ -f "${conffile}" ]]; then
 		    [[ ! -z "${DEBUG}" ]] && \
 			debug_configure "${FUNCNAME}: non-default ${MSG_MPDCONF} \`${conffile}' found."
+		    printf "%s" "${conffile}"
 		    break
 		fi
 	    done
