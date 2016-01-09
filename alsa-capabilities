@@ -985,10 +985,15 @@ function analyze_opt_limit() {
 	    msg_custom="maybe you could try to use the custom filter option, eg:"
 	    msg_trail="for limit option \`${option}' specified. should be one of:\n"
 	    if [[ ! -z ${opt_limit} ]]; then
+		str_re=""
+		for (( i=0; i<${#opt_limit}; i++ )); do
+		    char="${opt_limit:$i:1}"
+		    str_re+="[${char^^}${char,,}]"
+		done
 		msg="invalid value \`${opt_limit}' "
 		msg+="$(printf "${msg_trail}${msg_vals}\n${msg_custom}")"
 		## display instructions to use the custom filter
-		msg+="$(printf "\n bash $0 -c %s\n" "${opt_limit}")"
+		msg+="$(printf "\n bash $0 -c \"%s\"\n" "${str_re}")"
 	    else
 		msg="$(printf "no value for ${msg_trail}${msg_vals}")"
 	    fi
