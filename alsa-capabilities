@@ -988,12 +988,9 @@ function analyze_opt_limit() {
 		msg="invalid value \`${opt_limit}' "
 		msg+="$(printf "${msg_trail}${msg_vals}\n${msg_custom}")"
 		## display instructions to use the custom filter
-		msg+=""
 		msg+="$(printf "\n bash $0 -c %s\n" "${opt_limit}")"
 	    else
-		msg="no value for "
-		msg+="$(printf "${msg_trail}")"
-		msg+="${msg_vals}"
+		msg="$(printf "no value for ${msg_trail}${msg_vals}")"
 	    fi
 	    
 	    ## display the option pairs, stripping the trailing comma
