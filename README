@@ -23,10 +23,16 @@ The latest stable version of the script may be cloned from github using `git`:
 ````bash
 git clone https://github.com/ronalde/mpd-configure.git
 ````
+Using git has the added benefit that updating the script to the latest
+version is as easy as:
+````bash
+## cd /path/to/git-clone
+git pull
+````
 
-Or [the tarball of the current stable
+Alternatively, [the tarball of the current stable
 master](http://lacocina.nl/mpd-configure) can be downloaded and
-untarred in the current directory using `wget` and `tar`:
+unpacked in the current directory using `wget` and `tar`:
 ````bash
 wget http://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
 ````
@@ -49,10 +55,11 @@ example `mympd.conf`):
 bash mpd-configure > mympd.conf
 ````
 
-Although the same may be achieved by using the `-o` or `--output` command line parameters or setting `CONF_MPD_CONFFILE` on
-the command line. This has the benefit that the script detects if the
-target file exists, in which case the user is prompted to overwrite
-it, while making an automated *backup* of the original file:
+Although the same may be achieved by using the `-o` or `--output`
+command line parameters or setting `CONF_MPD_CONFFILE` on the command
+line. This has the benefit that the script detects if the target file
+exists, in which case the user is prompted to overwrite it, while
+making an automated *backup* of the original file:
 ````bash
 bash mpd-configure -o "mympd.conf"
 # or:
@@ -67,7 +74,8 @@ configuration snippet files in the
 [`./confs-available/`](./confs-available) directory. 
 
 For example to specify `CONF_MPD_MUSICDIR` which sets the
-`music_directory` and saving the resulting mpd configuration file in `mympd.conf`, use:
+`music_directory` and saving the resulting mpd configuration file in
+`mympd.conf`, use:
 ````bash
 CONF_MPD_MUSICDIR="/srv/media/music" ./mpd-configure -o "/etc/mpd.conf"
 ````
@@ -103,11 +111,7 @@ About the alsa-capabilities helper script
 [`mpd-configure`](./mpd-configure) relies on the accompanying bash
 script [`alsa-capabilities`](./alsa-capabilities) for getting
 information about the available audio output interfaces from
-alsa. Also offered is the [`mpd-monitor'](./mpd-monitor) script which
-shows which parts of the audio chain are configured for bit perfect
-audio playback. `mpd-monitor` is currently in development and unstable.
-
-`alsa-capabilities` may be run from the commandline. It will then
+alsa. However, `alsa-capabilities` may be run from the commandline independently from `mpd-configure`. It will then
 display each alsa audio output interface with its capabilities, like
 the type (ie. Analog, Digital or USB Audio Class) and the native
 (digital) audio formats it supports, as well as other properties, like
@@ -157,8 +161,12 @@ bash alsa-capabilities -s
 About the mpd-monitor helper script
 -----------------------------------
 
-The actual configuration of the system may be inspected/monitored by
-the helper script `mpd-monitor`, which can be executed as follows:
+In development is the [`mpd-monitor'](./mpd-monitor) script which is
+aimed at showing which parts of the audio chain are configured for bit
+perfect audio playback. `mpd-monitor` is currently in development and
+unstable. The actual configuration of the system may be
+inspected/monitored by the helper script `mpd-monitor`, which can be
+executed as follows:
 
 ````bash
     bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")
