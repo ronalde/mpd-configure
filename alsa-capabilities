@@ -981,9 +981,23 @@ function analyze_opt_limit() {
 		fi
 	    done
 	    args_val=$(printf "%s, " "${args[@]}")
-	    printf "the limit option (specified with \`%s'), requires one of the following arguments:\n" "${option}" 1>&2;
-	    ## strip the trailing comma
-	    printf " ${args_val%*, }\n" 1>&2;
+	    msg_vals="$(printf " ${args_val%*, }\n")"
+	    msg_custom="maybe you could try to use the custom filter option, eg:"
+	    msg_trail="for limit option \`${option}' specified. should be one of:\n"
+	    if [[ ! -z ${opt_limit} ]]; then
+		msg="invalid value \`${opt_limit}' "
+		msg+="$(printf "${msg_trail}${msg_vals}\n${msg_custom}")"
+		## display instructions to use the custom filter
+		msg+=""
+		msg+="$(printf "\n bash $0 -c %s\n" "${opt_limit}")"
+	    else
+		msg="no value for "
+		msg+="$(printf "${msg_trail}")"
+		msg+="${msg_vals}"
+	    fi
+	    
+	    ## display the option pairs, stripping the trailing comma
+	    printf "%s\n" "${msg}" 1>&2;
 	    exit 1
     esac
 }
