@@ -19,22 +19,23 @@ Basic usage
 
 ### Getting the script
 
-The latest stable version of the script may be cloned from github using git:
+The latest stable version of the script may be cloned from github using `git`:
 ````bash
 git clone https://github.com/ronalde/mpd-configure.git
 ````
 
-Or downloaded and untarred in the current directory:
+Or [the tarball of the current stable
+master](http://lacocina.nl/mpd-configure) can be downloaded and
+untarred in the current directory using `wget` and `tar`:
 ````bash
-mkdir /tmp/mpd-configure
-cd /tmp/mpd-configure
 wget http://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
 ````
 
+
 ### Running the script
 
-Run the script with default settings and print the resulting mpd
-configuration file to stdout:
+Run the script with default settings to display the contents of the
+resulting mpd configuration file:
 
 ````bash
 bash mpd-configure
@@ -42,8 +43,8 @@ bash mpd-configure
 
 ### Storing the output of the script in a file
 
-The output can simply be redirected to a file (in this example
-`mympd.conf`):
+The output of the scripts can simply be redirected to a file (in this
+example `mympd.conf`):
 ````bash
 bash mpd-configure > mympd.conf
 ````
@@ -57,8 +58,6 @@ bash mpd-configure -o "mympd.conf"
 # or:
 CONF_MPD_CONFFILE="mympd.conf" ./mpd-configure
 ````
-
-
 
 ### More advanced usage example
 
