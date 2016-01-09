@@ -945,6 +945,10 @@ function analyze_opt_limit() {
 
     option="$1"
     opt_limit="${2-}"
+    declare -a args
+    prev_opt=0
+    prev_arg=0
+    argsval=
     case ${opt_limit} in
         a|analog) 
 	    OPT_LIMIT_AO="True"
@@ -965,9 +969,21 @@ function analyze_opt_limit() {
 	    return 0
 	    ;;
 	*)
-	    args=$(printf "\"%s\", " "${OPT_LIMIT_ARGS[@]}")
+	    ## construct list of option pairs: "x (or 'long option')"
+	    for arg_index in ${!OPT_LIMIT_ARGS[@]}; do
+		if [[ $(( arg_index % 2 )) -eq 0 ]]; then
+		    ## even (short option): new array item
+		    args+=("")
+		else
+		    ## odd (long option): add value to previous array item
+		    prev_opt=$(( arg_index - 1 ))
+		    args[-1]="${OPT_LIMIT_ARGS[${prev_opt}]} (or '${OPT_LIMIT_ARGS[${arg_index}]}')"
+		fi
+	    done
+	    args_val=$(printf "%s, " "${args[@]}")
 	    printf "the limit option (specified with \`%s'), requires one of the following arguments:\n" "${option}" 1>&2;
-	    printf "${args%*, }\n" 1>&2;
+	    ## strip the trailing comma
+	    printf " ${args_val%*, }\n" 1>&2;
 	    exit 1
     esac
 }
@@ -995,14 +1011,14 @@ matches or other errors.
 
   -l TYPEFILTER, --limit TYPEFILTER   
                      Limit the interfaces to TYPEFILTER. Can be one of
-                     \`a' (or \`analog'), \`d' (or \`digital'), 
-                     \`u' (or \`usb', for USB Audio Class (UAC1 or UAC2)
-                     devices).
+                     \`a' (or \`analog'), \`d' (or \`digital'), \`u'
+                     (or \`usb'), the latter for USB Audio Class (UAC1
+                     or UAC2) devices.
   -c REGEXP, --customlimit REGEXP 
-                     Limit the available interfaces (further) to match
+                     Limit the available interfaces further to match
                      \`REGEXP'.
   -a HWADDRESS, --address HWADDRESS   
-                     Limit the returned interface (further) to the one
+                     Limit the returned interface further to the one
                      specified with HWADDRESS, eg. \`hw:0,1'
   -s, --samplerates  Adds a listing of the supported sample rates for
                      each format an interface supports.
@@ -1300,6 +1316,9 @@ MSG_ALSA_SAMPLERATES="sample rates"
 MSG_ALSA_MONITORFILE="monitor file"
 
 ## command line options
+## input parameters for the limit option
+## should be consequtive pairs of '"x" "long option"'
+declare -a OPT_LIMIT_ARGS=("a" "analog" "d" "digital" "u" "usb")
 ## also see analyze_command_line
 OPT_LIMIT_AO=${OPT_LIMIT_AO:-}
 OPT_LIMIT_DO=${OPT_LIMIT_DO:-}
