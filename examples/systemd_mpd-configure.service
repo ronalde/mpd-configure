@@ -3,6 +3,8 @@
 ##
 ## This file should be copied to
 ## /usr/lib/systemd/system/mpd-configure.service
+## or, on Debian based ditros to:
+## /lib/systemd/system/mpd-configure.service
 ## after which it should be made known by running:
 ## systemctl daemon-reload
 ## 
