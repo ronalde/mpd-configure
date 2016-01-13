@@ -1136,7 +1136,8 @@ function return_alsa_interface() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
-    profile_file=""
+    profile_file=
+    paerr=
     ## start profiling
     if [[ ! -z ${PROFILE} ]]; then
 	profile_file="/tmp/alsa-capabilities.$$.log"
@@ -1155,26 +1156,24 @@ function return_alsa_interface() {
     ## parse command line arguments
     analyze_command_line "$@"
 
-    if [[ ! -z ${OPT_STOP_PULSEAUDIO} ]] || \
-	   [[ ! -z ${OPT_DISABLE_PULSEAUDIO} ]]; then 
+    if [[ ! -z ${OPT_STOP_PULSEAUDIO} ]]; then 
 	## analyse pulseaudio when requested
-	if [[ ! -f pulseaudio-helper ]]; then
-	    printf "option \`OPT_STOP_PULSEAUDIO' and/or \
-OPT_DISABLE_PULSEAUDIO set, but helper script \
-\`pulseaudio-helper' not found.\n" 1>&2;
+	if [[ ! -f ${PA_HELPER_SCRIPT} ]]; then
+            paerr="can't source \`${PA_HELPER_SCRIPT}'; file not found."
 	else
-	    source pulseaudio-helper
-	    pulseaudio_evaluate_stopping
+	    source ${PA_HELPER_SCRIPT}
+	    if [[ $? -ne 0 ]]; then
+		paerr="error sourcing \`${PA_HELPER_SCRIPT}'."
+	    else 
+		pulseaudio_evaluate_stopping
+	    fi
+	fi
+	if [[ ! -z "${paerr}" ]]; then
+	    printf "  %s %s\n" "-" "${paerr}" 1>&2;
 	fi
     fi
     ## create a list of alsa audio output interfaces and parse it.
     fetch_alsa_outputinterfaces
-
-    if [[ ! -z ${OPT_STOP_PULSEAUDIO} ]] || \
-	   [[ ! -z ${OPT_DISABLE_PULSEAUDIO} ]]; then 
-	## restore and restart pulseaudio if requested and command available.
-	pulseaudio_evaluate_restoring
-    fi
 
     ## exit with error if no matching output line was found
     if [[ ${#ALSA_AIF_HWADDRESSES[@]} == 0 ]]; then
@@ -1346,7 +1345,7 @@ OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
 
 ## currently unused
 OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
-OPT_DISABLE_PULSEAUDIO="${OPT_DISABLE_PULSEAUDIO:-}"
+PA_HELPER_SCRIPT="pulseaudio-helper"
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
