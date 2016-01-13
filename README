@@ -1,10 +1,14 @@
+---
+layout: post
+title: README for mpd-configure
+---
+
 README for mpd-configure
 ========================
 
-The `mpd-configure` bash script creates a valid
-[mpd](http://www.musicpd.org/) configuration file optimised for
-bit perfect playback of any digital audio file, including those of
-high resolution.
+The `mpd-configure` bash script creates a valid configuration file for
+[mpd], optimised for bit perfect playback of any digital audio file,
+including those of high resolution.
 
 With default settings the script uses the first available alsa audio
 interface by using its hardware address (in the form of `hw:x,y`), and
@@ -12,6 +16,12 @@ has automagic procedures for things like the music directory and
 directory where files are stored, the number of items in the music
 direcory and the UPNP name. When multiple audio interfaces are found,
 the user is presented with a choice.
+
+More information is available at the following pages:
+
+- [audiophile-mpd]
+- [detect-alsa-output-capabilities]
+
 
 
 Basic usage
@@ -439,3 +449,10 @@ LTSP specific:
   software (with LTSP and
   MPD)](http://lacocina.nl/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
 - [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
+
+
+[audiophile-mpd]:  http://lacocina.nl/audiophile-mpd "mpd-configure: automatically turn Linux into an audiophile music player"
+[detect-alsa-output-capabilities]: http://lacocina.nl/detect-alsa-output-capabilities "Alsa-capabilities shows which digital audio formats your USB DA-converter supports"
+
+[mpd]: http://www.musicpd.org/ "Music Player Daemon (external website)"
+
