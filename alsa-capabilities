@@ -547,30 +547,19 @@ ${MSG_ERROR_UNEXPECTED}"
 		printf "   %-17s   %-60s\n" \
 		       " " \
 		       "${formats_res[@]}"  1>&2;
-	    else
 		## when OPT_SAMPLERATES is set alsa_if_formats might
 		## contain multiple lines so print the header first
-		if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
-		    formatcounter=0
-		    MSG_ALSA_ENCODINGFORMATS="rates per format"
-		    printf " - %-17s = " \
-			   "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
-		    while IFS="\n" read -r line; do
-			(( formatcounter++ ))
-			if [[ ${formatcounter} -gt 1 ]]; then 
-			    printf "%-23s" " " 1>&2;
-			fi
-			printf "%-60s\n" "${line}" 1>&2;
-		    done<<<"${alsa_if_formats[@]}"
-		else
-		    ## no sample rates
-		    formats=$(printf "%s, " ${alsa_if_formats[@]})
-		    ## strip the last comma
-		    formats=${formats%,*}
-		    printf " - %-17s = %-60s\n" \
-			   "${MSG_ALSA_ENCODINGFORMATS}" \
-			   "${formats}" 1>&2;		
-		fi
+		formatcounter=0
+		MSG_ALSA_ENCODINGFORMATS="rates per format"
+		printf " - %-17s = " \
+		       "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
+		while IFS="\n" read -r line; do
+		    (( formatcounter++ ))
+		    if [[ ${formatcounter} -gt 1 ]]; then 
+			printf "%-23s" " " 1>&2;
+		    fi
+		    printf "%-60s\n" "${line}" 1>&2;
+		done<<<"${alsa_if_formats[@]}"
 	    fi
 	    printf " - %-17s = %-60s\n" \
 		   "${MSG_ALSA_MONITORFILE}" "${alsa_if_monitorfile}" 1>&2;
@@ -836,18 +825,11 @@ function return_alsa_formats() {
 		    if [[ "${line}" =~ ${rates_re} ]]; then
 			## sample rates for interface/format found
 			inside_interface=
- 			if [[ -z ${OPT_SAMPLERATES} ]]; then
-			    formats+=("${format_found}")
-			    format_found=
-			else
-			    samplerates="${BASH_REMATCH[1]//,/Hz}Hz"
-			    [[ ! -z ${DEBUG} ]] && \
-				debug "${FUNCNAME}: sample rates found: \`${samplerates}'"
-			    printf "%-20s" "${format_found}:"
-			    printf "%s " "${samplerates}"
-			    
-			    
-			fi
+			samplerates="${BASH_REMATCH[1]//,/Hz}Hz"
+			[[ ! -z ${DEBUG} ]] && \
+			    debug "${FUNCNAME}: sample rates found: \`${samplerates}'"
+			printf "%-20s" "${format_found}:"
+			printf "%s " "${samplerates}"
 			continue
 		    fi
 		fi
@@ -1400,7 +1382,8 @@ OPT_LIMIT_UO=${OPT_LIMIT_UO:-}
 OPT_QUIET=${OPT_QUIET:-}
 OPT_FILTER=${OPT_FILTER:-}
 OPT_HWFILTER=${OPT_HWFILTER:-}
-OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
+#OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
+OPT_SAMPLERATES=True
 
 ## currently unused
 PA_HELPER_SCRIPT="pulseaudio-helper"
