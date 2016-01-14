@@ -547,8 +547,7 @@ ${MSG_ERROR_UNEXPECTED}"
 		printf "   %-17s   %-60s\n" \
 		       " " \
 		       "${formats_res[@]}"  1>&2;
-		## when OPT_SAMPLERATES is set alsa_if_formats might
-		## contain multiple lines so print the header first
+	    else
 		formatcounter=0
 		MSG_ALSA_ENCODINGFORMATS="rates per format"
 		printf " - %-17s = " \
@@ -1149,6 +1148,7 @@ as an argument (eg \`hw:x,y')\n" "$1" 1>&2
 		fi
 		;;
             -s|--samplerates)
+		## deprecated
 		[[ ! -z ${DEBUG} ]] && \
 		    debug "${FUNCNAME}: option \`$1' set"
 		OPT_SAMPLERATES=true
@@ -1382,7 +1382,6 @@ OPT_LIMIT_UO=${OPT_LIMIT_UO:-}
 OPT_QUIET=${OPT_QUIET:-}
 OPT_FILTER=${OPT_FILTER:-}
 OPT_HWFILTER=${OPT_HWFILTER:-}
-#OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
 OPT_SAMPLERATES=True
 
 ## currently unused
