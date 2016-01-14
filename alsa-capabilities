@@ -667,70 +667,88 @@ function return_alsa_samplerates() {
     ## TODO: document
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
-    
+
     alsa_if_hwaddress="$1"
     format="$2"
-    rate_min="$3"
-    rate_max="$4"
-    rates=(${SAMPLERATES[@]})
-    rates=${rates[@]/$rate_min}
-    rates=${rates[@]/$rate_max}
     hw=""
-
+    
     ## sanity checks
-    if [[ ${rate_min} -ge ${rate_max} ]]; then
+    if [[ -z "${rawformats[0]}" ]]; then
 	## something went wrong
-	debug "${FUNCNAME}: rate_min (${rate_min}) -ge rate_max (${rate_max})."
-	return 1
-    elif [[ -z "${rawformats[0]}" ]]; then
-	## something went wrong
-	if [[ ! -z ${DEBUG} ]]; then 
-	    debug "${FUNCNAME}: empty rawformats[0]: ${rawformats[0]}"
-	    for i in "${!rawformats[0]}"; do
-		debug "${FUNCNAME}: $i: ${rawformats[$i]}"
-	    done
-	fi
 	return 1
     fi
     
     [[ ! -z ${DEBUG} ]] && \
 	debug "${FUNCNAME}: getting sample rates for device \`${alsa_if_hwaddress}' \
 using format \`${format}'."
+    
+    errors=()
+    noerror=
+    ## assume fs*1 is always supported to save time
+    printf "%s\n" "${SAMPLERATES_AUDIO[0]}"
+    for rate in ${SAMPLERATES_AUDIO[@]:1}; do  
+	res="$(check_samplerate "${alsa_if_hwaddress}" "${format}" "${rate}")"
+	if [[ $? -eq 0 ]]; then 
+	    printf "%s\n" "${res}"
+	else
+	    break
+	fi
+    done
+
+    ## assume fs*1 is always supported to save time
+    printf "%s\n" "${SAMPLERATES_VIDEO[1]}"
+    for rate in ${SAMPLERATES_VIDEO[0]} ${SAMPLERATES_VIDEO[@]:2} ${SAMPLERATES_VIDEO[@]:2}; do
+	res="$(check_samplerate "${alsa_if_hwaddress}" "${format}" "${rate}")"
+	if [[ $? -eq 0 ]]; then 
+	    printf "%s\n" "${res}"
+	else
+	    break
+	fi
+    done
+
+}
+
+function check_samplerate() {
+
+    alsa_if_hwaddress="$1"
+    format="$2"
+    samplerate="$3"
+    
     declare -a aplay_opts_pre
-    aplay_opts_pre+=(-D "${alsa_if_hwaddress}")
-    aplay_opts_pre+=(-f "${format}")
-    aplay_opts_pre+=(-c "2")
-    aplay_opts_pre+=(-N)
+    aplay_opts_pre+=(--device="${alsa_if_hwaddress}")
+    aplay_opts_pre+=(--format="${format}")
+    aplay_opts_pre+=(--channels="2")
+    aplay_opts_pre+=(--nonblock)
     declare -a aplay_opts_post
     rate_notaccurate_re=".*Warning:.*not[[:space:]]accurate[[:space:]]\(requested[[:space:]]=[[:space:]]([0-9]+)Hz,[[:space:]]got[[:space:]]=[[:space:]]([0-9]+)Hz\).*"
     badspeed_re=".*bad[[:space:]]speed[[:space:]]value.*"
     sampleformat_nonavailable_re=".*Sample[[:space:]]format[[:space:]]non[[:space:]]available.*"
     wrongformat_re=".*wrong[[:space:]]extended[[:space:]]format.*"
     default_re=".*Playing[[:space:]]raw[[:space:]]data.*"
-    
-    errors=()
-    noerror=
-    for rate in ${rates[@]}; do
-	if [[ ${rate} -gt ${rate_min} ]] && [[ ${rate} -lt ${rate_max}  ]]; then 
-	    unset aplay_opts_post
-	    aplay_opts_post+=(-r "${rate}")
-	    aplay_out=$(echo "${PSEUDO_RANDOM_NOISE}" | \
-LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1)
-	    if [[ $? -eq 0 ]]; then
-		read -r firstline<<<"${aplay_out}"
-		if [[ "${aplay_out}" = "${firstline}" ]] && \
-		       [[ "${firstline}" =~ ${default_re} ]]; then 
-		    printf "%sHz\n" "${rate}"
-		fi
-	    else
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME}: aplay returned an error using \
-format ${format} @ rate ${rate}: \`${aplay_out}'"
-	    fi
+
+    [[ ! -z ${DEBUG} ]] && debug "${FUNCNAME}: testing rate ${samplerate}"
+    unset aplay_opts_post
+    aplay_opts_post+=(--rate="${samplerate}")
+    aplay_out=$(echo "${PSEUDO_RANDOM_NOISE}" | \
+		       LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1)
+    if [[ $? -eq 0 ]]; then
+	read -r firstline<<<"${aplay_out}"
+	if [[ "${aplay_out}" = "${firstline}" ]] && \
+	       [[ "${firstline}" =~ ${default_re} ]]; then
+	    [[ ! -z ${DEBUG} ]] && debug "${FUNCNAME}: success"		    
+	    printf "%s" "${samplerate}"
+	else
+	    [[ ! -z ${DEBUG} ]] && debug "${FUNCNAME}: failure"
+	    break
 	fi
-    done
-  
+    else
+	[[ ! -z ${DEBUG} ]] && \
+	    debug "${FUNCNAME}: aplay returned an error using \
+format ${format} @ rate ${samplerate}: \`${aplay_out}'"
+    fi
+
 }
+
 
 function check_alsa_device_unlocked() {
     ## check if the interface (hw:$1,$2) is locked by another process
@@ -745,7 +763,7 @@ function check_alsa_device_unlocked() {
     aplay_opts+=(--channels=2)
     aplay_opts+=(--format=MPEG)
     aplay_opts+=(--nonblock)
-    aplay_opts+=(--dump-hw-params)
+    #aplay_opts+=(--dump-hw-params)
     declare -a rawformats
     device_busy_re=".*aplay.*main.*audio.*error(.*)"
     device_busy_error=0
@@ -785,8 +803,6 @@ function return_alsa_formats() {
     alsa_if_chardev="$5"
     format="${format:-}"
     rawformat="${rawformat:-}"
-    rate_min="${rate_min:-0}"
-    rate_max="${rate_max:-0}"
     formats=()
     parent_pid=
     parent_cmd=
@@ -827,8 +843,10 @@ function return_alsa_formats() {
 			    samplerates="${BASH_REMATCH[1]//,/Hz}Hz"
 			    [[ ! -z ${DEBUG} ]] && \
 				debug "${FUNCNAME}: sample rates found: \`${samplerates}'"
-			    format="$(printf "%-18s" "${format_found}"): ${samplerates}"
-			    formats+=("${format}")
+			    printf "%-20s" "${format_found}:"
+			    printf "%s " "${samplerates}"
+			    
+			    
 			fi
 			continue
 		    fi
@@ -837,18 +855,13 @@ function return_alsa_formats() {
 	done<"${alsa_if_streamfile}" 
 
     else 
-	## non-uac type: if interface is not locked, play psuedo random non-audio data using
-	## aplay while capturing error lines starting with `- ' to
-	## determine formats
-	aplay_opts=(--device=hw:${alsa_dev_nr},${alsa_if_nr})
-	aplay_opts+=(--channels=2)
-	aplay_opts+=(--format=MPEG)
-	aplay_opts+=(--nonblock)
-	aplay_opts+=(--dump-hw-params)
+	## non-uac type: if interface is not locked, use aplay to determine formats
 	declare -a rawformats
-	device_busy_error=0
-	format_re="^FORMAT:[[:space:]]*(.*)"
-	rate_re="^RATE:[[:space:]]+\[([0-9]+)[[:space:]]([0-9]+)\]"
+	## because of invalid file format, aplay is forced to return
+	## supported formats (=200 times faster than --dump-hw-params)
+	format_re="^-[[:space:]]+([[:alnum:]_]*)$"
+	#format_re="^FORMAT:[[:space:]]*(.*)"
+	#rate_re="^RATE:[[:space:]]+\[([0-9]+)[[:space:]]([0-9]+)\]"
 	aplay_out="$(check_alsa_device_unlocked "${alsa_dev_nr}" "${alsa_if_nr}")"
 	
 	if [[ $? -ne 0 ]]; then
@@ -907,61 +920,41 @@ ${parent_cmd} with PID ${parent_pid}; bailing out"
 	else
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "${FUNCNAME}: device is not locked; will iterate aplay_out"
-	    ## device is not locked, $res contains aplay output
+	    ## device is not locked, iterate aplay output
 	    while read -r line; do
 		if [[ "${line}" =~ ${format_re} ]]; then
 		    rawformats+=(${BASH_REMATCH[1]})
-		    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
-			## if sample rates are needed, proceed to the line
-			## containing RATE
-			continue
-		    else
-			## no sample rates are needed; exit this loop
-			break
-		    fi
-		fi
-		if [[ "${line}" =~ ${rate_re} ]]; then
-		    ## set minimum and maximum rates
-		    rate_min="${BASH_REMATCH[1]}"
-		    rate_max="${BASH_REMATCH[2]}"
-		    break
 		fi
 	    done <<< "${aplay_out}"
 	
  	    ## aplay returned no locking error
 	    ## formats (and minimum/maximum sample rates gathered, check if
 	    ## all sample rates should be checked
-	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
-		## warning: slowness ahead
-		declare -a sorted_rates
-		## everything is right
-		rates_supported=("$(return_alsa_samplerates \
-"${alsa_if_hwaddress}" "${rawformats[0]}" "${rate_min}" "${rate_max}")")
-		if [[ $? -ne 0 ]]; then
-		    debug "${FUNCNAME}: return_alsa_samplerates returned \`${rates_supported[@]}'"
-		    return 1
-		fi
-		## add the minimum and maximum rates in the array, free of charge
-		rates_supported+=("${rate_min}Hz" "${rate_max}Hz")
-		IFS=$'\n' sorted_rates=($(sort -u -n <<<"${rates_supported[*]}"))
+
+	    ## warning: slowness ahead
+	    declare -a sorted_rates
+	    rates_supported=("$(return_alsa_samplerates \
+"${alsa_if_hwaddress}" "${rawformats[0]}")")
+	    if [[ $? -ne 0 ]]; then
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME}: #### sorted_rates returned: \
+		    debug "${FUNCNAME}: return_alsa_samplerates returned \`${rates_supported[@]}'"
+		return 1
+	    fi
+	    ## sort the items
+	    rates=$(printf "%sHz\n" ${rates_supported[@]} |sort -u -n)
+	    sorted_rates=$(printf "%s " ${rates})
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME}: #### sorted_rates returned: \
 $(printf "%s " "${sorted_rates[@]}")"
-		rates="$(printf "%s " "${sorted_rates[@]}")"
-		for rawformat in ${rawformats[@]}; do 
-		    format="$(printf "%-18s" "${rawformat}"): ${rates}"
-		    formats+=(${format})
-		done
-		
-	    else
-		formats=(${rawformats[@]})
-	    fi 
+	    for rawformat in ${rawformats[@]}; do 
+		printf "%-20s" "${rawformat}: "
+		printf "%s" "${sorted_rates[@]}"
+		printf "\n"	
+	    done
+
 	fi
     fi
-    
-    if [[ ${#formats[@]} -gt 0 ]]; then 
-	printf "%s\n" "${formats[@]}"
-    fi
+
 }
 
 
@@ -1304,23 +1297,28 @@ EOF
 ## based on ground clock frequencies of
 ##  - video standard: 24.576  (mHz) * 1000000 / 512 = 48000Hz
 ##  - audio standard: 22.5792 (mHz) * 1000000 / 512 = 44100Hz
-## initialize array with 32000 (seems commonly supported but not advisable
-## to use)
 
-SAMPLERATES=(32000)
+base_fs_video=$(( 24576000 / 512 ))
+base_fs_audio=$(( 22579200 / 512 ))
+## initialize audio rates with fs*1 (cd)
+declare -a SAMPLERATES_AUDIO=(${base_fs_audio})
+## initalize video rates with base * 2/3 (which seems common)
+declare -a SAMPLERATES_VIDEO=($(( base_fs_video * 2 / 3 )) ${base_fs_video})
+
 ## max multiplier: fs*n
 max_fs_n=8
-samplerate=0
-base_fs_audio=$(( 24576000 / 512 ))
-base_fs_video=$(( 22579200 / 512 ))
-for base_samplefrequency in ${base_fs_audio} ${base_fs_video}; do
-    ## add rates to array up to basefrequency*n<=max_fsn
-    n=1
-    while [[ ${n} -le ${max_fs_n} ]]; do
-	samplerate=$(( base_samplefrequency * ${n} ))
-	SAMPLERATES+=(${samplerate})
-	n=$(( n * 2 ));
-    done 
+rate=0
+n=2;
+while [[ ${n} -le ${max_fs_n} ]]; do
+    rate=$(( base_fs_video * n ))
+    SAMPLERATES_VIDEO+=(${rate})
+    n=$(( n * 2 ))
+done
+n=2;
+while [[ ${n} -le ${max_fs_n} ]]; do
+    rate=$(( base_fs_audio * n ))
+    SAMPLERATES_AUDIO+=(${rate})
+    n=$(( n * 2 ))
 done
 
 ## pseudo random data to generate noise
