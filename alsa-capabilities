@@ -287,7 +287,6 @@ function fetch_alsa_outputinterfaces() {
 	brm_template="^${brm_dev}${brm_if}$"
 
 	## unset / empty out all variables
-	unset errors
 	alsa_dev_nr=""
 	alsa_dev_name=""
 	alsa_dev_label=""
@@ -655,8 +654,8 @@ function get_locking_process() {
 	    parent_cmd="${ps_out_raw[-2]}"
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "${FUNCNAME}: \`${owner_pid}' has PPID \`${parent_pid}', PCMD \`${parent_cmd}'."
-	    ## return formatted string to calling function
-	    printf "by command %s with PID %s" "${parent_cmd}" "${parent_pid}"
+	    ## return comma seperated list (pid,cmd) to calling function
+	    printf "%s,%s" "${parent_pid}" "${parent_cmd}"
 	fi
     fi
 
@@ -739,16 +738,19 @@ function return_alsa_formats() {
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
-    alsa_card_nr="$1"
+    alsa_dev_nr="$1"
     alsa_if_nr="$2"
     alsa_if_type="$3"
     alsa_if_streamfile="$4"
     alsa_if_chardev="$5"
-    format=
-    rawformat=
-    rate_min=0
-    rate_max=0
+    format="${format:-}"
+    rawformat="${rawformat:-}"
+    rate_min="${rate_min:-0}"
+    rate_max="${rate_max:-0}"
     formats=()
+    parent_pid=
+    parent_cmd=
+    locking_error=
 
     if [[ "${alsa_if_type}" = "uo" ]]; then
 	## uac type interface: use its streamfile
@@ -795,10 +797,10 @@ function return_alsa_formats() {
 	done<"${alsa_if_streamfile}" 
 
     else 
-	## non-uac type: whe interface is not locked, play psuedo random non-audio data using
+	## non-uac type: if interface is not locked, play psuedo random non-audio data using
 	## aplay while capturing error lines starting with `- ' to
 	## determine formats
-	aplay_opts=(--device=hw:${alsa_card_nr},${alsa_if_nr})
+	aplay_opts=(--device=hw:${alsa_dev_nr},${alsa_if_nr})
 	aplay_opts+=(--channels=2)
 	aplay_opts+=(--format=MPEG)
 	aplay_opts+=(--nonblock)
@@ -833,19 +835,63 @@ LANG=C ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
 		break
 	    fi
 	done <<< "${aplay_out}"
-
+	
 	if [[ ${device_busy_error} -eq 1 ]]; then 
 	    ## aplay returned an error: device is locked
+	    locking_error=True
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "aplay returned error indicating device is locked"
-	    res="$(get_locking_process "${alsa_card_nr}" "${alsa_if_nr}")"
+	    res="$(get_locking_process "${alsa_dev_nr}" "${alsa_if_nr}")"
 	    if [[ $? -ne 0 ]]; then
-		## received an unexpected error
-		return 1
+		## received an unexpected error; assume it's locked
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "${FUNCNAME}: get_locking_process returned an \
+unexpected error."
 	    else
-		## received the (parent) cmd and pid for the locking process
-		printf "%s" "${res}"
+		## received the (parent) 'pid,cmd' for the locking process
+		parent_pid="${res%,*}"
+		parent_cmd="${res#*,}"
+		## check if pulseaudio is locking the interface
+		CMD_PULSEAUDIO="$(which pulseaudio 2>/dev/null)"
+		## pulseaudio command found
+		if [[ "${parent_cmd}" == "${CMD_PULSEAUDIO}" ]]; then
+		    ## pulseaudio is locking the interface, try to stop it
+		    source ${PA_HELPER_SCRIPT}
+		    ## DANGER AHEAD
+		    #pa_stopped="bla"
+		    #while [[ ! -z "${pa_stopped}" ]]; do
+		    pulseaudio_stop "${parent_pid}"
+		    pa_stopped="$(pulseaudio_is_running "${parent_pid}")"
+		    res="$(get_locking_process "${alsa_dev_nr}" "${alsa_if_nr}")"
+		    if [[ $? -ne 0 ]]; then
+			## received an unexpected error; assume it's locked
+			[[ ! -z ${DEBUG} ]] && \
+			    debug "${FUNCNAME}: get_locking_process returned no \
+locking processes."
+			locking_error=
+			## DANGER AHEAD
+			formats_res="$(return_alsa_formats \
+"${alsa_dev_nr}" \
+"${alsa_if_nr}" \
+"${alsa_if_type}" \
+"${alsa_if_streamfile}" \
+"${alsa_if_chardev}")"
+		    else
+			## received the (parent) 'pid,cmd' for the locking process
+			parent_pid="${res%,*}"
+			parent_cmd="${res#*,}"
+		    fi
+		    
+		 #   done
+		  #  sleep 3s
+		    ## pulseaudio successfully stopped; unset locking_error
+		    
+		fi
 	    fi
+	fi
+
+	if [[ ! -z ${locking_error} ]]; then
+	    printf "by command %s with PID %s" "${parent_cmd}" "${parent_pid}"
 	    return 1
 	else
 	    ## aplay returned no locking error
@@ -909,8 +955,6 @@ function return_alsa_uac_ep() {
     ep_synctype_regexp="[[:space:]]\(${ep_synctype_filter}\)$"
     ep_regexp="${ep_label_regexp}${ep_num_regexp}${ep_direction_regexp}${ep_synctype_regexp}"
 
-    [[ ! -z ${DEBUG} ]] && \
-	debug "ep_regexp: \`${ep_regexp}'"
     ## iterate the contents of the streamfile
     while read -r line; do
 	if [[ "${line}" =~ ${ep_regexp} ]]; then
@@ -927,8 +971,6 @@ function return_alsa_uac_ep() {
 	printf ""
 	return 1
     else
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "return_alsa_uac_ep returned value: \`${ep_mode}'."
 	## return the filtered endpoint type
 	printf "%s" "${ep_mode}"
     fi
@@ -1156,22 +1198,6 @@ function return_alsa_interface() {
     ## parse command line arguments
     analyze_command_line "$@"
 
-    if [[ ! -z ${OPT_STOP_PULSEAUDIO} ]]; then 
-	## analyse pulseaudio when requested
-	if [[ ! -f ${PA_HELPER_SCRIPT} ]]; then
-            paerr="can't source \`${PA_HELPER_SCRIPT}'; file not found."
-	else
-	    source ${PA_HELPER_SCRIPT}
-	    if [[ $? -ne 0 ]]; then
-		paerr="error sourcing \`${PA_HELPER_SCRIPT}'."
-	    else 
-		pulseaudio_evaluate_stopping
-	    fi
-	fi
-	if [[ ! -z "${paerr}" ]]; then
-	    printf "  %s %s\n" "-" "${paerr}" 1>&2;
-	fi
-    fi
     ## create a list of alsa audio output interfaces and parse it.
     fetch_alsa_outputinterfaces
 
@@ -1344,7 +1370,6 @@ OPT_HWFILTER=${OPT_HWFILTER:-}
 OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
 
 ## currently unused
-OPT_STOP_PULSEAUDIO="${OPT_STOP_PULSEAUDIO:-}"
 PA_HELPER_SCRIPT="pulseaudio-helper"
 
 ## if the script is not sourced by another script but run within its
