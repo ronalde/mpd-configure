@@ -14,7 +14,7 @@ PA_CLIENT_USER_CONF_PATH=${HOME}/.config/pulse/client.conf
 PA_CLIENT_SYSTEM_CONF_PATH=/etc/pulse/client.conf
 PA_CLIENT_CONF=""
 MSG_PA_CONFFILE="pulseaudio user configuration file"
-PULSEAUDIO_CONF_MODIFIED=""
+PACLIENT_CONF_MODIFIED=""
 PA_CLIENT_PID=""
 PA_CLIENT_CONF_BACKUP=""
 
@@ -42,60 +42,12 @@ function inform() {
     echo_stderr "$@\n"
 }
 
-function pulseaudio_evaluate_stopping() {
-    ## stop pulseaudio if needed. Errors are non fatal.
-    ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
 
-    ## check if its installed
-    CMD_PULSEAUDIO="$(which pulseaudio 2>/dev/null)"
-    if [[ $? -ne 0  ]]; then
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug_pahelper "${FUNCNAME}: disabling of pulseaudio requested but \
-it is not installed."
-	CMD_PULSEAUDIO=""
-	return 1
-    fi
-    ## check if it is running.
-    PA_CLIENT_PID="$(pulseaudio_is_running)"
-    if [[ $? -ne 0 ]]; then
-	## not running
-	[[ ! -z "${DEBUG}" ]] && \
-	    debug_pahelper "${FUNCNAME}: disabling of pulseaudio requested but \
-it is not running."    
-	PA_CLIENT_PID=""
-	return 1
-    else 
-	# temporary disable pulseaudio client
-	printf " * will temporary disable pulseaudio client.\n" 1>&2;
-	## check if there's an existing client.conf and back it up
-	if [[ -f "${PA_CLIENT_USER_CONF_PATH}" ]]; then
-	    PA_CLIENT_CONF="${PA_CLIENT_USER_CONF_PATH}"
-	    PA_CLIENT_CONF_BACKUP="$(pulseaudio_backup_clientconf "${PA_CLIENT_CONF}")"
-	    if [[ $? -ne 0 ]]; then
-		return 1
-	    fi
-	fi
-	## stop it
-	
-	res="$(pulseaudio_stop "${PA_CLIENT_PID}")"
-	if [[ $? -ne 0 ]]; then
-	    PA_CLIENT_PID=""
-	fi
-	## disable respawn by modifying client.conf
-	## pulseaudio_disable_respawn
-	## stop it
-	## pulseaudio_stop
-    fi
-}
-
-
-function pulseaudio_restore_clientconf() {
+function paclient_restore_clientconf() {
     ## restore backed up client configuration if created by script.
     ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function "${FUNCNAME}" "$*"
 
     if [[ -f "${PA_CLIENT_CONF_BACKUP}" ]]; then
 	res="$(cp -av "${PA_CLIENT_CONF_BACKUP}" "${PA_CLIENT_CONF}")"
@@ -132,11 +84,11 @@ successfully restored to \`${PA_CLIENT_CONF}'."
 }
 
 
-function pulseaudio_is_running() {
-    ## returns pid of pulseaudio if running, otherwise empty
-    ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
+function check_paclient_stopped() {
+    ## returns nothing or error with pid of pulseaudio if it is running
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function "${FUNCNAME}" "$*"
+
     PA_CLIENT_PID="$1"
     res="$(ps -fp "${PA_CLIENT_PID}")"
     if [[ $? -ne 0 ]]; then
@@ -151,20 +103,20 @@ function pulseaudio_is_running() {
     fi
 }
 
-function pulseaudio_start() {
+function paclient_start() {
     ## start pulseaudio
     ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function "${FUNCNAME}" "$*"
     
-    if [[ ! -z "$(pulseaudio_is_running)" ]]; then
+    if [[ ! -z "$(check_paclient_stopped)" ]]; then
 	## pulseaudio is running
 	[[ ! -z "${DEBUG}" ]] && \
 	    debug_pahelper "${FUNCNAME}: not starting pulseaudio, is already running."
     else
 	## pulseaudio is not running, start it
 	res=$(${CMD_PULSEAUDIO} --start)
-	if [[ ! -z "$(pulseaudio_is_running)" ]]; then	
+	if [[ ! -z "$(check_paclient_stopped)" ]]; then	
 	    [[ ! -z "${DEBUG}" ]] && debug_pahelper "${FUNCNAME}: pulseaudio started."
 	else
 	    [[ ! -z "${DEBUG}" ]] && debug_pahelper "${FUNCNAME}: pulseaudio could not be started."
@@ -173,81 +125,49 @@ function pulseaudio_start() {
 
 }
 
-function pulseaudio_check_autospawn() {
-    ## check if autospawning of the pulseaudio daemon is disabled in
-    ## its configuration files.
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
 
-    noautospawn=""
-    noautospawn_regexp="^[[:space:]]*autospawn[[:space:]]*=[[:space:]]*([Nn]o|[Oo]ff|[Ff]alse|0)"
-    conffile=""
-    ## check each possible pulse audio client conf; user conf takes precedence
-    if [[ ! -f "${PA_CLIENT_USER_CONF_PATH}" ]]; then
-	if [[ ! -f "${PA_CLIENT_SYSTEM_CONF_PATH}" ]]; then
-	    ## no conf files found
-	    return 1
-	else
-	    conffile="${PA_CLIENT_SYSTEM_CONF_PATH}"
-	fi
-    else
-	conffile="${PA_CLIENT_USER_CONF_PATH}"
-    fi
-
-    if [[ -f "${conffile}" ]]; then
-	while read -r line; do
-	    if [[ "${line}" =~ ${noautospawn_regexp} ]]; then
-		noautospawn=True
-		[[ ! -z ${DEBUG} ]] && \
-		    debug_pahelper "${FUNCNAME}: autospawning was already disabled \
-in \`${conffile}' by line \`${line}'."
-		break
-	    fi
-	done <"${conffile}"
-    fi
-
-
-    if [[ ! -z ${noautospawn} ]]; then
-	return 0
-    else
-	return 1
-    fi
-}
-
-function pulseaudio_disable_respawn() {
+function paclient_disable_respawn() {
     ## disables spawning of pulseaudio
     ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function "${FUNCNAME}" "$*"
 
-    pulseaudio_check_autospawn
-    if [[ $? -ne 0 ]]; then
-	## create or overwrite the pulseaudio configuration file
-	res="$(printf "autospawn=no\n" > "${PA_CLIENT_USER_CONF_PATH}")"
+    ## create or overwrite the pulseaudio configuration file
+    if [[ ! -f "${PA_CLIENT_USER_CONF_PATH}" ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_pahelper "${FUNCNAME}: no ${MSG_PA_CONFFILE} found."
+    else
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_pahelper "${FUNCNAME}: \
+ ${MSG_PA_CONFFILE} file found: \`${PA_CLIENT_USER_CONF_PATH}'."
+	PA_CLIENT_CONF_BACKUP="$(paclient_backup_clientconf \
+"${PA_CLIENT_USER_CONF_PATH}")"
 	if [[ $? -ne 0 ]]; then
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug_pahelper "${FUNCNAME}: creating ${MSG_PA_CONFFILE} \`${PA_CLIENT_USER_CONF_PATH}' \
-failed with error: \`${res}'."
 	    return 1
 	else
-	    [[ ! -z "${DEBUG}" ]] && \
-		debug_pahelper "${FUNCNAME}: respawning disabled by creating \
+	    res="$(printf "autospawn=no\n" > "${PA_CLIENT_USER_CONF_PATH}")"
+	    if [[ $? -ne 0 ]]; then
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug_pahelper "${FUNCNAME}: creating ${MSG_PA_CONFFILE} \
+ \`${PA_CLIENT_USER_CONF_PATH}' failed with error: \`${res}'."
+		return 1
+	    else
+		[[ ! -z "${DEBUG}" ]] && \
+		    debug_pahelper "${FUNCNAME}: respawning disabled by creating \
 ${MSG_PA_CONFFILE} \`${PA_CLIENT_USER_CONF_PATH}'."
-	    return 0
-	fi
-    else
-	## autospawning was already disabled
-	return 0
+		return 0
+	    fi
+	fi	    
     fi
 }
 
 
-function pulseaudio_backup_clientconf() {
+function paclient_backup_clientconf() {
     ## backs up client.conf, returns path to backup conf file on
     ## success, 1 on error.
     ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function "${FUNCNAME}" "$*"
 
     PA_CLIENT_CONF="$1"
     PA_CLIENT_CONF_BACKUP="${PA_CLIENT_CONF}.backup-$$"
@@ -268,31 +188,36 @@ backed up to \`${PA_CLIENT_CONF_BACKUP}'."
 }
 
 
-function pulseaudio_stop() {
+function paclient_stop() {
     ## stop pulseaudio instance by killing the PID indicated in $1 and
     ## temporary or permanently keeping it from respawning.
-    ## TODO: check neccessity and/or cleanup
-    [[ ! -z "${DEBUG}" ]] && \
-	debug_pahelper "${FUNCNAME}: entering \`${FUNCNAME}' with arguments \`$*'"
+    ## afterwards, check if it is really stopped.
+    ## returns 0 or error 1 with description
+    [[ ! -z ${DEBUG} ]] && \
+	debug_function "${FUNCNAME}" "$*"
 
-    ## check if its running
     PA_CLIENT_PID="$1"
 
     ## disable respawning of the daemon
-    pulseaudio_disable_respawn
+    paclient_disable_respawn
     if [[ $? -ne 0 ]]; then
 	msg="unable to keep pulseaudio from respawning"
 	[[ ! -z ${DEBUG} ]] && debug_pahelper "${FUNCNAME}: ${msg}"
 	printf "%s" "${msg}"
 	return 1
     else
+	## respawning temporary disabled
 	## kill pulseaudio
 	res=$(${CMD_PULSEAUDIO} -vv --kill)
-	if [[ $? -ne 0 ]]; then
+	reskill="$?"
+	sleep 1s
+	if [[ ${reskill} -ne 0 ]]; then
 	    msg="pulseaudio --kill failed to stop PID ${PA_CLIENT_PID} with return code \`${res}'."
 	    [[ ! -z ${DEBUG} ]] && debug_pahelper "${FUNCNAME}: ${msg}"
 	    ## try killing it by its pid
 	    res="$(kill -9 ${PA_CLIENT_PID})"
+	    reskill="$?"
+	    sleep 1s
 	    if [[ $? -ne 0 ]]; then
 		msg="unable to kill pulseaudio by sending SIGTERM to its PID."
 		[[ ! -z ${DEBUG} ]] && debug_pahelper "${FUNCNAME}: ${msg}"
@@ -300,26 +225,26 @@ function pulseaudio_stop() {
 		return 1
 	    else
 		[[ ! -z ${DEBUG} ]] && \
-		    debug_pahelper "${FUNCNAME}: succesfully killed \
-pulseaudio client with PID ${PA_CLIENT_PID}."
-		return 0
+		    debug_pahelper "${FUNCNAME}: sending SIGTERM to its PID  \
+succesfully stopped the pulseaudio client with PID ${PA_CLIENT_PID}'."
 	    fi
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_pahelper "${FUNCNAME}: pulseaudio --kill reported it succesfully killed PID ${PA_CLIENT_PID}."
-	    ## wait for pulseaudio to exit check if that worked
-	    # if [[ -z "$(pulseaudio_is_running)" ]]; then
-	    # 	[[ ! -z "${DEBUG}" ]] && \
-	    # 	    debug_pahelper "${FUNCNAME}: pulseaudio is definitely killed."
-	    # 	return 0
-	    # else
-	    # 	msg="pulseaudio respawned. ${MSG_ERROR_UNEXPECTED}."
-	    # 	[[ ! -z "${DEBUG}" ]] && \
-	    # 	    debug_pahelper "${FUNCNAME}: pulseaudio respawned. ${MSG_ERROR_UNEXPECTED}."
-	    # 	printf "%s" "${msg}"
-	    # 	return 1
+		debug_pahelper "${FUNCNAME}: \`pulseaudio --kill' \
+succesfully stopped the pulseaudio client with PID ${PA_CLIENT_PID}."
+	fi
+	## wait for pulseaudio to exit check if that worked
+	if [[ -z "$(check_paclient_stopped "${PA_CLIENT_PID}")" ]]; then
+	    [[ ! -z "${DEBUG}" ]] && \
+	     	debug_pahelper "${FUNCNAME}: pulseaudio is definitely killed."
+	    return 0
+	else
+	    msg="pulseaudio respawned. ${MSG_ERROR_UNEXPECTED}."
+	    [[ ! -z "${DEBUG}" ]] && \
+	     	    debug_pahelper "${FUNCNAME}: pulseaudio respawned. ${MSG_ERROR_UNEXPECTED}."
+	    printf "%s" "${msg}"
+	    return 1
 
-	    # fi
 	fi
     fi
     
