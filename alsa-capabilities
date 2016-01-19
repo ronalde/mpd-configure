@@ -227,7 +227,7 @@ function fetch_alsa_outputinterfaces() {
 	alsa_filtered_cardnr="${alsa_filtered_hwaddr%%,*}"
 	alsa_filtered_devicenr="${alsa_filtered_hwaddr##*,}"
 	if [[ ! ${alsa_filtered_cardnr} =~ ${integer_regexp} ]] || \
-	   [[ ! ${alsa_filtered_devicenr} =~ ${integer_regexp} ]]; then
+	       [[ ! ${alsa_filtered_devicenr} =~ ${integer_regexp} ]]; then
 	    msg+=("Invalid OPT_HWFILTER (\`${OPT_HWFILTER}') specified.")
 	    msg+=("Should be \`hw:x,y' were x and y are both integers.")
 	    die "$(printf "%s\n" "${msg[@]}")"
@@ -251,7 +251,7 @@ function fetch_alsa_outputinterfaces() {
 	    let NR_AIFS_BEFOREFILTERING+=1
 	    ## check if line matches `OPT_FILTER'
 	    if [[ -z "${OPT_FILTER}"  || \
-		"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
+			"$(echo -e "${line}" | grep -E "${OPT_FILTER}")" ]]; then
 		[[ ! -z ${DEBUG} ]] && \
 		    debug  "${FUNCNAME}:                match: ${line}"
 		## store the line in an array
@@ -308,8 +308,8 @@ function fetch_alsa_outputinterfaces() {
 		debug "${FUNCNAME}: #####: line with brackets \`${line}'"
 	    if [[ "${line}" =~ ${name_re} ]]; then
 		name="${BASH_REMATCH[1]}"
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME}: #####: name \`${name}'"		
+		[[ ! -z ${DEBUG} ]] && \
+		    debug "${FUNCNAME}: #####: name \`${name}'"		
 	    fi
 	fi
 	if [[ ! -z "${name}" ]]; then
@@ -452,7 +452,7 @@ ${MSG_ERROR_UNEXPECTED}"
 			## the uac label (ie everything after `x: ')
 			alsa_if_uacclass_label="${alsa_if_uacclass:4}"
 		    fi
-	    
+		    
 		fi
 	    fi
 	fi 
@@ -746,7 +746,7 @@ function check_alsa_device_unlocked() {
 
     alsa_dev_nr="$1"
     alsa_if_nr="$2"
-		   
+    
     aplay_opts=(--device=hw:${alsa_dev_nr},${alsa_if_nr})
     aplay_opts+=(--channels=2)
     aplay_opts+=(--format=MPEG)
@@ -797,43 +797,62 @@ function return_alsa_formats() {
     locking_error=
 
     if [[ "${alsa_if_type}" = "uo" ]]; then
-	## uac type interface: use its streamfile
+	declare -A uac_formats 
 	interface_re="^[[:space:]]*Interface[[:space:]]([0-9])"
 	format_re="^[[:space:]]*Format:[[:space:]](.*)"
 	rates_re="^[[:space:]]*Rates:[[:space:]](.*)"
+	capture_re="^Capture:"
 	inside_interface=
 	format_found=
 	while read -r line; do
-	    if [[ "${line}" =~ ${interface_re} ]]; then
-		## new interface found
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME}: interface found: ${BASH_REMATCH[1]}"
-		inside_interface=true
-		continue
-	    fi
-	    if [[ ! -z ${inside_interface} ]]; then
-		if [[ -z "${format_found}" ]]; then
-		    if [[ "${line}" =~ ${format_re} ]]; then
-			## format for interface found
-			format_found="${BASH_REMATCH[1]}"
-			[[ ! -z ${DEBUG} ]] && \
-			    debug "${FUNCNAME}: format found: \`${format_found}'"
-			continue
-		    fi
-		else
-		    if [[ "${line}" =~ ${rates_re} ]]; then
-			## sample rates for interface/format found
-			inside_interface=
-			samplerates="${BASH_REMATCH[1]//,/Hz}Hz"
-			[[ ! -z ${DEBUG} ]] && \
-			    debug "${FUNCNAME}: sample rates found: \`${samplerates}'"
-			printf "%-20s" "${format_found}:"
-			printf "%s " "${samplerates}"
-			continue
+	    ## iterate the streamfile
+	    if [[ "${line}" =~ ${capture_re} ]]; then
+		## end of playback interfaces
+		break
+	    else
+		if [[ "${line}" =~ ${interface_re} ]]; then
+		    ## new interface found
+		    inside_interface=true
+		    ## reset (previous) format_found
+		    format_found= 
+		else 
+		    if [[ ! -z ${inside_interface} ]]; then
+			## parse lines below `Interface:`
+			if [[ ! -z "${format_found}" ]]; then
+			    ## parse lines below `Format:`
+			    if [[ "${line}" =~ ${rates_re} ]]; then
+				## sample rates for interface/format found;
+				## add to array and reset both
+				uac_formats[${format_found}]+="${BASH_REMATCH[1]//,/} "
+				[[ ! -z ${DEBUG} ]] && \
+				    debug "array: key=${format_found}, \
+rate=${uac_formats[${format_found}]} "
+				format_found=
+				inside_interface=
+				continue
+				
+			    fi
+			else
+			    ## check for new `Format:`
+			    if [[ "${line}" =~ ${format_re} ]]; then
+				## new format found
+				format_found="${BASH_REMATCH[1]}"
+				formats+=(${format_found})
+				[[ ! -z ${DEBUG} ]] && \
+				    debug "${FUNCNAME}: format found: \`${format_found}'"
+				## next: sample rates or new interface 
+			    fi
+
+			fi
 		    fi
 		fi
 	    fi
-	done<"${alsa_if_streamfile}" 
+	done<"${alsa_if_streamfile}"
+
+	## return the formatted line(s)
+	for key in ${!uac_formats[@]}; do
+	    printf "%-20s %s\n" "${key}:" "${uac_formats[${key}]// /Hz }"
+	done
 
     else 
 	## non-uac type: if interface is not locked, use aplay to determine formats
@@ -907,7 +926,7 @@ ${parent_cmd} with PID ${parent_pid}; bailing out"
 		    rawformats+=(${BASH_REMATCH[1]})
 		fi
 	    done <<< "${aplay_out}"
-	
+	    
  	    ## aplay returned no locking error
 	    ## formats (and minimum/maximum sample rates gathered, check if
 	    ## all sample rates should be checked
@@ -951,7 +970,7 @@ function return_alsa_uac_ep() {
     ## TODO: unsure which range this is; have seen 1, 3 and 5
     ##   2: USB_DIR_IN: "IN|OUT",
     ##   3: USB_ENDPOINT_SYNCTYPE: "NONE|ASYNC|ADAPTIVE|SYNC"
-  
+    
     alsa_if_streamfile_path="$1"
     ep_mode=""
     ep_label_filter="Endpoint:"
@@ -1096,7 +1115,7 @@ matches or other errors.
                      appropriate arrays.
   -h, --help         Show this help message
 EOF
-)
+       )
     printf "%s\n" "${msg}" 1>&2;
 }
 
@@ -1166,17 +1185,17 @@ as an argument (eg \`hw:x,y')\n" "$1" 1>&2
 		display_usageinfo
 		exit
 		;;
-           --)
-	       shift
-	       break
-	       ;;
-	   -?*)
-	       printf "Notice: unknown option \`%s' ignored\n\n." "$1" 1>&2
-               display_usageinfo
-	       exit
-               ;;
-           *)
-               break
+            --)
+		shift
+		break
+		;;
+	    -?*)
+		printf "Notice: unknown option \`%s' ignored\n\n." "$1" 1>&2
+		display_usageinfo
+		exit
+		;;
+            *)
+		break
         esac
     done
 
