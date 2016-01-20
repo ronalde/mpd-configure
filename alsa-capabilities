@@ -542,7 +542,9 @@ ${MSG_ERROR_UNEXPECTED}"
 		       "${formats_res[@]}"  1>&2;
 	    else
 		formatcounter=0
-		MSG_ALSA_ENCODINGFORMATS="rates per format"
+		if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+		    MSG_ALSA_ENCODINGFORMATS="rates per format"
+		fi
 		printf " - %-17s = " \
 		       "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
 		while IFS="\n" read -r line; do
@@ -855,15 +857,16 @@ rate=${uac_formats[${format_found}]} "
 	fi
 
     else
-	## non-uac type: if interface is not locked, use aplay to determine formats
+	## non-uac type: if interface is not locked, use aplay to
+	## determine formats
 	declare -a rawformats
 	## because of invalid file format, aplay is forced to return
 	## supported formats (=200 times faster than --dump-hw-params)
 	format_re="^-[[:space:]]+([[:alnum:]_]*)$"
 	#format_re="^FORMAT:[[:space:]]*(.*)"
 	#rate_re="^RATE:[[:space:]]+\[([0-9]+)[[:space:]]([0-9]+)\]"
-	aplay_out="$(check_alsa_device_unlocked "${alsa_dev_nr}" "${alsa_if_nr}")"
-
+	aplay_out="$(check_alsa_device_unlocked \
+"${alsa_dev_nr}" "${alsa_if_nr}")"
 	if [[ $? -ne 0 ]]; then
 	    ## $aplay_out contains pid,cmd of locking process
 	    locking_error=True
@@ -878,17 +881,21 @@ rate=${uac_formats[${format_found}]} "
 		if [[ $? -ne 0 ]]; then
 		    ## received an error; could not stop pulseaudio
 		    [[ ! -z ${DEBUG} ]] && \
-			debug "${FUNCNAME} (${LINENO}): unable to stop pulseaudio: ${locking_error}"
+			debug "${FUNCNAME} (${LINENO}): \
+unable to stop pulseaudio: ${locking_error}"
 		    ## return the error instead of the formats
 		    locking_error=True
 		else
 		    ## really?
 		    [[ ! -z ${DEBUG} ]] && \
-			debug "${FUNCNAME} (${LINENO}): stop pulseaudio returned succes: check again"
-		    aplay_out="$(check_alsa_device_unlocked "${alsa_dev_nr}" "${alsa_if_nr}")"
+			debug "${FUNCNAME} (${LINENO}): \
+stop pulseaudio returned succes: check again"
+		    aplay_out="$(check_alsa_device_unlocked \
+"${alsa_dev_nr}" "${alsa_if_nr}")"
 		    if [[ $? -ne 0 ]]; then
 			[[ ! -z ${DEBUG} ]] && \
-			    debug "${FUNCNAME} (${LINENO}): second attempt failed: \
+			    debug "${FUNCNAME} (${LINENO}): \
+second attempt failed: \
 pulseaudio still running with PID ${parent_pid}"
 			## $aplay_out contains pid,cmd of locking process
 			locking_error=True
@@ -896,14 +903,16 @@ pulseaudio still running with PID ${parent_pid}"
 			parent_cmd="${aplay_out#*,}"
 		    else
 			[[ ! -z ${DEBUG} ]] && \
-			    debug "${FUNCNAME} (${LINENO}): second attempt succeeded; device no longer locked."
+			    debug "${FUNCNAME} (${LINENO}): \
+second attempt succeeded; device no longer locked."
 			## empty out locking_error
 			locking_error=
 		    fi
 		fi
 	    else
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME} (${LINENO}): device is in use by ${parent_cmd} with PID ${parent_pid}."
+		    debug "${FUNCNAME} (${LINENO}): \
+device is in use by ${parent_cmd} with PID ${parent_pid}."
 		## in use by another process
 		##  return the error instead of the formats
 		locking_error=True
@@ -931,26 +940,32 @@ ${parent_cmd} with PID ${parent_pid}; bailing out"
 	    ## formats (and minimum/maximum sample rates gathered, check if
 	    ## all sample rates should be checked
 
-	    ## warning: slowness ahead
-	    declare -a sorted_rates
-	    rates_supported=("$(return_alsa_samplerates \
+	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
+		## warning: slowness ahead
+		declare -a sorted_rates
+		rates_supported=("$(return_alsa_samplerates \
 "${alsa_if_hwaddress}" "${rawformats[0]}")")
-	    if [[ $? -ne 0 ]]; then
+		if [[ $? -ne 0 ]]; then
+		    [[ ! -z ${DEBUG} ]] && \
+			debug "${FUNCNAME} (${LINENO}): return_alsa_samplerates returned \`${rates_supported[@]}'"
+		    return 1
+		fi
+		## sort the items
+		rates=$(printf "%sHz\n" ${rates_supported[@]} |sort -u -n)
+		sorted_rates=$(printf "%s " ${rates})
 		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME} (${LINENO}): return_alsa_samplerates returned \`${rates_supported[@]}'"
-		return 1
-	    fi
-	    ## sort the items
-	    rates=$(printf "%sHz\n" ${rates_supported[@]} |sort -u -n)
-	    sorted_rates=$(printf "%s " ${rates})
-	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME} (${LINENO}): #### sorted_rates returned: \
+		    debug "${FUNCNAME} (${LINENO}): #### sorted_rates returned: \
 $(printf "%s " "${sorted_rates[@]}")"
-	    for rawformat in ${rawformats[@]}; do
-		printf "%-20s" "${rawformat}: "
-		printf "%s" "${sorted_rates[@]}"
-		printf "\n"
-	    done
+		for rawformat in ${rawformats[@]}; do
+		    printf "%-20s" "${rawformat}: "
+		    printf "%s" "${sorted_rates[@]}"
+		    printf "\n"
+		done
+	    else
+		## just print the comma seperated format
+		formats="$(printf "%s, " ${rawformats[@]})"
+		printf "%-20s" "${formats%*, }"
+	    fi
 
 	fi
     fi
