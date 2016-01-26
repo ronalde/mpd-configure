@@ -750,8 +750,16 @@ function check_alsa_device_unlocked() {
     declare -a rawformats
     device_busy_re=".*aplay.*main.*audio.*error(.*)"
     device_busy_error=0
-    aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
+    CMD_PASUSPENDER="$(type -p pasuspender)"
+    if [[ ! -z ${CMD_PASUSPENDER} ]]; then
+	## pulseaudio is installed, pause it before using aplay
+	aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
+LANG=C ${CMD_PASUSPENDER} -- ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
+    else
+	## pulseaudio not installed
+	aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
 LANG=C ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
+    fi
     while read -r line; do
 	if [[ "${line}" =~ ${device_busy_re} ]]; then
 	    device_busy_error=1
@@ -863,68 +871,19 @@ rate=${uac_formats[${format_found}]} "
 	## because of invalid file format, aplay is forced to return
 	## supported formats (=200 times faster than --dump-hw-params)
 	format_re="^-[[:space:]]+([[:alnum:]_]*)$"
-	#format_re="^FORMAT:[[:space:]]*(.*)"
-	#rate_re="^RATE:[[:space:]]+\[([0-9]+)[[:space:]]([0-9]+)\]"
-	aplay_out="$(check_alsa_device_unlocked \
-"${alsa_dev_nr}" "${alsa_if_nr}")"
+	aplay_out="$(check_alsa_device_unlocked "${alsa_dev_nr}" "${alsa_if_nr}")"
 	if [[ $? -ne 0 ]]; then
 	    ## $aplay_out contains pid,cmd of locking process
 	    locking_error=True
 	    parent_pid="${aplay_out%,*}"
 	    parent_cmd="${aplay_out#*,}"
-	    ## check if pulseaudio is locking the interface
-	    CMD_PULSEAUDIO="$(which pulseaudio 2>/dev/null)"
-	    if [[ "${parent_cmd}" == "${CMD_PULSEAUDIO}" ]]; then
-		## pulseaudio is locking the interface, try to stop it
-		source ${PA_HELPER_SCRIPT}
-		locking_error="$(paclient_stop "${parent_pid}")"
-		if [[ $? -ne 0 ]]; then
-		    ## received an error; could not stop pulseaudio
-		    [[ ! -z ${DEBUG} ]] && \
-			debug "${FUNCNAME} (${LINENO}): \
-unable to stop pulseaudio: ${locking_error}"
-		    ## return the error instead of the formats
-		    locking_error=True
-		else
-		    ## really?
-		    [[ ! -z ${DEBUG} ]] && \
-			debug "${FUNCNAME} (${LINENO}): \
-stop pulseaudio returned succes: check again"
-		    aplay_out="$(check_alsa_device_unlocked \
-"${alsa_dev_nr}" "${alsa_if_nr}")"
-		    if [[ $? -ne 0 ]]; then
-			[[ ! -z ${DEBUG} ]] && \
-			    debug "${FUNCNAME} (${LINENO}): \
-second attempt failed: \
-pulseaudio still running with PID ${parent_pid}"
-			## $aplay_out contains pid,cmd of locking process
-			locking_error=True
-			parent_pid="${aplay_out%,*}"
-			parent_cmd="${aplay_out#*,}"
-		    else
-			[[ ! -z ${DEBUG} ]] && \
-			    debug "${FUNCNAME} (${LINENO}): \
-second attempt succeeded; device no longer locked."
-			## empty out locking_error
-			locking_error=
-		    fi
-		fi
-	    else
-		[[ ! -z ${DEBUG} ]] && \
-		    debug "${FUNCNAME} (${LINENO}): \
-device is in use by ${parent_cmd} with PID ${parent_pid}."
-		## in use by another process
-		##  return the error instead of the formats
-		locking_error=True
-		printf "%s" "${msg}"
-	    fi
-	fi
-
-	if [[ ! -z "${locking_error}" ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME} (${LINENO}): device is still locked by \
-${parent_cmd} with PID ${parent_pid}; bailing out"
-	    printf "by command %s with PID %s" "${parent_cmd}" "${parent_pid}"
+		debug "${FUNCNAME} (${LINENO}): \
+device is in use by ${parent_cmd} with PID ${parent_pid}."
+	    ## in use by another process
+	    ## return the error instead of the formats
+	    locking_error=True
+	    printf "%s" "${msg}"
 	    return 1
 	else
 	    [[ ! -z ${DEBUG} ]] && \
@@ -939,7 +898,6 @@ ${parent_cmd} with PID ${parent_pid}; bailing out"
  	    ## aplay returned no locking error
 	    ## formats (and minimum/maximum sample rates gathered, check if
 	    ## all sample rates should be checked
-
 	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
 		## warning: slowness ahead
 		declare -a sorted_rates
@@ -1417,9 +1375,6 @@ OPT_QUIET=${OPT_QUIET:-}
 OPT_FILTER=${OPT_FILTER:-}
 OPT_HWFILTER=${OPT_HWFILTER:-}
 OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
-
-## currently unused
-PA_HELPER_SCRIPT="pulseaudio-helper"
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
