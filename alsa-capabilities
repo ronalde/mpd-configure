@@ -377,7 +377,7 @@ function fetch_alsa_outputinterfaces() {
 	    ## keep track of status of interface
 	    alsa_if_closed=0
 	    ## assume no uac device
-	    alsa_if_uacclass="${MSG_PROP_NOTAVAILABLE}"
+	    alsa_if_uacclass="${MSG_PROP_NOTAPPLICABLE}"
 
 	    if [[ ! -z ${TESTFILE} ]]; then
 		## device is not real
@@ -413,7 +413,7 @@ function fetch_alsa_outputinterfaces() {
 			debug "${FUNCNAME} (${LINENO}): alsa_if_streamfile \`${alsa_if_streamfile}' \
 ${MSG_ERROR_NOFILE}"
 		    ## no uac interface
-		    alsa_if_streamfile=""
+		    alsa_if_streamfile="${MSG_PROP_NOTAPPLICABLE}"
 		else
 		    [[ ! -z ${DEBUG} ]] && \
 			debug "${FUNCNAME} (${LINENO}): using alsa_if_streamfile \`${alsa_if_streamfile}'."
@@ -421,7 +421,7 @@ ${MSG_ERROR_NOFILE}"
 		    alsa_if_type="uo"
 		    ## uac devices will use the stream file instead of
 		    ## hwparams file to monitor
-		    alsa_if_monitorfile="${alsa_if_streamfile}"
+		    ## alsa_if_monitorfile="${alsa_if_streamfile}"
 		    ## get the type of uac endpoint
 		    alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
 		    if [[ $? -ne 0 ]]; then
@@ -557,6 +557,8 @@ ${MSG_ERROR_UNEXPECTED}"
 	    fi
 	    printf " - %-17s = %-60s\n" \
 		   "${MSG_ALSA_MONITORFILE}" "${alsa_if_monitorfile}" 1>&2;
+	    printf " - %-17s = %-60s\n" \
+		   "${MSG_ALSA_STREAMFILE}" "${alsa_if_streamfile}" 1>&2;
 	    printf "\n"
 	fi
     done
@@ -1318,7 +1320,7 @@ UO_EP_ADAPT_FILTER="ADAPTIVE"
 UO_EP_ASYNC_FILTER="ASYNC"
 UO_EP_SYNC_FILTER="SYNC"
 ## labels for UAC classes.
-UO_EP_NONE_LABEL="0 - (none)"
+UO_EP_NONE_LABEL="0 - none"
 UO_EP_ADAPT_LABEL="1 - isochronous adaptive"
 UO_EP_ASYNC_LABEL="2 - isochronous asynchronous"
 UO_EP_SYNC_LABEL="3 - sync (?)"
@@ -1362,6 +1364,7 @@ MSG_ALSA_ENCODINGFORMATS="encoding formats"
 MSG_ALSA_PACKINGFORMATS="packing formats"
 MSG_ALSA_SAMPLERATES="sample rates"
 MSG_ALSA_MONITORFILE="monitor file"
+MSG_ALSA_STREAMFILE="stream file"
 
 ## command line options
 ## input parameters for the limit option
