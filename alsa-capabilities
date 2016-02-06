@@ -1193,11 +1193,11 @@ function return_alsa_interface() {
     fi
 
     ## check if needed commands are available
-    CMD_APLAY=$(which aplay || command_not_found "aplay" "alsa-utils")
+    CMD_APLAY=$(type -p aplay || command_not_found "aplay" "alsa-utils")
     if [[ $? -ne 0 ]]; then
 	die "The script cannot continue without aplay."
     fi
-    CMD_PS=$(which ps || command_not_found "ps" "procps")
+    CMD_PS=$(type -p ps || command_not_found "ps" "procps")
 
     ## parse command line arguments
     analyze_command_line "$@"
