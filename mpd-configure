@@ -676,16 +676,17 @@ function perform_automagic() {
 	    ## mpd is configured to use a 'real' ip address; try to get fqdn name
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "mpd is configured to use a 'real' ip address ..."
-	    if [[ -x $(which hostname) ]]; then
+	    CMD_HOSTNAME="$(type -p hostname)"
+	    if [[ $? -eq 0 ]]; then
+		hostname="$(${CMD_HOSTNAME})"
 		[[ ! -z ${DEBUG} ]] && \
-		    debug_configure "hostname command is available"
-		hostname="$(hostname)"
+		    debug_configure "mpd hostname set by ${CMD_HOSTNAME} to \`${hostname}'."
 	    fi
 	    if [[ -z "${hostname}" ]]; then
 		# use bash's internal hostname
 		hostname="${HOSTNAME}"
 		[[ ! -z ${DEBUG} ]] && \
-		    debug_configure "mpd hostname set by script to HOSTNAME variable of bash: \`${hostname}'."
+		    debug_configure "mpd hostname set by script to HOSTNAME environment variable: \`${hostname}'."
 	    fi
 	else
 	    [[ ! -z ${DEBUG} ]] && \
@@ -721,7 +722,7 @@ function get_mpd_musicdir() {
         
 	## try getting the `MUSIC' directory from XDG and use that,
 	## otherwise user current dir
-	CMD_XDGUSERDIR=$(which xdg-user-dir)
+	CMD_XDGUSERDIR="$(type -p xdg-user-dir)"
 	if [[ $? -eq 0 ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "CMD_XDGUSERDIR found in path: \`${CMD_XDGUSERDIR}'."
