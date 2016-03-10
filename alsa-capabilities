@@ -565,11 +565,11 @@ ${MSG_ERROR_UNEXPECTED}"
 }
 
 function get_locking_process() {
-    ## return a string describing the parent command and PID of the
+    ## return a string describing the command and id of the
     ## process locking the audio interface with card nr $1 and dev nr
-    ## $2 as indicated by its status file in /proc/asound. Only called
-    ## when there's an indication the device is actually locked.
-    ## returns an error status when its unable to find the parent process.
+    ## $2 based on its status file in /proc/asound.
+    ## returns a string containing the locking cmd and pid, or an
+    ## error when the interface is not locked.
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
@@ -577,14 +577,20 @@ function get_locking_process() {
     alsa_if_nr="$2"
     proc_statusfile="/proc/asound/card${alsa_card_nr}/pcm${alsa_if_nr}p/sub0/status"
     owner_pid=
+    owner_stat=
+    owner_cmd=
     parent_pid=
     parent_cmd=
+    locking_cmd=
+    locking_pid=
 
-    ## locking process indicated by `owner_pid` in /proc/asound/cardX/pcmYp/sub0/status
-    ## example `owner_pid   : 28022' is a child of the mpd parent process:
+    ## specific for mpd: each alsa output plugin results in a locking
+    ## process indicated by `owner_pid` in
+    ## /proc/asound/cardX/pcmYp/sub0/status: `owner_pid   : 28022'
+    ## this is a child process of the mpd parent process (`28017'):
     ##mpd(28017,mpd)-+-{decoder:flac}(28021)
     ##               |-{io}(28019)
-    ##               |-{output:Peachtre}(28022)
+    ##               |-{output:Peachtre}(28022) <<< owner_pid / child
     ##               `-{player}(28020)
     owner_pid_re="owner_pid[[:space:]]+:[[:space:]]+([0-9]+)"
     while read -r line; do
@@ -594,53 +600,54 @@ function get_locking_process() {
 	fi
     done<"${proc_statusfile}"
     if [[ -z ${owner_pid} ]]; then
-	## strange, device seems unused
-	## TODO: handle situation
+	## device is unused
 	[[ ! -z ${DEBUG} ]] && \
 	    debug "${FUNCNAME} (${LINENO}): ${FUNCNAME} called, but no owner_pid found in \`${proc_statusfile}'."
 	return 1
     else
 	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME} (${LINENO}): found owner pid: \`${owner_pid}'."
+	    debug "${FUNCNAME} (${LINENO}): found owner pid in status file \`${proc_statusfile}': \`${owner_pid}'."
     fi
-    ## look up parent process of locking process
-    ## `ps -q ${PID} -ejf` produces
-    ## UID        PID  PPID  PGID   SID  C STIME TTY          TIME CMD
-    ## mpd      28017     1 28017 28017 15 08:39 ?        00:10:36 /usr/bin/mpd --no-daemon
-    ## set arguments for ps command
-    psopts=(-q ${owner_pid})
-    ## we (possibly?) need the parent for the locking process, so both
-    ## e and f are needed
-    psopts+=(-ejf)
-    ## create an array for each output line of ps
-    ## double parenthesis are needed for proper array initialization
-    declare -a "ps_out_raw=($(${CMD_PS} "${psopts[@]}"))"
-    if [[ $? -ne 0 ]]; then
-	## should not happen
-	[[ ! -z ${DEBUG} ]] && \
-	    debug "${FUNCNAME} (${LINENO}): owner_pid \`${owner_pid}' has no parent_pid."
-	return 1
-    else
-	## ps returned header line and at least one extra line, each
-	## with 10 values
-	## TODO: bit flaky?
-	if [[ ${#ps_out_raw[@]} -lt 20 ]]; then
-	    ## should not happen
-	    if [[ ! -z ${DEBUG} ]]; then
-		debug "${FUNCNAME} (${LINENO}): ps returned no error but neither a value for owner_pid \`${owner_pid}'."
-		debug "${FUNCNAME} (${LINENO}): ps_out_raw contains ${#ps_out_raw[@]} items: \`${ps_out_raw[@]}' "
-	    fi
-	    return 1
-	else
-	    ## get the array items (fields) containing the ppid and pcmd
-	    parent_pid="${ps_out_raw[-10]}"
-	    parent_cmd="${ps_out_raw[-2]}"
+    
+    ## check if owner_pid is a child
+    ## construct regexp for getting the ppid from /proc
+    ## eg: /proc/837/stat:
+    ## 837 (output:Pink Fau) S 1 406 406 0 -1 ...
+    ## ^^^                       ^^^
+    ## +++-> owner_pid           +++-> parent_pid
+    parent_pid_re="(${owner_pid})[[:space:]]\(.*\)[[:space:]][A-Z][[:space:]][0-9]+[[:space:]]([0-9]+)"
+    read owner_stat < /proc/${owner_pid}/stat
+    [[ ! -z ${DEBUG} ]] && \
+	debug "${FUNCNAME} (${LINENO}): owner_stat: \`${owner_stat}'"
+    if [[ "${owner_stat}" =~ ${parent_pid_re} ]]; then
+	parent_pid="${BASH_REMATCH[2]}"
+	if [[ "x${parent_pid}" == "x${owner_pid}" ]]; then
+	    ## device is locked by the process with id owner_pid, look up command
+	    ## eg: /proc/837/cmdline: /usr/bin/mpd --no-daemon /var/lib/mpd/mpd.conf
+	    read owner_cmd < /proc/${owner_pid}/cmdline
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "${FUNCNAME} (${LINENO}): \`${owner_pid}' has parent_pid \`${parent_pid}', parent_cmd \`${parent_cmd}'."
-	    ## return comma seperated list (pid,cmd) to calling function
-	    printf "%s,%s" "${parent_pid}" "${parent_cmd}"
+		debug "${FUNCNAME} (${LINENO}): cmd \`${owner_cmd}' with id \`${owner_pid}' has no parent."
+	    locking_pid="${owner_pid}"
+	    locking_cmd="${owner_cmd}"
+	else
+	    ## device is locked by the parent of the process with owner_pid
+	    read owner_cmd < /proc/${owner_pid}/cmdline
+	    read parent_cmd < /proc/${parent_pid}/cmdline
+	    [[ ! -z ${DEBUG} ]] && \
+		debug "${FUNCNAME} (${LINENO}): cmd \`${owner_cmd}' with id \`${owner_pid}' \
+has parent cmd \`${parent_cmd}' with id \`${parent_pid}'."
+	    locking_pid="${parent_pid}"
+	    locking_cmd="${parent_cmd}"
 	fi
-    fi
+	## return comma seperated list (pid,cmd) to calling function
+	## TODO: use printf instead of cat and tr to retain spaces
+	locking_cmd="$(cat /proc/${locking_pid}/cmdline | tr '\000' ' ')"
+	printf "%s,%s" "${locking_pid}" "${locking_cmd}"
+
+    else
+	## should not happen; TODO: handle
+	parent_pid=
+    fi 
 
 }
 
@@ -735,49 +742,23 @@ format ${format} @ rate ${samplerate}: \`${aplay_out}'"
 }
 
 
-function check_alsa_device_unlocked() {
-    ## check if the interface (hw:$1,$2) is locked by another process
-    ## return true if unlocked with aplay output, 1 when locked with ppid,pcmd
+function return_aplay_formats() {
+    ## use aplay to determine supported formats of non-uac interface (hw:$1,$2)
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
     alsa_dev_nr="$1"
     alsa_if_nr="$2"
-
+    
     aplay_opts=(--device=hw:${alsa_dev_nr},${alsa_if_nr})
     aplay_opts+=(--channels=2)
     aplay_opts+=(--format=MPEG)
     aplay_opts+=(--nonblock)
-    #aplay_opts+=(--dump-hw-params)
-    declare -a rawformats
-    device_busy_re=".*aplay.*main.*audio.*error(.*)"
-    device_busy_error=0
-    CMD_PASUSPENDER="$(type -p pasuspender)"
-    if [[ ! -z ${CMD_PASUSPENDER} ]]; then
-	## pulseaudio is installed, pause it before using aplay
-	aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
-LANG=C ${CMD_PASUSPENDER} -- ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
-    else
-	## pulseaudio not installed
-	aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
+    aplay_out="$(echo ${PSEUDO_RANDOM_NOISE} | \
 LANG=C ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
-    fi
-    while read -r line; do
-	if [[ "${line}" =~ ${device_busy_re} ]]; then
-	    device_busy_error=1
-	    break
-	fi
-    done <<< "${aplay_out}"
 
-    if [[ ${device_busy_error} -eq 1 ]]; then
-	res="$(get_locking_process "${alsa_dev_nr}" "${alsa_if_nr}")"
-	## return the parent_pid,parent_cmd with error
-	printf "%s" "${res}"
-	return 1
-    else
-	## return aplay_out
-	printf "%s" "${aplay_out}"
-    fi
+    ## return aplay_out
+    printf "%s" "${aplay_out}"
 
 }
 
@@ -873,32 +854,32 @@ rate=${uac_formats[${format_found}]} "
 	## because of invalid file format, aplay is forced to return
 	## supported formats (=200 times faster than --dump-hw-params)
 	format_re="^-[[:space:]]+([[:alnum:]_]*)$"
-	aplay_out="$(check_alsa_device_unlocked "${alsa_dev_nr}" "${alsa_if_nr}")"
-	if [[ $? -ne 0 ]]; then
-	    ## $aplay_out contains pid,cmd of locking process
+	res="$(get_locking_process "${alsa_dev_nr}" "${alsa_if_nr}")"
+	if [[ $? -eq 0 ]]; then
+	    ## in use by another process
+	    ## res contains pid,cmd of locking process
 	    locking_error=True
-	    parent_pid="${aplay_out%,*}"
-	    parent_cmd="${aplay_out#*,}"
+	    locking_pid="${res%,*}"
+	    locking_cmd="${res#*,}"
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "${FUNCNAME} (${LINENO}): \
-device is in use by ${parent_cmd} with PID ${parent_pid}."
-	    ## in use by another process
+device is in use by command ${locking_cmd} with process id ${locking_pid}."
 	    ## return the error instead of the formats
-	    locking_error=True
-	    printf "%s" "${msg}"
-	    return 1
+	    printf "by command \`%s' with PID %s." \
+		   "${locking_cmd}" "${locking_pid}"
+	    return 1  
 	else
+	    ## device is not locked, iterate aplay output
 	    [[ ! -z ${DEBUG} ]] && \
 		debug "${FUNCNAME} (${LINENO}): device is not locked; will iterate aplay_out"
-	    ## device is not locked, iterate aplay output
+	    aplay_out="$(return_aplay_formats "${alsa_dev_nr}" "${alsa_if_nr}")"
 	    while read -r line; do
 		if [[ "${line}" =~ ${format_re} ]]; then
 		    rawformats+=(${BASH_REMATCH[1]})
 		fi
 	    done <<< "${aplay_out}"
 
- 	    ## aplay returned no locking error
-	    ## formats (and minimum/maximum sample rates gathered, check if
+	    ## formats (and minimum/maximum sample rates) gathered, check if
 	    ## all sample rates should be checked
 	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
 		## warning: slowness ahead
