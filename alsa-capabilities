@@ -653,47 +653,37 @@ has parent cmd \`${parent_cmd}' with id \`${parent_pid}'."
 
 function return_alsa_samplerates() {
     ## use aplay to get supported sample rates for playback for
-    ## specified non-uac interface ($1) and encoding format ($2)
-    ## between minimum ($3) and maximum ($4) supported rates. returns
-    ## space seperated list of valid rates.
-    ## TODO: document
+    ## specified non-uac interface ($1) and encoding format ($2).
+    ## returns a space seperated list of valid rates.
+
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME}" "$*"
 
     alsa_if_hwaddress="$1"
     format="$2"
-    hw=""
-
-    ## sanity checks
-    if [[ -z "${rawformats[0]}" ]]; then
-	## something went wrong
-	return 1
-    fi
 
     [[ ! -z ${DEBUG} ]] && \
 	debug "${FUNCNAME} (${LINENO}): getting sample rates for device \`${alsa_if_hwaddress}' \
-using format \`${format}'."
+using format \`${format}'."    
 
-    errors=()
-    noerror=
-    ## assume fs*1 is always supported to save time
-    printf "%s\n" "${SAMPLERATES_AUDIO[0]}"
-    for rate in ${SAMPLERATES_AUDIO[@]:1}; do
+    ## check all audio rates
+    for rate in ${SAMPLERATES_AUDIO[@]}; do
 	res="$(check_samplerate "${alsa_if_hwaddress}" "${format}" "${rate}")"
 	if [[ $? -eq 0 ]]; then
 	    printf "%s\n" "${res}"
 	else
+	    ## assume the previous one was the highest supported rate
 	    break
 	fi
     done
 
-    ## assume fs*1 is always supported to save time
-    printf "%s\n" "${SAMPLERATES_VIDEO[1]}"
-    for rate in ${SAMPLERATES_VIDEO[0]} ${SAMPLERATES_VIDEO[@]:2} ${SAMPLERATES_VIDEO[@]:2}; do
+    ## check all video rates
+    for rate in ${SAMPLERATES_VIDEO[@]}; do
 	res="$(check_samplerate "${alsa_if_hwaddress}" "${format}" "${rate}")"
 	if [[ $? -eq 0 ]]; then
 	    printf "%s\n" "${res}"
 	else
+	    ## assume the previous one was the highest supported rate
 	    break
 	fi
     done
@@ -701,6 +691,9 @@ using format \`${format}'."
 }
 
 function check_samplerate() {
+    ## use aplay to check if the specified alsa interface ($1)
+    ## supports encoding format $2 and sample rate $3
+    ## returns a string with the supported sample rate or nothing
 
     alsa_if_hwaddress="$1"
     format="$2"
@@ -712,6 +705,7 @@ function check_samplerate() {
     aplay_opts_pre+=(--channels="2")
     aplay_opts_pre+=(--nonblock)
     declare -a aplay_opts_post
+    ## set up regular expressions to match aplay's output errors
     rate_notaccurate_re=".*Warning:.*not[[:space:]]accurate[[:space:]]\(requested[[:space:]]=[[:space:]]([0-9]+)Hz,[[:space:]]got[[:space:]]=[[:space:]]([0-9]+)Hz\).*"
     badspeed_re=".*bad[[:space:]]speed[[:space:]]value.*"
     sampleformat_nonavailable_re=".*Sample[[:space:]]format[[:space:]]non[[:space:]]available.*"
@@ -720,18 +714,19 @@ function check_samplerate() {
 
     [[ ! -z ${DEBUG} ]] && debug "${FUNCNAME} (${LINENO}): testing rate ${samplerate}"
     unset aplay_opts_post
+    ## set fixed sample rate
     aplay_opts_post+=(--rate="${samplerate}")
+    ## pipe random noise to aplay
     aplay_out=$(echo "${PSEUDO_RANDOM_NOISE}" | \
-		       LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1)
-    if [[ $? -eq 0 ]]; then
+		    LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1)
+    if [[ $? -eq 0 ]]; then	
 	read -r firstline<<<"${aplay_out}"
-	if [[ "${aplay_out}" = "${firstline}" ]] && \
-	       [[ "${firstline}" =~ ${default_re} ]]; then
+	if [[ "${firstline}" =~ ${default_re} ]]; then
 	    [[ ! -z ${DEBUG} ]] && debug "${FUNCNAME} (${LINENO}): success"
 	    printf "%s" "${samplerate}"
 	else
 	    [[ ! -z ${DEBUG} ]] && debug "${FUNCNAME} (${LINENO}): failure"
-	    break
+	    return 1
 	fi
     else
 	[[ ! -z ${DEBUG} ]] && \
