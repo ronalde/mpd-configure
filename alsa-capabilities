@@ -27,7 +27,7 @@
 LANG=C
 
 APP_NAME_AC="alsa-capabilities"
-APP_VERSION="0.9.2"
+APP_VERSION="0.9.3"
 
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
