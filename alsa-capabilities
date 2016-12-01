@@ -28,6 +28,7 @@ LANG=C
 
 APP_NAME_AC="alsa-capabilities"
 APP_VERSION="0.9.3"
+APP_INFO_URL="https://lacocina.nl/detect-alsa-output-capabilities"
 
 ## set DEBUG to a non empty value to display internal program flow to
 ## stderr
@@ -1047,7 +1048,7 @@ function display_usageinfo() {
 
     msg=$(cat <<EOF
 Usage:
-$0 [ -l a|d|u ]  [ -c <filter> ] [-a <hwaddress>] [-s] [ -q ]
+${APP_NAME_AC} [ -l a|d|u ]  [ -c <filter> ] [-a <hwaddress>] [-s] [ -q ]
 
 Displays a list of each alsa audio output interface with its details
 including its alsa hardware address (\`hw:x,y').
@@ -1079,6 +1080,9 @@ matches or other errors.
                      ie. only store the details of each card in the
                      appropriate arrays.
   -h, --help         Show this help message
+
+Version ${APP_VERSION}. For more information see:
+${APP_INFO_URL}
 EOF
        )
     printf "%s\n" "${msg}" 1>&2;
