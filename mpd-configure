@@ -57,7 +57,7 @@ function debug_function() {
 function really_write() {
     ## writes the contents of CONF_CONTENTS to the file specified in $1.
     ## returns success or error with descriptive string
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     mpd_conffile="$1"
     ## do the actual writing
@@ -78,7 +78,7 @@ function check_or_create_targetdir() {
     ## exists and is writable, otherwise attempts to create
     ## it.
     ## returns success or an error with descriptive string.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     mpd_conf_file="$1"
     mpd_conf_dir="$(dirname "${mpd_conf_file}")"
@@ -86,34 +86,34 @@ function check_or_create_targetdir() {
     
     if [[ ! -d "${mpd_conf_dir}" ]]; then
 	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "${FUNCNAME}: conf dir \`${mpd_conf_dir}' does not exist, \
+	    debug_configure "${FUNCNAME[0]}: conf dir \`${mpd_conf_dir}' does not exist, \
 try to create it"
 	res="$(mkdir -p "${mpd_conf_dir}" 2>&1)"
 	if [[ $? -ne 0 ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: error creating mpd_conf_dir \
+		debug_configure "${FUNCNAME[0]}: error creating mpd_conf_dir \
  \`${mpd_conf_dir}': \`${err}'"
 	    printf " %s can't create parent directory \`%s'.\n" \
 		   "-" "${mpd_conf_dir}"
 	    return 1
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: successfully created \
+		debug_configure "${FUNCNAME[0]}: successfully created \
 mpd_conf_dir \`${mpd_conf_dir}'"
 	    printf "%s" "${mpd_conf_dir}"
 	fi
     else
 	[[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: mpd_conf_dir \`${mpd_conf_dir}' already exists"
+		debug_configure "${FUNCNAME[0]}: mpd_conf_dir \`${mpd_conf_dir}' already exists"
 	## conf dir exists, check if it writable
 	if [[ ! -w "${mpd_conf_dir}" ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: mpd_conf_dir \`${mpd_conf_dir}' already exists"
+		debug_configure "${FUNCNAME[0]}: mpd_conf_dir \`${mpd_conf_dir}' already exists"
 	    printf " - no write permission in target directory \`%s'." "${mpd_conf_dir}"
 	    return 1
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: conf dir \`${mpd_conf_dir}' is writable"
+		debug_configure "${FUNCNAME[0]}: conf dir \`${mpd_conf_dir}' is writable"
 	    printf "%s" "${mpd_conf_dir}"
 	fi
     fi
@@ -147,10 +147,10 @@ function check_existing_conffile() {
 function make_temp_conf() {
     ## makes a temporary file for storing the mpd configuration file.
     ## returns the path to the created file or error.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     ## try to make a temp file in /tmp 
-    tempfile="$(mktemp -p /tmp mpd.XXXX.conf)"
+    tempfile="$(mktemp /tmp/${APP_NAME_MPDCONFIGURE}.XXXX.conf)"
     if [[ $? -ne 0 ]]; then
 	[[ ! -z ${DEBUG} ]] && \
 	    debug_configure "Unable to create a temporary file \`${tempfile}'"
@@ -170,7 +170,7 @@ function make_temp_conf() {
 
 function backup_original_conf() {
     ## create a backup of the current config file $1
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
     
     mpd_conf_file="$1"
 
@@ -207,7 +207,7 @@ function backup_original_conf() {
 function write_conffile() {
     ## prepares to write to the target mpd configuration file specified by $1.
     ## returns success or an error with descriptive string.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     declare -a errors
     error_message=""
@@ -308,7 +308,7 @@ overwrite && echo -e "${overwrite}")"
 function command_not_found() {
     ## give installation instructions when a command is not available
     ## and exit with error,
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     command="$1"
     package="$2"
@@ -330,7 +330,7 @@ function prompt_select_hwaddress() {
     ## of the first available interface filled in.
     ## returns the index number of the item entered in the array or an
     ## error with description.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     selected_address=0
     selected_key=
@@ -345,7 +345,7 @@ function prompt_select_hwaddress() {
 -i "${default_aif_hwaddress}" alsa_aif_hwaddress && \
 echo -e "${alsa_aif_hwaddress}")"
     [[ ! -z ${DEBUG} ]] && \
-	debug_configure "${FUNCNAME}: user entered \`${alsa_aif_hwaddress}'."
+	debug_configure "${FUNCNAME[0]}: user entered \`${alsa_aif_hwaddress}'."
     ## look up the chosen hardware address in the proper array
     for key in "${!ALSA_AIF_HWADDRESSES[@]}"; do
 	## set the user selected key and exit loop
@@ -363,11 +363,11 @@ echo -e "${alsa_aif_hwaddress}")"
 	prompt_messages=("  NOTE:")			
 	if [[ -z ${alsa_aif_hwaddress} ]]; then
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: no hwaddress entered"
+		debug_configure "${FUNCNAME[0]}: no hwaddress entered"
 	    msg="no hardware address "
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "${FUNCNAME}: an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
+		debug_configure "${FUNCNAME[0]}: an invalid hwaddress \`${alsa_aif_hwaddress}' entered"
 	    msg="an invalid hardware address (${alsa_aif_hwaddress})"
 	fi
 	## return the problem and error code
@@ -376,7 +376,7 @@ echo -e "${alsa_aif_hwaddress}")"
     else
 	## a valid addres was entered; return its index number
 	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "${FUNCNAME}: chosen key \`${selected_key}' for \
+	    debug_configure "${FUNCNAME[0]}: chosen key \`${selected_key}' for \
 interface \`${selected_address}'"
 
 	printf "%s" "${selected_key}"
@@ -393,7 +393,7 @@ function select_interface_index() {
     ## of the first interface found.
     ## returns the index of the chosen hardware address or an error
     ## with description.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     interface_count="$1"
     ## variable to hold the index number for the ALSA_AIF_HWADDRESSES
@@ -441,7 +441,7 @@ function fetch_alsa_hwaddresses() {
     ## use alsa-capabilities script to get alsa output interfaces,
     ## thereby filling the approriate global arrays.
     ## returns success or an error.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
     
     ## when more than one matching output device is found and
     ## DISABLE_PROMPTS is not set, prompt the user to select one,
@@ -460,7 +460,7 @@ function fetch_alsa_hwaddresses() {
     else
 	interface_count="${#ALSA_AIF_HWADDRESSES[@]}"
 	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "${FUNCNAME}:  \
+	    debug_configure "${FUNCNAME[0]}:  \
 audio interfaces after filtering: \`${interface_count}'."
     fi
     return 0
@@ -470,7 +470,7 @@ audio interfaces after filtering: \`${interface_count}'."
 function check_readable_path() {
     ## checks if path ($1), needed for ($2) is readable, or adds
     ## problem description ($2) to problems array.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     path="$1"
     purpose="$2"
@@ -478,14 +478,21 @@ function check_readable_path() {
 
     msg="\n  - can't access or read ${purpose} \`${path}',\
 \n   you won't be able to ${problem}.\n"
-    [[ -d "${path}" || -f "${path}" ]] || PROBLEMS+=("${msg}") 
+    if [[ ! -d "${path}" ]]; then
+	if [[ ! -f "${path}" ]]; then
+	    [[ ! -z ${DEBUG} ]] && \
+		debug_configure "${FUNCNAME[0]} (line ${LINENO}): $(printf "${msg}")"		
+	    PROBLEMS+=("${msg}")
+	    return 1
+	fi
+    fi
 }
 
 
 function check_writeable_path() {
     ## checks if path ($1), needed for ($2) is writeable, or adds
     ## problem description ($2) to problems array.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     path="$1"
     purpose="$2"
@@ -494,14 +501,19 @@ function check_writeable_path() {
     msg="\n  - can't write to ${purpose} \`${path}',\
 \n   you won't be able to ${problem}.\n"
 
-    [[ -w "${path}" ]] || PROBLEMS+=("${msg}") 
+    if [[ ! -w "${path}" ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "${FUNCNAME[0]} (line ${LINENO}): $(printf "${msg}")"
+	PROBLEMS+=("${msg}")
+	return 1
+    fi
 }
 
 function parse_configuration_line() {
     ## parse a line from mpd configuration templates, replacing
     ## variables in those templates with values from this scripts
     ## configuration files and returning them to the calling function.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     line="$@"
 
@@ -551,7 +563,7 @@ function source_enabled_confs() {
     ## source conf snippets in ./confs-enabled/*.conf while
     ## substituting the variables in those conf files with the ones
     ## generated in this script.
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     ## temporary file needed to source enabled configuration snippets files
     tempconfs="$(mktemp)"
@@ -567,6 +579,7 @@ function source_enabled_confs() {
 
     ## iterate each file
     for conf_file in ${CONFS_ENABLED}; do
+	[[ ! -z "${DEBUG}" ]] && debug_configure "${LINENO}: $(declare -p conf_file).\n"
 	## check if the symlink points to a valid file
 	isvalid="$(readlink -e "${conf_file}")"
 	## process the next one if the symlink is broken 
@@ -586,8 +599,6 @@ function source_enabled_confs() {
 		    if [[ ! -z "${trimmed}" ]]; then
 			## parse the line
 			line="$(parse_configuration_line "${line}")"
-			
-			local interpreted_line="${!line}"
 			## original code
 			[[ ! -z "${line}" ]] && \
 			    printf "%s\n" "${line}"
@@ -595,16 +606,16 @@ function source_enabled_confs() {
 		fi
 	    else
 		line="$(parse_configuration_line "${line}")"
-		echo -e "${line}"
+		printf "%s\n" "${line}"
 	    fi
 	done <${conf_file}
-	echo -e "## done processing"
+	printf "## done processing\n"
     done
 }
 
 function perform_automagic() {
     ### automagic configuration stuff
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     ## client limits
     ## if the directory specified in `CONF_MPD_MUSICDIR` is
@@ -614,52 +625,53 @@ function perform_automagic() {
     default_length=${MAX_PLAYLIST_LENGTH_DEFAULT}
     nr_musicfiles=0
 
-    if [[ -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]]; then
+    if [[ "${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}x" == "x" ]]; then
 	[[ ! -z ${DEBUG} ]] && \
 	    debug_configure "G_CLIENTLIMITS_MAXPLAYLISTLENGTH not set, trying to count the number of music files ..."
 	## setting not configured
-	if [[ -d "${CONF_MPD_MUSICDIR}" ]]; then
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "$(declare -p G_PATHS_MUSICDIRECTORY)"
+	if [[ -d "${G_PATHS_MUSICDIRECTORY}" ]]; then
 	    ## music dir exists; calculate number of files
 	    ## TODO: add permission errors to errorlog
     	    ## ls without stat() calls is much faster than find or bash globbing, thanks 
 	    ## http://stackoverflow.com/questions/1427032/fast-linux-file-count-for-a-large-number-of-files
-	    let nr_musicfiles=$(ls -fR  "${CONF_MPD_MUSICDIR}" 2>/dev/null| wc -l)
-
+	    let nr_musicfiles="$(ls -fR  "${G_PATHS_MUSICDIRECTORY}" 2>/dev/null | wc -l)"
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "Done counting, nr of files found: \`${nr_musicfiles}'"
-
-	    let double_nr_musicfiles=( ${nr_musicfiles} * 2 )
-	    [[ ${double_nr_musicfiles} -gt ${default_length} ]] && \
-		G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${double_nr_musicfiles} || \
-		G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
+	    let double_nr_musicfiles=$(( ${nr_musicfiles} * 2 ))
+	    if [[ ${double_nr_musicfiles} -gt ${default_length} ]]; then
+	 	G_CLIENTLIMITS_MAXPLAYLISTLENGTH="${double_nr_musicfiles}"
+	    else 
+		G_CLIENTLIMITS_MAXPLAYLISTLENGTH="${default_length}"
+	    fi
 	else
 	    ## music dir not available; use default
-	    G_CLIENTLIMITS_MAXPLAYLISTLENGTH=${default_length}
+	    G_CLIENTLIMITS_MAXPLAYLISTLENGTH="${default_length}"
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "Music dir not available, nr of files set to default: \`${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}'."
 	fi
     else
 	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "G_CLIENTLIMITS_MAXPLAYLISTLENGTH set to \`${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}'."
-
+	    debug_configure "$(declare -p G_CLIENTLIMITS_MAXPLAYLISTLENGTH)"
+    fi
+    if [[ "${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}x" != "x" ]]; then 
+	## if empty set `G_CLIENTLIMITS_MAXCOMMANDLISTSIZE` to 1/8 of
+	## `G_CLIENTLIMITS_MAXPLAYLISTLENGTH`
+	if [[ "${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}x" == "x" ]]; then 
+	    let G_CLIENTLIMITS_MAXCOMMANDLISTSIZE=$(( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 8 ))
+	fi
+    	## if empty, set `MAXOUTPUTBUFFERSIZE` to 1/2 of
+	## `G_CLIENTLIMITS_MAXPLAYLISTLENGTH`
+	if [[ "${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}x" == "x" ]]; then 
+	    let G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE=$(( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 2 ))
+	fi
     fi
     
-    ## if empty set `G_CLIENTLIMITS_MAXCOMMANDLISTSIZE` to 1/8 of
-    ## `G_CLIENTLIMITS_MAXPLAYLISTLENGTH`
-    [[ -z ${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE} && \
-	! -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]] && \
-	let G_CLIENTLIMITS_MAXCOMMANDLISTSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 8 )
-    
-    ## if empty, set `MAXOUTPUTBUFFERSIZE` to 1/2 of
-    ## `G_CLIENTLIMITS_MAXPLAYLISTLENGTH`
-    [[ -z ${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE} && \
-	! -z ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} ]] && \
-	let G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE=( ${G_CLIENTLIMITS_MAXPLAYLISTLENGTH} / 2 )
-    
     if [[ ! -z "${DEBUG}" ]]; then
-	debug_configure "G_CLIENTLIMITS_MAXPLAYLISTLENGTH: \`${G_CLIENTLIMITS_MAXPLAYLISTLENGTH}'"
-	debug_configure "G_CLIENTLIMITS_MAXCOMMANDLISTSIZE: \`${G_CLIENTLIMITS_MAXCOMMANDLISTSIZE}'"
-	debug_configure "G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE: \`${G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE}'"
+	debug_configure "$(declare -p G_CLIENTLIMITS_MAXPLAYLISTLENGTH)"
+	debug_configure "$(declare -p G_CLIENTLIMITS_MAXCOMMANDLISTSIZE)"
+	debug_configure "$(declare -p G_CLIENTLIMITS_MAXOUTPUTBUFFERSIZE)"
     fi
     
     ## get network name for zeroconf
@@ -669,10 +681,11 @@ function perform_automagic() {
 	    debug_configure "G_ZEROCONF_ZEROCONFNAME not set  ..."
 	
 	hostname_string=""
+	ipv6_re="*::*"
 	## only try to get hostname if it isn't link local
-	if [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "127" ]] || \
+	if [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ 127\. ]] || \
 	       [[ "${CONF_MPD_NETWORK_ADRESS}" != "0.0.0.0" ]] || \
-	       [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ "*::*"  ]]; then
+	       [[ ! "${CONF_MPD_NETWORK_ADRESS}" =~ ${ipv6_re}  ]]; then
 	    ## mpd is configured to use a 'real' ip address; try to get fqdn name
 	    [[ ! -z ${DEBUG} ]] && \
 		debug_configure "mpd is configured to use a 'real' ip address ..."
@@ -690,26 +703,29 @@ function perform_automagic() {
 	    fi
 	else
 	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "G_ZEROCONF_ZEROCONFNAME set by user to \`${G_ZEROCONF_ZEROCONFNAME}'."
-
+		debug_configure "${FUNCNAME[0]} (${LINENO}: \
+$(declare -p G_ZEROCONF_ZEROCONFNAME) (set by user)"
 	fi
-	
 	## set string to use if hostname contains something
-	[[ ! -z ${hostname} ]] && hostname_string="on ${hostname} "
-	G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-MPD \
-${hostname_string}(${CONF_ALSA_AIF_DEVLABEL})}"
+	if [[ "${hostname}x" != "x" ]]; then
+	    hostname_string="on ${hostname} "
+	fi
+	defname="MPD ${hostname_string}(${CONF_ALSA_AIF_DEVLABEL})"
+	G_ZEROCONF_ZEROCONFNAME="${ZEROCONF_NAME:-${def_name}}"
+		debug_configure "${FUNCNAME[0]} (${LINENO}: \
+$(declare -p G_ZEROCONF_ZEROCONFNAME)"
+	
 	
     fi
 
     ## cap to the maximum nr of characters (64)
     G_ZEROCONF_ZEROCONFNAME="$(printf "%.*s\n" 64 "${G_ZEROCONF_ZEROCONFNAME}")"
-    
 
 }
 
 function get_mpd_musicdir() {
     ### get and check music dir
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     ## check if user set the music dir configuration parameters
     if [[ ! -z "${CONF_MPD_MUSICDIR}" ]]; then
@@ -755,131 +771,104 @@ function get_mpd_musicdir() {
 }
 
 function get_current_mpdconf_path() {
-    ## get and retrun the mpd.conf file in use by the system
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    ## get and return the mpd.conf file in use by the system
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
+    ## for debian based distros 
     default_path="/etc/default/mpd"
     default_re="[[:space:]]*MPDCONF[[:space:]]*=[[:space:]]*(.*)"
     conffile=""
-    declare -a mpd_confs
-    
-    if [[ ! -z ${CONF_MPD_CONFFILE} ]]; then
+    declare -a default_mpd_conf_paths
+    if [[ "${XDG_CONFIG_HOME}x" == "x" ]]; then
+	XDG_CONFIG_HOME="~/.config"
+    fi
+    declare -a default_mpd_conf_paths=(
+	"${XDG_CONFIG_HOME}/mpd/mpd.conf"
+	"~/.mpdconf"
+	"~/.mpd/mpd.conf"
+	"/etc/mpd.conf")
+    if [[ "${CONF_MPD_CONFFILE}x" != "x" ]]; then
 	if [[ -f "${default_path}" ]]; then
 	    while read -r line; do
 		if [[ "${line}" =~ ${default_re} ]]; then
 		    [[ ! -z "${DEBUG}" ]] && \
-			debug_configure "${FUNCNAME}: default ${MSG_MPDCONF}: \`${conffile}'."
+			debug_configure "${FUNCNAME[0]}: default ${MSG_CONF_TITLE}: \`${conffile}'."
 		    conffile="${BASH_REMATCH[1]}"
 		    break
 		fi
 	    done<"${default_path}"
 	fi
 
-	if [[ ! -z "${conffile}" ]]; then
+	if [[ "${conffile}x" != "x" ]]; then
 	    if [[ ! -f "${conffile}" ]]; then
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug_configure "${FUNCNAME}: default ${MSG_MPDCONF} \`${conffile}' \
+		    debug_configure "${FUNCNAME[0]}: default ${MSG_CONF_TITLE} \`${conffile}' \
 does not exist."
 		## default conffile does not exist
-		return 1
 	    else
 		[[ ! -z "${DEBUG}" ]] && \
-		    debug_configure "${FUNCNAME}: default ${MSG_MPDCONF} \`${conffile}' exists."
+		    debug_configure "${FUNCNAME[0]}: default ${MSG_CONF_TITLE} \`${conffile}' exists."
 	    fi
 	else
-	    ## no default conffile, try usual suspects
-	    mpd_confs=("${XDG_CONFIG_HOME}/mpd/mpd.conf")
-	    mpd_confs+=("~/.mpdconf")
-	    mpd_confs+=("~/.mpd/mpd.conf")
-	    mpd_confs+=("/etc/mpd.conf")
-	    
-	    for conffile in "${mpd_confs[@]}"; do
+	    ## no default conffile, try usual suspects  
+	    for conffile in "${default_mpd_conf_paths[@]}"; do
 		if [[ -f "${conffile}" ]]; then
 		    [[ ! -z "${DEBUG}" ]] && \
-			debug_configure "${FUNCNAME}: non-default ${MSG_MPDCONF} \`${conffile}' found."
-		    printf "%s" "${conffile}"
+			debug_configure "${FUNCNAME[0]}: non-default ${MSG_CONF_TITLE} \`${conffile}' found."
 		    break
 		fi
 	    done
 	fi
     fi
 
-    if [[ ! -z "${conffile}" ]] && [[ -f "${conffile}" ]]; then
+    if [[ "${conffile}x" == "x" ]]; then
+	conffile="${default_mpd_conf_paths[0]}"
 	[[ ! -z "${DEBUG}" ]] && \
-	    debug_configure "${FUNCNAME}: returning ${MSG_MPDCONF} \`${conffile}'."
+	    debug_configure "${FUNCNAME[0]}: no ${MSG_CONF_TITLE} found; will use the first default one: ${conffile}."	
+    fi
+    
+    if [[ -f "${conffile}" ]]; then
+	[[ ! -z "${DEBUG}" ]] && \
+	    debug_configure "${FUNCNAME[0]}: ${MSG_CONF_TITLE} \`${conffile}' exists."
 	printf "%s" "${conffile}"
-	return 0
     else
 	[[ ! -z "${DEBUG}" ]] && \
-	    debug_configure "${FUNCNAME}: found ${MSG_MPDCONF} \`${conffile}' \
-does not exist (THIS SHOULD NOT HAPPEN)."
-	return 1
+	    debug_configure "${FUNCNAME[0]}: ${MSG_CONF_TITLE} \`${conffile}' does not (yet) exist."
+	printf "%s" "${conffile}"
     fi
 	
 }
 
 
-
 function get_mpd_homedir() {
     ### get and check working directory for mpd
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    ##  according to mpd source
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
   
     ## if `CONF_MPD_HOMEDIR` not set by user use `XDG_CONFIG_MPDDIR`
-    if [[ -z ${CONF_MPD_HOMEDIR} ]]; then
-	[[ ! -z ${DEBUG} ]] && \
-	    debug_configure "CONF_MPD_HOMEDIR not set, trying to get xdg_config_dir ..."
-       ## use user xdg config dir or current path
-	XDG_CONFIG_DIR="${HOME}/.config"
-	if [[ -d ${XDG_CONFIG_DIR} ]]; then
-	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "XDG_CONFIG_DIR found: \`${XDG_CONFIG_DIR}'."
-	else   
-	    XDG_CONFIG_DIR=$(pwd)
-	    [[ ! -z ${DEBUG} ]] && \
-		debug_configure "XDG_CONFIG_DIR not found, using current dir: \`${XDG_CONFIG_DIR}'."
-	fi
-        ## set default path
-	CONF_MPD_HOMEDIR=${XDG_CONFIG_DIR}/mpd
-	[[ ! -z ${DEBUG} ]] && \
-		debug_configure "CONF_MPD_HOMEDIR set by script to: \`${CONF_MPD_HOMEDIR}'."
-    else
+    if [[ "${CONF_MPD_HOMEDIR}x" != "x" ]]; then
 	[[ ! -z ${DEBUG} ]] && \
 	    debug_configure "CONF_MPD_HOMEDIR set by user to \`${CONF_MPD_HOMEDIR}'."
-    fi
-    
-    ## check if it is accessible
-    check_readable_path "${CONF_MPD_HOMEDIR}" "mpd home directory" \
-	"use mpd"
-    check_writeable_path "${CONF_MPD_HOMEDIR}" "mpd home directory" \
-	"store mpd database, playlist and cache."
-    
+    else
+	CONF_MPD_HOMEDIR="$(dirname "$(get_current_mpdconf_path)")"
+	[[ ! -z ${DEBUG} ]] && \
+	    debug_configure "CONF_MPD_HOMEDIR set by script to \`${CONF_MPD_HOMEDIR}'."
+    fi	
+    ## check if it is accessible or can be made
     ## where to store data
     MPD_DATADIR="${MPD_DATADIR:-${CONF_MPD_HOMEDIR}}"
     CONF_MPD_PLAYLISTDIR="${MPD_PLAYLISTDIR:-${MPD_DATADIR}/playlists}"
-    check_readable_path "${MPD_PLAYLISTDIR}" "playlist directory" "use playlists"
-    check_writeable_path "${MPD_PLAYLISTDIR}" "playlist directory" \
-	"change or create playlists"
     CONF_MPD_DBFILE="${MPD_DBFILE:-${MPD_DATADIR}/tag_cache}"
-    check_readable_path "${MPD_DBFILE}" "database file" "use mpd"
-    check_writeable_path "${MPD_DBFILE}" "database file" "store changes in mpd"
     CONF_MPD_LOGFILE="${MPD_LOGFILE:-${MPD_DATADIR}/mpd.log}"
-    check_writeable_path "${MPD_LOGFILE}" "log file" "start or use mpd"
     CONF_MPD_PIDFILE="${MPD_PIDFILE:-${MPD_DATADIR}/pid}"
-    check_writeable_path "${MPD_PIDFILE}" "PID file" \
-	"start, stop or restart mpd using service daemon"
     CONF_MPD_STATEFILE="${MPD_STATEFILE:-${MPD_DATADIR}/state}"
-    check_writeable_path "${MPD_STATEFILE}" "state file" \
-	"store mpd running status"
     CONF_MPD_STICKERFILE="${MPD_STICKERFILE:-${MPD_DATADIR}/sticker}"
-    check_writeable_path "${MPD_STICKERFILE}" "sticker file" \
-	"store dynamic user data"   
-    
 }
 
 
 function conf_header() {
     ## construct the byline for the configuration file
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     formatted_date="$(date -Is)"
 
@@ -892,7 +881,7 @@ function conf_header() {
 
 function conf_footer() {
     ## construct the footer for the configuration file
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     printf "\n\n%s\n%s end of %s\n%s" \
 	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" \
@@ -902,7 +891,7 @@ function conf_footer() {
 
 function do_configure() {
     ## main function
-    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME}" "$*"
+    [[ ! -z "${DEBUG}" ]] && debug_function "${FUNCNAME[0]}" "$*"
 
     analyze_command_line_conf "$@" || exit 
 
@@ -910,12 +899,12 @@ function do_configure() {
     ## get a count of number of audio output interfaces
     fetch_alsa_hwaddresses
     if [[ $? -ne 0 ]]; then
-	die_configure "${FUNCNAME}: error running \`fetch_alsa_hwaddresses'"
+	die_configure "${FUNCNAME[0]}: error running \`fetch_alsa_hwaddresses'"
     else
 	interface_count=${#ALSA_AIF_HWADDRESSES[@]}
     fi
     [[ ! -z ${DEBUG} ]] && \
-	debug_configure "${FUNCNAME}: fetch_alsa_hwaddresses returned ${interface_count} interfaces."
+	debug_configure "${FUNCNAME[0]}: fetch_alsa_hwaddresses returned ${interface_count} interfaces."
 
     ## get the index number of the selected hardware address in the
     ## ALSA_AIF_HWADDRESSES array
@@ -930,7 +919,7 @@ function do_configure() {
 ${ALSA_AIF_LABELS[${selected_array_index}]}"
     fi
     [[ ! -z ${DEBUG} ]] && \
-	debug_configure "${FUNCNAME}: CONF_ALSA_AIF_HWADDRESS=\`${CONF_ALSA_AIF_HWADDRESS}'."
+	debug_configure "${FUNCNAME[0]}: CONF_ALSA_AIF_HWADDRESS=\`${CONF_ALSA_AIF_HWADDRESS}'."
 
     if [[ ! -z "${CONF_MPD_CONFFILE}" ]]; then 
 	default_mpd_conffile="$(get_current_mpdconf_path "${CONF_MPD_CONFFILE}")"
@@ -940,7 +929,7 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
 		   "-" "${MSG_MPD_CONFFILE}" "${CONF_MPD_CONFFILE}" 1>&2;
 		printf "   \`%s' will be used by mpd by default. " \
 		       "${default_mpd_conffile}" 1>&2;
-		printf "in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
+		printf "%s in order to use the new file, \n   start mpd with:\n" "-" 1>&2;
 		printf "     mpd [other options] %s\n" \
 		       "${CONF_MPD_CONFFILE}" 1>&2;
 		printf "   or rerun this script and set the \`--output' option to \`%s'.\n" \
@@ -992,7 +981,7 @@ ${ALSA_AIF_LABELS[${selected_array_index}]}"
 function display_usageinfo_conf() {
     ## display syntax and exit
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$*"
+	debug_function_ac "${FUNCNAME[0]}" "$*"
 
     msg=$(cat <<EOF
 Usage:
@@ -1048,7 +1037,7 @@ function analyze_command_line_conf() {
     ## parse command line arguments using the `manual loop` method
     ## described in http://mywiki.wooledge.org/BashFAQ/035.
     [[ ! -z ${DEBUG} ]] && \
-	debug_function_ac "${FUNCNAME}" "$*"
+	debug_function_ac "${FUNCNAME[0]}" "$*"
 
     while :; do
         case "${1:-}" in
@@ -1306,7 +1295,7 @@ fi
 ## files and directories
 if [[ ! -z "${DEBUG}" ]]; then
     if [[ ${#PROBLEMS[@]} -gt 0 ]]; then
-	debug_configure "\nPotential problems found:\n${PROBLEMS[@]}"
+	debug_configure "\nPotential problems found:\n${PROBLEMS[*]}"
     else
 	debug_configure "No potential problems found."
     fi
