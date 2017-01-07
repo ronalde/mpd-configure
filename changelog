@@ -1,3 +1,81 @@
+commit b261abd212f3f0a281f6623ca83f80763dd8cd2a (HEAD -> master, origin/master, origin/database-proxy, origin/HEAD, unittesting, database-proxy)
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Dec 9 15:49:19 2016 +0100
+
+    isolated db_file and added database (proxy) plugin
+
+commit 1b05a563845751bb207ed537da93a7d97fefd97d
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon Dec 5 17:14:03 2016 +0100
+
+    working again
+
+commit 490eb9dc5d569399fb9de77eea7870c4fee05eaa
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Dec 1 09:13:25 2016 +0100
+
+    fixed application name with the help function and added version info
+
+commit 0b63506c233a5786e64b61bc6e702f682ed4ad84 (tag: v0.9.3)
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Dec 1 09:07:05 2016 +0100
+
+    v0.9.3
+
+commit 5952a179520e042775fb36f15089c6124635385f
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Dec 1 09:06:39 2016 +0100
+
+    v0.9.2
+
+commit 29842654d40082f5a926e6651e3b1635d040f1a4 (tag: v0.9.2, origin/shellcheck, shellcheck)
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Wed Nov 30 16:58:53 2016 +0100
+
+    shellchecked and simplified/speeded up detection of sample rate support
+
+commit 92c17ffde0806cff8b3b1fdebb0b84a9d018bf1f
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Wed Nov 30 09:01:54 2016 +0100
+
+    fixed, cleaned up and documented checking sample rates based on video base rate
+
+commit f117e4179e4e34c0fac166f213ed6f1b96825b4d
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Mar 11 09:46:04 2016 +0100
+
+    added fifo audio output for visualization purposes
+
+commit 792263c88c5ec45afc699cccbc66b6c152e85a02
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Mar 10 12:47:51 2016 +0100
+
+    fixed issue #28: replaced ps command with reading /proc/pid and renamed function
+
+commit 20be7798e84c9f5309cc7877e30ac38bea2e771d
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sat Feb 6 12:17:06 2016 +0100
+
+    which replaced by type -p
+
+commit e46a873ca40e0002d06103e8dff0da9eb3a95963
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sat Feb 6 12:14:49 2016 +0100
+
+    which replaced by type -p
+
+commit e6a6bd5267093ab0366e352839ac0472b91e8149
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Feb 2 09:37:34 2016 +0100
+
+    always show the real hwparams file
+
+commit 3eea4adcc94de136d51e3cc607f98eddea4a6869
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Jan 26 10:45:16 2016 +0100
+
+    updated
+
 commit 375075468daf50dca380c03eab995db6a57d72e9
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Tue Jan 26 08:37:29 2016 +0100
@@ -16,7 +94,7 @@ Date:   Sat Jan 23 13:21:45 2016 +0100
 
     moved test script out of the way
 
-commit 6c0bc3ab7428f7d8e082867d2e8ddf9adac91ed4
+commit 6c0bc3ab7428f7d8e082867d2e8ddf9adac91ed4 (mpd-monitor)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Jan 20 01:10:38 2016 +0100
 
@@ -41,7 +119,7 @@ Date:   Tue Jan 19 15:38:49 2016 +0100
 
     fixed regression bug issue #27
 
-commit 4a72293d10915f1008ddd209a2c04555914f5177
+commit 4a72293d10915f1008ddd209a2c04555914f5177 (tag: v0.9.1)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Tue Jan 19 15:38:49 2016 +0100
 
@@ -305,7 +383,7 @@ Date:   Thu Jan 7 11:24:27 2016 +0100
 
     added download instructions
 
-commit 19fffba2a6ffcc573112d801e9fb86fedd701732
+commit 19fffba2a6ffcc573112d801e9fb86fedd701732 (tag: v0.9)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Thu Jan 7 11:15:36 2016 +0100
 
@@ -371,7 +449,7 @@ Date:   Tue Jan 5 19:31:07 2016 +0100
 
     added backup function
 
-commit 6cfbdf8e12b6199a093620f275d37769abb66f75
+commit 6cfbdf8e12b6199a093620f275d37769abb66f75 (tag: v0.8)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Tue Jan 5 18:54:46 2016 +0100
 
@@ -401,7 +479,7 @@ Date:   Tue Jan 5 13:37:18 2016 +0100
 
     issue #20: fixed. function get_mpd_musicdir existed and worked but was not called
 
-commit de71c5b53aec2d2072c2d389d2ca8eeb48a1b78b
+commit de71c5b53aec2d2072c2d389d2ca8eeb48a1b78b (tag: v0.7)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Tue Jan 5 12:30:45 2016 +0100
 
@@ -425,7 +503,7 @@ Date:   Mon Jan 4 14:39:39 2016 +0100
 
     remove obsolete locking function
 
-commit 622a1feb29f3c0e202596e1e07e4ad0431164362
+commit 622a1feb29f3c0e202596e1e07e4ad0431164362 (tag: v0.6)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Mon Jan 4 09:48:49 2016 +0100
 
@@ -449,7 +527,7 @@ Date:   Sun Jan 3 16:35:11 2016 +0100
 
     bumped version
 
-commit 87e4d39cb4ead479fc94835f6e216a979a07080e
+commit 87e4d39cb4ead479fc94835f6e216a979a07080e (tag: v0.5)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Sun Jan 3 16:33:54 2016 +0100
 
@@ -473,7 +551,7 @@ Date:   Sun Jan 3 16:26:08 2016 +0100
 
     added -s option to display sample rates for each supported format (very slow)
 
-commit fc04c871ab79ad68ce2647e7486393de0ce33ec6
+commit fc04c871ab79ad68ce2647e7486393de0ce33ec6 (origin/formats)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Dec 30 03:56:03 2015 +0100
 
@@ -497,7 +575,7 @@ Date:   Tue Dec 22 12:08:09 2015 +0100
 
     (sloppy) pulseaudio functions moved to own script
 
-commit 60759370916bd97154dab876ce504c8d9de116c8
+commit 60759370916bd97154dab876ce504c8d9de116c8 (tag: v0.4, origin/towards1.0, towards1.0)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Mon Dec 21 23:21:36 2015 +0100
 
@@ -551,7 +629,7 @@ Date:   Sat Dec 19 16:12:32 2015 +0100
 
     added a sample script for advanced usage of alsa-capabilities
 
-commit eff30e4af8143bd484a2f7f0570ef70a34d08554
+commit eff30e4af8143bd484a2f7f0570ef70a34d08554 (tag: v0.3)
 Merge: aac3ede f5cf01d
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Sat Dec 19 15:21:59 2015 +0100
@@ -603,31 +681,31 @@ Date:   Thu Dec 17 09:54:01 2015 +0100
 
     aplay moved to its own function, adding enhancements in dealing with errors
 
-commit d5d5378e34fc0580a02a0dcbd25d23c01ce4e3b3
+commit d5d5378e34fc0580a02a0dcbd25d23c01ce4e3b3 (origin/mpd-monitor)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Thu Dec 17 08:36:33 2015 +0100
 
     issue #15: removed unnecessary variable initialization; see commit:6659341
 
-commit cd2e103042ba4586c0d630567f4bfca712b73816
+commit cd2e103042ba4586c0d630567f4bfca712b73816 (tag: v0.2-3)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Dec 16 12:12:07 2015 +0100
 
     issue #15: latest enhancements to the regular expressions based on aplay.c
 
-commit b67783e10d63b024d13b48631a2bee1a0db29e3b
+commit b67783e10d63b024d13b48631a2bee1a0db29e3b (tag: v0.2-2)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Dec 16 12:10:06 2015 +0100
 
     issue #15: some minor enhancements to the regular expressions based on aplay.c
 
-commit 45c086a027cb1396a3e0862ac2c8d521b0327fb1
+commit 45c086a027cb1396a3e0862ac2c8d521b0327fb1 (tag: v0.2-1)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Dec 16 11:00:38 2015 +0100
 
     issue #15: some fixes to prevent unitialized variables
 
-commit 66593415d9791cb523713ee97b320b14be66247c
+commit 66593415d9791cb523713ee97b320b14be66247c (tag: v0.2-0)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Dec 16 10:55:25 2015 +0100
 
@@ -771,7 +849,7 @@ Date:   Thu Nov 19 09:35:01 2015 +0100
 
     issue #11: replace associative array UO_EP_LABELS with simple array and string filtering
 
-commit 68f7a5e199ae6878ed0a8063ef65c0ef3c358d3e
+commit 68f7a5e199ae6878ed0a8063ef65c0ef3c358d3e (tag: v0.1)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed May 13 17:32:12 2015 +0200
 
@@ -1508,9 +1586,9 @@ Date:   Wed Sep 18 13:42:14 2013 +0200
     Merge branch 'master' of https://github.com/ronalde/mpd-configure
     
     Conflicts:
-    	mpd-configure
-    	mpdconfigure-alsa-functions
-    	mpdconfigure-common-functions
+            mpd-configure
+            mpdconfigure-alsa-functions
+            mpdconfigure-common-functions
 
 commit 6ee9f12c9464f6846a459056c9f10bccb9e4f8a6
 Author: Ronald van Engelen <ronalde@lacocina.nl>

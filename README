@@ -41,10 +41,10 @@ git pull
 ````
 
 Alternatively, [the tarball of the current stable
-master](http://lacocina.nl/mpd-configure) can be downloaded and
+master](https://lacocina.nl/mpd-configure) can be downloaded and
 unpacked in the current directory using `wget` and `tar`:
 ````bash
-wget http://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
+wget https://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
 ````
 
 
@@ -139,20 +139,20 @@ the script with the `-h` help option, eg:
 The script can also run 'directly' from github using:
 
 ````bash
-    bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")
+    bash <(wget -q -O - "https://lacocina.nl/alsa-capabilities")
 ````
 
 To specify an option (like `-l usb`) use the following syntax:
 
 ````bash
-    bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities") -l usb    
+    bash <(wget -q -O - "https://lacocina.nl/alsa-capabilities") -l usb    
 ````
 
 To display the alsa playback interfaces on a remote host to which you
 have ssh access, use:
 
 ````bash
-    ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/alsa-capabilities")"
+    ssh ${username}@${remotehost} "bash <(wget -q -O - "https://lacocina.nl/alsa-capabilities")"
 ````
 
 Proper detection of the sample rates each format supports on an
@@ -179,14 +179,14 @@ inspected/monitored by the helper script `mpd-monitor`, which can be
 executed as follows:
 
 ````bash
-    bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")
+    bash <(wget -q -O - "https://lacocina.nl/mpd-monitor")
 ````
 
 Or, when mpd is running on a remote host to which you have (key based)
 ssh access, execute:
 
 ````bash
-    ssh ${username}@${remotehost} "bash <(wget -q -O - "http://lacocina.nl/mpd-monitor")"
+    ssh ${username}@${remotehost} "bash <(wget -q -O - "https://lacocina.nl/mpd-monitor")"
 ````
 
 - The mpd-monitor script is in a development state and unstable.
@@ -198,7 +198,7 @@ Background
 I created this script to assist users in turning mpd in an audiophile
 digital music player. See the article [How to turn Music Player Daemon
 (mpd) into an audiophile music
-player](http://lacocina.nl/audiophile-mpd).
+player](https://lacocina.nl/audiophile-mpd).
 
 It does this by creating a proper formatted `audio_output`
 configuration snippet for mpd's [alsa audio output
@@ -438,21 +438,21 @@ Reference
 MPD specific:
 
 - [How to turn Music Player Daemon (mpd) into an audiophile music
-player](http://lacocina.nl/mpd-configure-audiophile).
+player](https://lacocina.nl/mpd-configure-audiophile).
 - [What digital audio format does your USB DA-converter support and
-  use?](http://lacocina.nl/detect-alsa-output-capabilities)
+  use?](https://lacocina.nl/detect-alsa-output-capabilities)
 - [Music Player Daemon (MPD)](http://www.musicpd.org/)
 
 LTSP specific:
 
 - [How to setup a bit-perfect digital audio streaming client with free
   software (with LTSP and
-  MPD)](http://lacocina.nl/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
+  MPD)](https://lacocina.nl/how-to-setup-a-bit-perfect-digital-audio-streaming-client-with-free-software-with-ltsp-and-mpd)
 - [Linux Terminal Server Project (LTSP)](http://www.ltsp.org/)
 
 
-[audiophile-mpd]:  http://lacocina.nl/audiophile-mpd "mpd-configure: automatically turn Linux into an audiophile music player"
-[detect-alsa-output-capabilities]: http://lacocina.nl/detect-alsa-output-capabilities "Alsa-capabilities shows which digital audio formats your USB DA-converter supports"
+[audiophile-mpd]:  https://lacocina.nl/audiophile-mpd "mpd-configure: automatically turn Linux into an audiophile music player"
+[detect-alsa-output-capabilities]: https://lacocina.nl/detect-alsa-output-capabilities "Alsa-capabilities shows which digital audio formats your USB DA-converter supports"
 
 [mpd]: http://www.musicpd.org/ "Music Player Daemon (external website)"
 
