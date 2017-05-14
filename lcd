@@ -26,7 +26,7 @@ bold="$(tput bold)"
 dim="$(tput dim)"
 std="$(tput sgr0)"
 red=$(tput setaf 1)   #  color 1
-blue=$(tput setaf 33) #  color 2
+blue=$(tput setaf 4) #  color 2
 white=$(tput setaf 7) #  color 3
 
 ## input | nfs://srv/media/music/.../track11.aiff
@@ -58,37 +58,39 @@ main_playing_trackplayingtime=
 main_playing_tracktitle=
 main_rt_tracknumber_album=
 main_rt_tracknumber_playlist=
-main_rt_tracknumbers_playlist=
+main_rt_playlistlength=
 
 declare -A alsa_encoding
 declare -a mpc_fields=(
-    artist
-    track
-    album
-    name
-    file
-    artist
     album
     albumartist
+    artist
     comment
     composer
     date
     disc
-    genre
-    performer
-    title
-    track
-    time
     file        	      
-    position
-    mtime
+    genre
     mdate
+    mtime
+    name
+    performer
+    position
+    time
+    title
+    length
+    track
 )
 
 mpc_format_string=
 for mpc_field in ${mpc_fields[@]}; do 
 	mpc_format_string+="${mpc_field}:[%${mpc_field}%]\n"
 done
+
+function die() {
+    printf "%s\n" "$@" 1>&2
+    exit 1
+}
 
 function check_commands() {
     err=()
@@ -126,7 +128,7 @@ function filter_soxi_duration() {
 }
 
 function fill_arrays() {
-    ret_mpc_info
+    ret_mpc_info || return 1
     #ret_mpc_now
     ret_mpd_now
     ret_exif_info "${mpc_vals[file]}"
@@ -197,14 +199,15 @@ function alsa_format_outputencoding() {
 
 function get_info() {
 
-    fill_arrays
-    
+    fill_arrays || return 1
+    [[ ${DEBUG} ]] && declare -p mpc_vals 1>&2
+    [[ ${DEBUG} ]] && declare -p mpd_vals 1>&2    
     main_playing_tracktitle="${mpc_vals[title]}"
     main_playing_trackartist="${mpc_vals[artist]}"
     main_playing_trackperformers="${exif_vals[Performer]}"
     main_rt_tracknumber_album="${mpc_vals[track]}"
-    main_rt_tracknumber_playlist="${mpc_vals[rt_playlist_tracknumber]}"
-    main_rt_tracknumbers_playlist="${mpc_vals[rt_playlist_tracknumbers]}"
+    main_rt_tracknumber_playlist="${mpc_vals[position]}"
+    main_rt_playlistlength="${mpd_vals[rt_raw_playlistlength]}"
     main_playing_trackalbumname="${mpc_vals[album]}"
     main_playing_trackalbumnumber="${mpc_vals[position]}"
     main_playing_trackalbumartist="${mpc_vals[albumartist]}"
@@ -267,9 +270,9 @@ function get_info() {
     msg_samplerate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
 " " "Sample rate (Hz)" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
 
-    msg_tracktitle="${bold}${main_playing_tracktitle}${std}"
+    msg_tracktitle="${bold}${blue}${main_playing_tracktitle}${std}"
     msg_trackartist="${bold}${red}${main_playing_trackartist}${std}"
-    msg_tracknumber="$(printf "%-4s (of %-3s)" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_tracknumbers_playlist}")"
+    msg_tracknumber="$(printf "%-4s (of %3s)" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_playlistlength}")"
     msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
     msg_byline="$(printf "%-13s-- by %s" " " "${msg_trackartist}")"
     msg_albumline="$(printf "%-13s   track %s from %s" \
@@ -294,34 +297,13 @@ ${msg_filesize}
 }
 
 function ret_mpd_now() {
-    ## fills mpc_vals array with rt_ fields from mpc status
-	
-    #res="$(${cmd_mpc} "${mpc_args[@]}" &)"
-    [[ "${DEBUG}" ]] && declare -p cmd_netcat mpd_host mpd_port 1>&2
-    res="$(echo "status" | ${cmd_netcat} -N ${mpd_host} ${mpd_port})"
-    [[ "${DEBUG}" ]] && declare -p res 1>&2
-    linecounter=1
-    #playing_re="[(playing|paused)][[:space:]]+#([0-9]+)/([0-9]+)[[:space:]]+([0-9]+):([0-9]+)/([0-9]+):([0-9]+)[[:space:]]+\(([0-9]+%\)"
+    ## echo status command to mpd host on mpd port using netcat, to
+    ## fill mpc_vals array with rt_ fields
 
-# OK MPD 0.19.0
-# volume: -1
-# repeat: 0
-# random: 1
-# single: 0
-# consume: 0
-# playlist: 555
-# playlistlength: 19
-# mixrampdb: 0.000000
-# state: play
-# song: 10
-# songid: 681
-# time: 156:163
-# elapsed: 155.829
-# bitrate: 1084
-# audio: 48000:24:2
-# nextsong: 18
-# nextsongid: 689
-    # OK
+    [[ "${DEBUG}" ]] && declare -p cmd_netcat mpd_host mpd_port 1>&2
+    mpd_status="$(echo "status" | ${cmd_netcat} -N ${mpd_host} ${mpd_port})"
+    [[ "${DEBUG}" ]] && declare -p mpd_status 1>&2
+    linecounter=1
     prefix="rt_raw"
     key_val_re="^([^\:]+):[[:space:]]+(.*)"
     while read -r line; do
@@ -330,7 +312,7 @@ function ret_mpd_now() {
 	    value="${BASH_REMATCH[2]}"
 	    mpd_vals["${prefix}_${field}"]="${value}"
 	fi
-    done<<<"${res}"
+    done<<<"${mpd_status}"
     IFS=: read audio_samplerate audio_bitdepth audio_channelcount <<< "${mpd_vals[${prefix}_audio]}"
     mpd_vals["rt_audio_samplerate"]="${audio_samplerate}"
     mpd_vals["rt_audio_bitdepth"]="${audio_bitdepth}"
@@ -351,21 +333,25 @@ function ret_mpc_info() {
     mpc_args=(-h "${mpd_host}")
     mpc_args+=(current)
     mpc_args+=(-f "${mpc_format_string}")
+    [[ ${DEBUG} ]] && declare -p mpc_format_string 1>&2
     res="$(${cmd_mpc} "${mpc_args[@]}" &)"
+    if [[ $? -ne 0 ]]; then
+	die "${FUNCNAME[0]}: mpd on %s is not running."
+    else
+	if [[ "${res}x" == "x" ]]; then 
+	    printf 1>&2 "mpd on %s is not currently playing anything.\n" \
+			"${mpd_host}"
+	    return 1
+	fi
+    fi
     field_val_re="^([^\:]+):(.*)"
     while read -r line; do
 	if [[ "${line}" =~ ${field_val_re} ]]; then
 	    field="${BASH_REMATCH[1]}"
 	    val="${BASH_REMATCH[2]}"
 	    mpc_vals["${field}"]="${val}"
-	#else
-	#    printf 1>&2 "%s error: no match with line: '%s'\n" \
-	#		"${FUNC_NAME[0]}" "${line}"
 	fi
     done<<<"${res}"
-    #for k in ${!mpc_vals[@]}; do
-    #	printf '"mpcfield";"%s";"%s";\n' "${k}" "${mpc_vals[${k}]}"
-    #   done
 }
 
 function ret_soxi_info() {
@@ -434,7 +420,7 @@ function ret_alsa_info() {
 		val="${BASH_REMATCH[2]}"
 		alsa_vals["${field}"]="${val}"
 	    else
-		declare -p line 1>&2
+		[[ ${DEBUG} ]] && declare -p line 1>&2
 		return 1
 	    fi
 	done<<<"${res}"
@@ -455,96 +441,6 @@ function main_loop() {
 	sleep 0.5
 	get_info
 	fill_arrays
-	
-	main_playing_tracktitle="${mpc_vals[title]}"
-	main_playing_trackartist="${mpc_vals[artist]}"
-	main_playing_trackperformers="${exif_vals[Performer]}"
-	main_rt_tracknumber_album="${mpc_vals[track]}"
-	main_rt_tracknumber_playlist="${mpc_vals[rt_playlist_tracknumber]}"
-	main_rt_tracknumbers_playlist="${mpc_vals[rt_playlist_tracknumbers]}"
-	main_playing_trackalbumname="${mpc_vals[album]}"
-	main_playing_trackalbumnumber="${mpc_vals[position]}"
-	main_playing_trackalbumartist="${mpc_vals[albumartist]}"
-	main_playing_trackduration="$(filter_soxi_duration "${soxi_vals[Duration]}")"
-	main_file_sizebytes="$(soxi_filesize_to_bytes ${soxi_vals[FileSize]})"
-	main_file_bitrate_raw="${soxi_vals[BitRate]}"
-	main_file_bitrate_value="${main_file_bitrate_raw:0:-1}"
-	main_file_bitrate_unit="${main_file_bitrate_raw:$(( ${#main_file_bitrate_raw} - 1 )):1}"
-	main_file_bitrate_kvalue=
-	if [[ "${main_file_bitrate_unit}x" == "Mx" ]]; then 
-	    main_file_bitrate_kvalue="$(echo "${main_file_bitrate_value} * 1000" | bc)"
-	else
-	    main_file_bitrate_kvalue="${main_file_bitrate_value}"
-	fi
-	main_file_bitrate_kvalue="${main_file_bitrate_kvalue%%.00}"
-	main_file_bitrate="${main_file_bitrate_kvalue}"
-	main_file_bitdepth="${soxi_vals[Precision]//-bit}"
-	main_file_samplerate="${soxi_vals[SampleRate]}"
-	#declare -p alsa_vals 1>&2
-	main_output_samplerate_raw=(${alsa_vals[rate]})
-	main_output_samplerate="${main_output_samplerate_raw[0]}"
-	alsa_format_outputencoding "${alsa_vals[format]}"
-	main_output_bitdepth="${alsa_encoding[bitdepth]}"
-	main_output_sampleencoding="${alsa_encoding[bitdepth]} bit (${alsa_encoding[signedness]} ${alsa_encoding[endianness]})"
-	main_output_samplechannelcount="${alsa_vals[channels]}"
-	
-	main_playing_trackplayingtime="${mpc_vals[rt_time_elapsed_minutes]}:${mpc_vals[rt_time_elapsed_seconds]}"
-	main_playing_trackplayingpercentage="${mpc_vals[rt_percentage_played]}%"
-	
-	# declare -p main_playing_tracktitle 1>&2
-	# declare -p main_playing_trackartist 1>&2
-	# declare -p main_rt_tracknumber_album 1>&2
-	# declare -p main_rt_tracknumber_playlist 1>&2
-	# declare -p main_rt_tracknumbers_playlist 1>&2
-	# #declare -p main_playing_trackperformer 1>&2
-	# declare -p main_playing_trackalbumname 1>&2
-	# declare -p main_playing_trackduration 1>&2
-	# declare -p main_playing_trackplayingtime 1>&2
-	# declare -p main_playing_trackplayingpercentage 1>&2
-	# declare -p main_file_sizebytes 1>&2
-	# declare -p main_file_bitrate 1>&2
-	# declare -p main_file_bitdepth 1>&2
-	# declare -p main_file_samplerate 1>&2
-	# declare -p main_output_samplerate 1>&2
-	# declare -p main_output_sampleencoding 1>&2
-	# declare -p main_output_samplechannelcount 1>&2
-	
-	main_mpd_bitdepth="${mpd_vals[rt_audio_bitdepth]}"
-	main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
-	main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
-	
-	msg_filesize="$(printf "%-13s: %-13s" \
-"File size" "${main_file_sizebytes} bytes")"
-	
-	msg_header="$(printf "%-11s %-18s  %8s > %8s > %8s" " " " " "File" "MPD" "DAC")"
-	msg_bitrate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
-" " "Bit rate (kbit/s)" "${main_file_bitrate}" "${main_mpd_bitrate}" "(n/a)")"
-	msg_bitdepth="$(printf "%-11s %-18s: %8s > %8s > %8s" \
-" " "Bit depth (bit)" "${main_file_bitdepth}" "${main_mpd_bitdepth}" "${main_output_bitdepth}")"
-	msg_samplerate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
-" " "Sample rate (Hz)" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
-
-	msg_tracktitle="${bold}${main_playing_tracktitle}${std}"
-	msg_trackartist="${bold}${red}${main_playing_trackartist}${std}"
-	msg_tracknumber="$(printf "%-4s (of %-3s)" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_tracknumbers_playlist}")"
-	msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
-	msg_byline="$(printf "%-13s-- by %s" " " "${msg_trackartist}")"
-	msg_albumline="$(printf "%-13s   track %s from %s" \
-" " "${bold}${main_rt_tracknumber_album}${std}" "${bold}${blue}${main_playing_trackalbumname}${std}")"
-	msg_playingtime="$(printf "%-13s   playing %s from %s (%s)" \
-" " "${bold}${std}${main_playing_trackplayingtime}${std}" "${main_playing_trackduration}" "${main_playing_trackplayingpercentage}")"
-	
-	#     echo -en "\
-	# ${msg_nowplaying}
-	# ${msg_byline}
-	# ${msg_albumline}
-	# ${msg_playingtime}
-	# ${msg_header}
-	# ${msg_bitrate}
-	# ${msg_bitdepth}
-	# ${msg_samplerate}
-	
-	# ${msg_filesize}
 	# \r"
 	((counter++))
 	echo -en "bla die bla $counter\ntwee bla die bla $counter\r"
