@@ -36,7 +36,6 @@ CONF_MPD_NETWORK_PORT_DEFAULT="6600"
 ## default maximum number of files in music directory
 MAX_PLAYLIST_LENGTH_DEFAULT="16384"
 
-
 function die_configure() {
     printf "\nError in %s (v%s):\n%s\n" \
 	   "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "$@" 1>&2;
@@ -721,6 +720,10 @@ $(declare -p G_ZEROCONF_ZEROCONFNAME)"
     ## cap to the maximum nr of characters (64)
     G_ZEROCONF_ZEROCONFNAME="$(printf "%.*s\n" 64 "${G_ZEROCONF_ZEROCONFNAME}")"
 
+    ## default directory depth for auto updates
+    if [[ "${CONF_MPD_AUTOUPDATEDEPTH}x" == "x" ]]; then
+	G_GENERAL_AUTOUPDATEDEPTH="$(getconf PATH_MAX "${G_PATHS_MUSICDIRECTORY}")"
+    fi
 }
 
 function get_mpd_musicdir() {
