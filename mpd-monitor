@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ## This script for linux with bash 4.x displays the properties of a
-## digital audio file as stored, transferred by mpd and decoded by alsa.
+## digital audio file as stored, transferred by mpd, and decoded by alsa.
 ##
 ##  Copyright (C) 2015 Ronald van Engelen <ronalde+github@lacocina.nl>
 ##  This program is free software: you can redistribute it and/or modify
@@ -24,7 +24,6 @@ LANG=C
 
 ### generic functions
 
-
 function die() {
     printf "\nError running %s: %s\n" "${BASH_SOURCE[0]:-}" "$@" 1>&2;
     exit 1
@@ -38,34 +37,28 @@ function debug() {
     printf "DEBUG *** %s\n" "$@" 1>&2;
 }
 
-
 function check_needed_commands() {
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
 }
 
-
 function is_mpd_local() {
     ## determine if mpd is running local, otherwise exit with notice.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
-
     loopback_regexp="^127."
     local_ipaddress=""
-
-    msg_remote_intro="This script only functions when mpd runs locally."
-    msg_remote_next="You can execute the script on the specified remote mpd host \`${MPD_HOST}' using ssh, using"
-    msg_remote_ssh="   ssh \${username}@${MPD_HOST} \"bash <(wget -q -O - \"${REMOTEURL}\")\""
-    msg_remote_post="(replacing \`\${username}' with the a valid one)"
-    msg_remote="$(printf "%s\n%s\n%s\n%s\n" \
-"${msg_remote_intro}" "${msg_remote_next}" "${msg_remote_ssh}" "${msg_remote_post}")"
-
+    msg_remote="\
+This script only functions when mpd runs locally.  You can execute the
+script on the specified remote mpd host \`${MPD_HOST}' using ssh,
+using the following command:
+ ssh root@${MPD_HOST} -- bash <(wget -q -O - \"${REMOTEURL}\")
+(replacing \`root' with the username you would like to use)"
     if [[ -z "${MPD_HOST}" ]]; then
 	return 0
     else
 	[[ ! -z "${DEBUG}" ]] && \
 	    debug "MPD_HOST is set to \`${MPD_HOST}'" 
-
 	## environment variable is set
 	if [[ "${MPD_HOST}" =~ ${loopback_regexp} ]] || \
 	       [[  "${MPD_HOST}" = "localhost" ]] ; then
@@ -74,7 +67,7 @@ function is_mpd_local() {
  	    local_ipaddress="$(hostname --ip-addresses)"
 	    if [[ ! "${MPD_HOST}" = ${local_ipaddress} ]]; then
 		## assume it is not local
-		printf "%s\n" "${msg_remote}"
+		printf 1>&2 "%s\n" "${msg_remote}"
 		return 1
 	    fi
 	fi
@@ -1118,7 +1111,7 @@ MPD_CONFIGURATIONFILE="${MPD_CONFIGURATIONFILE:-}"
 MPD_STATUS="${MPD_STATUS:-}"
 
 #DEBUG=True
-REMOTEURL="https://raw.githubusercontent.com/ronalde/mpd-configure/mpd-monitor"
+REMOTEURL="https://lacocina.nl/mpd-monitor"
 CMD_ALSACAPS="alsa-capabilities"
 ALSACAPS_OUTPUT=""
 
