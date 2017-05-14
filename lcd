@@ -1,0 +1,561 @@
+#!/usr/bin/env bash
+
+LANG=C
+mpd_host=sonida
+mpd_host=${mpd_host:-localhost}
+mpd_port=${mpd_port:-6600}
+ssh_host=sonida
+ssh_user=root
+ssh_userhost="${ssh_user}@${ssh_host}"
+media_base_path="/srv/media/music"
+
+unset mpc_vals
+unset mpd_vals
+unset alsa_vals
+unset exif_vals
+unset soxi_vals
+
+declare -A alsa_vals
+declare -A mpc_vals
+declare -A mpd_vals
+declare -A exif_vals
+declare -A soxi_vals
+
+## output formatting
+bold="$(tput bold)"
+dim="$(tput dim)"
+std="$(tput sgr0)"
+red=$(tput setaf 1)   #  color 1
+blue=$(tput setaf 33) #  color 2
+white=$(tput setaf 7) #  color 3
+
+## input | nfs://srv/media/music/.../track11.aiff
+##       | AIFF (Little Endian) PCM in 24bit/192kHz  @ 4.503bit/s
+main_file_bitdepth=
+main_file_bitrate=
+main_file_bitrate_kvalue=
+main_file_bitrate_raw=
+main_file_bitrate_unit=
+main_file_bitrate_value=
+main_file_samplerate=
+main_file_sizebytes=
+main_mpd_bitdepth=
+main_mpd_bitrate=
+main_mpd_samplerate=
+main_output_bitdepth=
+main_output_samplechannelcount=
+main_output_sampleencoding=
+main_output_samplerate=
+main_output_samplerate_raw=
+main_playing_trackalbumartist=
+main_playing_trackalbumname=
+main_playing_trackalbumnumber=
+main_playing_trackartist=
+main_playing_trackduration=
+main_playing_trackperformers=
+main_playing_trackplayingpercentage=
+main_playing_trackplayingtime=
+main_playing_tracktitle=
+main_rt_tracknumber_album=
+main_rt_tracknumber_playlist=
+main_rt_tracknumbers_playlist=
+
+declare -A alsa_encoding
+declare -a mpc_fields=(
+    artist
+    track
+    album
+    name
+    file
+    artist
+    album
+    albumartist
+    comment
+    composer
+    date
+    disc
+    genre
+    performer
+    title
+    track
+    time
+    file        	      
+    position
+    mtime
+    mdate
+)
+
+mpc_format_string=
+for mpc_field in ${mpc_fields[@]}; do 
+	mpc_format_string+="${mpc_field}:[%${mpc_field}%]\n"
+done
+
+function check_commands() {
+    err=()
+    cmd_mpc="$(type -p mpc || err+=("mpc not found") )"
+    cmd_soxi="$(type -p soxi || err+=("soxi not found"))"
+    cmd_exiftool="$(type -p exiftool || err+=("exiftool not found"))"
+    cmd_netcat="$(type -p nc || err+=("netcat (nc) not found"))"
+    if [[ ${#err} -gt 0 ]]; then
+	printf 1>&2 "error: %s\n" "${err[@]}"
+    fi
+}
+
+function get_csv_value() {
+    data="$1"
+    IFS=\; read type field value <<<"${data}"
+    printf "%s" "${value//\"}"
+}
+
+function get_soxi_value() {
+    fieldname="$1"
+    printf 1>&2 "%s: fieldname='%s', value='%s'\n" \
+		"${FUNCNAME[0]}" "${fieldname}" "${soxi_info["${fieldname}"]}"
+    declare vals="${soxi_info["${fieldname}"]}"
+    #declare -p vals 1>&2
+    value="$(get_csv_value "${vals[0]}")"
+    printf "%s" "${value}"
+}
+
+function filter_soxi_duration() {
+    ## expects: hh:mm:ss.xxx where xxx are the subseconds (milliseconds?)
+    duration_fields=($1)
+    IFS=":" read hours minutes seconds subseconds <<<"${duration_fields[0]//./:}"
+    minutes=$(echo "${minutes} + ( ${hours} * 60 )" | bc)
+    printf "%s:%s" "${minutes}" "${seconds}"
+}
+
+function fill_arrays() {
+    ret_mpc_info
+    #ret_mpc_now
+    ret_mpd_now
+    ret_exif_info "${mpc_vals[file]}"
+    ret_soxi_info "${mpc_vals[file]}"
+    ret_alsa_info "1" "0" "root@sonida"
+    #[[ "${exif_vals[*]}x" == "x" ]] || ret_exif_info "${mpc_vals[file]}"
+    #[[ "${soxi_vals[*]}x" == "x" ]] || ret_soxi_info "${mpc_vals[file]}"
+    #[[ "${alsa_vals[*]}x" == "x" ]] || ret_alsa_info "1" "0" "root@sonida"
+}
+    
+function info_to_csv() {
+    fill_arrays
+    
+    for f in "${!mpc_vals[@]}"; do
+	printf '"%s";"%s";"%s";\n' "mpc" "${f}" "${mpc_vals[${f}]}"
+    done
+    for f in "${!soxi_vals[@]}"; do
+	printf '"%s";"%s";"%s";\n' "soxi" "${f}" "${soxi_vals[${f}]}"
+    done
+    for f in "${!exif_vals[@]}"; do
+	printf '"%s";"%s";"%s";\n' "exif" "${f}" "${exif_vals[${f}]}"
+    done
+    for f in "${!alsa_vals[@]}"; do
+	printf '"%s";"%s";"%s";\n' "alsa" "${f}" "${alsa_vals[${f}]}"
+    done
+    
+}
+function soxi_filesize_to_bytes() {
+    soxi_filesize="$1" # ${soxi_vals[FileSize]}
+    unit="${soxi_filesize:$(( ${#soxi_filesize} -1 )):1}"
+    size="${soxi_filesize:0:-1}"
+    case "${unit}" in
+	G) value="$(echo "scale=0; ${size} * 1000000" | bc)" ;;
+	M) value="$(echo "scale=0; ${size} * 1000" | bc)" ;;
+	K) value="${size}" ;;
+	*) printf 1>&2 \
+			 "ANOMALITY: unknown unit '%s' in soxi reported file size ('%s')" \
+		       "${unit}" "${soxi_filesize}"
+	   return 1
+    esac
+    printf "%s" "${value}"
+}
+
+function alsa_format_outputencoding() {
+
+    alsa_encoding="$1" # ${alsa_vals[format]}
+    encoding_re="([SU])([0-9]+)_([LB]E)"
+    if [[ "${alsa_encoding}" =~ ${encoding_re} ]]; then 
+	signedness="${BASH_REMATCH[1]}"
+	bitdepth="${BASH_REMATCH[2]}"
+	alsa_encoding[bitdepth]="${bitdepth}"
+	endianness="${BASH_REMATCH[3]}"
+	case "${signedness}" in
+	    U) alsa_encoding[signedness]="unsigned" ;;
+	    S) alsa_encoding[signedness]="signed" ;;
+	esac
+	case "${endianness}" in
+	    LE) alsa_encoding[endianness]="little endian" ;;
+	    BE) alsa_encoding[endianness]="big endian" ;;
+	esac
+    else
+	printf "ANOMALITY in %s: alsa_encoding '%s' does not match regex.\n" \
+	       "${FUNCNAME[0]}" "${alsa_encoding}"
+	return 1
+    fi
+}
+	
+
+function get_info() {
+
+    fill_arrays
+    
+    main_playing_tracktitle="${mpc_vals[title]}"
+    main_playing_trackartist="${mpc_vals[artist]}"
+    main_playing_trackperformers="${exif_vals[Performer]}"
+    main_rt_tracknumber_album="${mpc_vals[track]}"
+    main_rt_tracknumber_playlist="${mpc_vals[rt_playlist_tracknumber]}"
+    main_rt_tracknumbers_playlist="${mpc_vals[rt_playlist_tracknumbers]}"
+    main_playing_trackalbumname="${mpc_vals[album]}"
+    main_playing_trackalbumnumber="${mpc_vals[position]}"
+    main_playing_trackalbumartist="${mpc_vals[albumartist]}"
+    main_playing_trackduration="$(filter_soxi_duration "${soxi_vals[Duration]}")"
+    main_file_sizebytes="$(soxi_filesize_to_bytes ${soxi_vals[FileSize]})"
+    main_file_bitrate_raw="${soxi_vals[BitRate]}"
+    main_file_bitrate_value="${main_file_bitrate_raw:0:-1}"
+    main_file_bitrate_unit="${main_file_bitrate_raw:$(( ${#main_file_bitrate_raw} - 1 )):1}"
+    main_file_bitrate_kvalue=
+    if [[ "${main_file_bitrate_unit}x" == "Mx" ]]; then 
+	main_file_bitrate_kvalue="$(echo "${main_file_bitrate_value} * 1000" | bc)"
+    else
+	main_file_bitrate_kvalue="${main_file_bitrate_value}"
+    fi
+    main_file_bitrate_kvalue="${main_file_bitrate_kvalue%%.00}"
+    main_file_bitrate="${main_file_bitrate_kvalue}"
+    main_file_bitdepth="${soxi_vals[Precision]//-bit}"
+    main_file_samplerate="${soxi_vals[SampleRate]}"
+    #declare -p alsa_vals 1>&2
+    main_output_samplerate_raw=(${alsa_vals[rate]})
+    main_output_samplerate="${main_output_samplerate_raw[0]}"
+    alsa_format_outputencoding "${alsa_vals[format]}"
+    main_output_bitdepth="${alsa_encoding[bitdepth]}"
+    main_output_sampleencoding="${alsa_encoding[bitdepth]} bit (${alsa_encoding[signedness]} ${alsa_encoding[endianness]})"
+    main_output_samplechannelcount="${alsa_vals[channels]}"
+
+    main_playing_trackplayingtime="${mpc_vals[rt_time_elapsed_minutes]}:${mpc_vals[rt_time_elapsed_seconds]}"
+    main_playing_trackplayingpercentage="${mpc_vals[rt_percentage_played]}%"
+
+    # declare -p main_playing_tracktitle 1>&2
+    # declare -p main_playing_trackartist 1>&2
+    # declare -p main_rt_tracknumber_album 1>&2
+    # declare -p main_rt_tracknumber_playlist 1>&2
+    # declare -p main_rt_tracknumbers_playlist 1>&2
+    # #declare -p main_playing_trackperformer 1>&2
+    # declare -p main_playing_trackalbumname 1>&2
+    # declare -p main_playing_trackduration 1>&2
+    # declare -p main_playing_trackplayingtime 1>&2
+    # declare -p main_playing_trackplayingpercentage 1>&2
+    # declare -p main_file_sizebytes 1>&2
+    # declare -p main_file_bitrate 1>&2
+    # declare -p main_file_bitdepth 1>&2
+    # declare -p main_file_samplerate 1>&2
+    # declare -p main_output_samplerate 1>&2
+    # declare -p main_output_sampleencoding 1>&2
+    # declare -p main_output_samplechannelcount 1>&2
+
+    main_mpd_bitdepth="${mpd_vals[rt_audio_bitdepth]}"
+    main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
+    main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
+
+    msg_filesize="$(printf "%-13s: %-13s" \
+"File size" "${main_file_sizebytes} bytes")"
+	
+    msg_header="$(printf "%-11s %-18s  %8s > %8s > %8s" " " " " "File" "MPD" "DAC")"
+    msg_bitrate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+" " "Bit rate (kbit/s)" "${main_file_bitrate}" "${main_mpd_bitrate}" "(n/a)")"
+    msg_bitdepth="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+" " "Bit depth (bit)" "${main_file_bitdepth}" "${main_mpd_bitdepth}" "${main_output_bitdepth}")"
+    msg_samplerate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+" " "Sample rate (Hz)" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
+
+    msg_tracktitle="${bold}${main_playing_tracktitle}${std}"
+    msg_trackartist="${bold}${red}${main_playing_trackartist}${std}"
+    msg_tracknumber="$(printf "%-4s (of %-3s)" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_tracknumbers_playlist}")"
+    msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
+    msg_byline="$(printf "%-13s-- by %s" " " "${msg_trackartist}")"
+    msg_albumline="$(printf "%-13s   track %s from %s" \
+" " "${bold}${main_rt_tracknumber_album}${std}" "${bold}${blue}${main_playing_trackalbumname}${std}")"
+    msg_playingtime="$(printf "%-13s   playing %s from %s (%s)" \
+" " "${bold}${std}${main_playing_trackplayingtime}${std}" "${main_playing_trackduration}" "${main_playing_trackplayingpercentage}")"
+
+    echo -en "\
+${msg_nowplaying}
+${msg_byline}
+${msg_albumline}
+${msg_playingtime}
+${msg_header}
+${msg_bitrate}
+${msg_bitdepth}
+${msg_samplerate}
+
+${msg_filesize}
+\r"
+
+    
+}
+
+function ret_mpd_now() {
+    ## fills mpc_vals array with rt_ fields from mpc status
+	
+    #res="$(${cmd_mpc} "${mpc_args[@]}" &)"
+    [[ "${DEBUG}" ]] && declare -p cmd_netcat mpd_host mpd_port 1>&2
+    res="$(echo "status" | ${cmd_netcat} -N ${mpd_host} ${mpd_port})"
+    [[ "${DEBUG}" ]] && declare -p res 1>&2
+    linecounter=1
+    #playing_re="[(playing|paused)][[:space:]]+#([0-9]+)/([0-9]+)[[:space:]]+([0-9]+):([0-9]+)/([0-9]+):([0-9]+)[[:space:]]+\(([0-9]+%\)"
+
+# OK MPD 0.19.0
+# volume: -1
+# repeat: 0
+# random: 1
+# single: 0
+# consume: 0
+# playlist: 555
+# playlistlength: 19
+# mixrampdb: 0.000000
+# state: play
+# song: 10
+# songid: 681
+# time: 156:163
+# elapsed: 155.829
+# bitrate: 1084
+# audio: 48000:24:2
+# nextsong: 18
+# nextsongid: 689
+    # OK
+    prefix="rt_raw"
+    key_val_re="^([^\:]+):[[:space:]]+(.*)"
+    while read -r line; do
+	if [[ "${line}" =~ ${key_val_re} ]]; then
+	    field="${BASH_REMATCH[1]}"
+	    value="${BASH_REMATCH[2]}"
+	    mpd_vals["${prefix}_${field}"]="${value}"
+	fi
+    done<<<"${res}"
+    IFS=: read audio_samplerate audio_bitdepth audio_channelcount <<< "${mpd_vals[${prefix}_audio]}"
+    mpd_vals["rt_audio_samplerate"]="${audio_samplerate}"
+    mpd_vals["rt_audio_bitdepth"]="${audio_bitdepth}"
+    mpd_vals["rt_audio_channelcount"]="${audio_channelcount}"
+    mpd_vals["rt_audio_bitrate"]="${mpd_vals[${prefix}_bitrate]}"
+
+    IFS=: read time_elapsed_rounded time_tracktotal <<< "${mpd_vals[${prefix}_time]}"
+    mpd_vals["rt_time_tracktotal"]="${time_tracktotal}"
+    
+    # for k in "${!mpd_vals[@]}"; do
+    #  	if [[ "${k}" =~ ^rt ]]; then
+    #  	    printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
+    #  	fi
+    # done
+}
+
+function ret_mpc_info() {
+    mpc_args=(-h "${mpd_host}")
+    mpc_args+=(current)
+    mpc_args+=(-f "${mpc_format_string}")
+    res="$(${cmd_mpc} "${mpc_args[@]}" &)"
+    field_val_re="^([^\:]+):(.*)"
+    while read -r line; do
+	if [[ "${line}" =~ ${field_val_re} ]]; then
+	    field="${BASH_REMATCH[1]}"
+	    val="${BASH_REMATCH[2]}"
+	    mpc_vals["${field}"]="${val}"
+	#else
+	#    printf 1>&2 "%s error: no match with line: '%s'\n" \
+	#		"${FUNC_NAME[0]}" "${line}"
+	fi
+    done<<<"${res}"
+    #for k in ${!mpc_vals[@]}; do
+    #	printf '"mpcfield";"%s";"%s";\n' "${k}" "${mpc_vals[${k}]}"
+    #   done
+}
+
+function ret_soxi_info() {
+    rel_file_path="${1}"
+    file_path="${media_base_path}/${rel_file_path}"
+    if [[ -f "${file_path}" ]]; then 
+	res="$(${cmd_soxi} "${file_path}")"
+	field_val_re='([^\:]+):[[:space:]]*(.*)'
+	while read -r line; do
+	    if [[ "${line}" =~ ${field_val_re} ]]; then
+		field="${BASH_REMATCH[1]}"
+		field="${field// /}"
+		val="${BASH_REMATCH[2]}"
+		soxi_vals["${field}"]="${val}"
+		if [[ "${field}x" == "Sample Encodingx" ]]; then
+		    break
+		fi
+	    fi
+	done<<<"${res}"
+    fi
+}
+
+function ret_exif_info() {
+    rel_file_path="${1}"
+    file_path="${media_base_path}/${rel_file_path}"
+    if [[ -f "${file_path}" ]]; then 
+	res="$(${cmd_exiftool} -j "${file_path}")"
+	#declare -p res 1>&2
+	field_val_re='"([^\:]+)":(.*)'
+	while read -r line; do
+	    if [[ "${line}" =~ ${field_val_re} ]]; then
+		#declare -p line 1>&2
+		field="${BASH_REMATCH[1]}"
+		val="${BASH_REMATCH[2]}"
+		exif_vals["${field}"]="${val}"
+		#else
+		#   printf 1>&2 "error: no match with line: '%s'\n" "${line}"
+	    fi
+	done<<<"${res}"
+	#for k in ${!exif_vals[@]}; do
+	#    printf '"exiffield";"%s";"%s";\n' "${k}" "${exif_vals[${k}]}"
+	#done
+    fi
+}
+
+function ret_alsa_info() {
+    alsa_card_no="$1"
+    alsa_dev_no="$2"
+    alsa_ssh_userhost="${3:-${ssh_userhost}}"
+    hw_params_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
+    cmd="cat ${hw_params_file}"
+    if [[ "${alsa_ssh_userhost}x" == "x" ]]; then 
+	res="$(${cmd})"
+    else
+	res="$(ssh ${alsa_ssh_userhost} -- "${cmd}")"
+    fi
+    if [[ $? -ne 0 ]]; then
+	printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
+		    "${hw_params_file}" "${alsa_ssh_userhost}"
+	return 1
+    else
+	key_val_re="^([^\:]+):[[:space:]]+(.*)"
+	while read -r line; do
+	    if [[ "${line}" =~ ${key_val_re} ]]; then
+		field="${BASH_REMATCH[1]}"
+		val="${BASH_REMATCH[2]}"
+		alsa_vals["${field}"]="${val}"
+	    else
+		declare -p line 1>&2
+		return 1
+	    fi
+	done<<<"${res}"
+    fi
+}
+
+function terminal_size() { # Calculate the size of the terminal
+    terminal_cols="$(tput cols)"
+    terminal_rows="$(tput lines)"
+}
+
+
+function main_loop() {
+    mpc_args=(-h "${mpd_host}")
+    counter=0
+    while : ; do
+	#"${cmd_mpc}" "${mpc_args[@]}" idle
+	sleep 0.5
+	get_info
+	fill_arrays
+	
+	main_playing_tracktitle="${mpc_vals[title]}"
+	main_playing_trackartist="${mpc_vals[artist]}"
+	main_playing_trackperformers="${exif_vals[Performer]}"
+	main_rt_tracknumber_album="${mpc_vals[track]}"
+	main_rt_tracknumber_playlist="${mpc_vals[rt_playlist_tracknumber]}"
+	main_rt_tracknumbers_playlist="${mpc_vals[rt_playlist_tracknumbers]}"
+	main_playing_trackalbumname="${mpc_vals[album]}"
+	main_playing_trackalbumnumber="${mpc_vals[position]}"
+	main_playing_trackalbumartist="${mpc_vals[albumartist]}"
+	main_playing_trackduration="$(filter_soxi_duration "${soxi_vals[Duration]}")"
+	main_file_sizebytes="$(soxi_filesize_to_bytes ${soxi_vals[FileSize]})"
+	main_file_bitrate_raw="${soxi_vals[BitRate]}"
+	main_file_bitrate_value="${main_file_bitrate_raw:0:-1}"
+	main_file_bitrate_unit="${main_file_bitrate_raw:$(( ${#main_file_bitrate_raw} - 1 )):1}"
+	main_file_bitrate_kvalue=
+	if [[ "${main_file_bitrate_unit}x" == "Mx" ]]; then 
+	    main_file_bitrate_kvalue="$(echo "${main_file_bitrate_value} * 1000" | bc)"
+	else
+	    main_file_bitrate_kvalue="${main_file_bitrate_value}"
+	fi
+	main_file_bitrate_kvalue="${main_file_bitrate_kvalue%%.00}"
+	main_file_bitrate="${main_file_bitrate_kvalue}"
+	main_file_bitdepth="${soxi_vals[Precision]//-bit}"
+	main_file_samplerate="${soxi_vals[SampleRate]}"
+	#declare -p alsa_vals 1>&2
+	main_output_samplerate_raw=(${alsa_vals[rate]})
+	main_output_samplerate="${main_output_samplerate_raw[0]}"
+	alsa_format_outputencoding "${alsa_vals[format]}"
+	main_output_bitdepth="${alsa_encoding[bitdepth]}"
+	main_output_sampleencoding="${alsa_encoding[bitdepth]} bit (${alsa_encoding[signedness]} ${alsa_encoding[endianness]})"
+	main_output_samplechannelcount="${alsa_vals[channels]}"
+	
+	main_playing_trackplayingtime="${mpc_vals[rt_time_elapsed_minutes]}:${mpc_vals[rt_time_elapsed_seconds]}"
+	main_playing_trackplayingpercentage="${mpc_vals[rt_percentage_played]}%"
+	
+	# declare -p main_playing_tracktitle 1>&2
+	# declare -p main_playing_trackartist 1>&2
+	# declare -p main_rt_tracknumber_album 1>&2
+	# declare -p main_rt_tracknumber_playlist 1>&2
+	# declare -p main_rt_tracknumbers_playlist 1>&2
+	# #declare -p main_playing_trackperformer 1>&2
+	# declare -p main_playing_trackalbumname 1>&2
+	# declare -p main_playing_trackduration 1>&2
+	# declare -p main_playing_trackplayingtime 1>&2
+	# declare -p main_playing_trackplayingpercentage 1>&2
+	# declare -p main_file_sizebytes 1>&2
+	# declare -p main_file_bitrate 1>&2
+	# declare -p main_file_bitdepth 1>&2
+	# declare -p main_file_samplerate 1>&2
+	# declare -p main_output_samplerate 1>&2
+	# declare -p main_output_sampleencoding 1>&2
+	# declare -p main_output_samplechannelcount 1>&2
+	
+	main_mpd_bitdepth="${mpd_vals[rt_audio_bitdepth]}"
+	main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
+	main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
+	
+	msg_filesize="$(printf "%-13s: %-13s" \
+"File size" "${main_file_sizebytes} bytes")"
+	
+	msg_header="$(printf "%-11s %-18s  %8s > %8s > %8s" " " " " "File" "MPD" "DAC")"
+	msg_bitrate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+" " "Bit rate (kbit/s)" "${main_file_bitrate}" "${main_mpd_bitrate}" "(n/a)")"
+	msg_bitdepth="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+" " "Bit depth (bit)" "${main_file_bitdepth}" "${main_mpd_bitdepth}" "${main_output_bitdepth}")"
+	msg_samplerate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+" " "Sample rate (Hz)" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
+
+	msg_tracktitle="${bold}${main_playing_tracktitle}${std}"
+	msg_trackartist="${bold}${red}${main_playing_trackartist}${std}"
+	msg_tracknumber="$(printf "%-4s (of %-3s)" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_tracknumbers_playlist}")"
+	msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
+	msg_byline="$(printf "%-13s-- by %s" " " "${msg_trackartist}")"
+	msg_albumline="$(printf "%-13s   track %s from %s" \
+" " "${bold}${main_rt_tracknumber_album}${std}" "${bold}${blue}${main_playing_trackalbumname}${std}")"
+	msg_playingtime="$(printf "%-13s   playing %s from %s (%s)" \
+" " "${bold}${std}${main_playing_trackplayingtime}${std}" "${main_playing_trackduration}" "${main_playing_trackplayingpercentage}")"
+	
+	#     echo -en "\
+	# ${msg_nowplaying}
+	# ${msg_byline}
+	# ${msg_albumline}
+	# ${msg_playingtime}
+	# ${msg_header}
+	# ${msg_bitrate}
+	# ${msg_bitdepth}
+	# ${msg_samplerate}
+	
+	# ${msg_filesize}
+	# \r"
+	((counter++))
+	echo -en "bla die bla $counter\ntwee bla die bla $counter\r"
+	
+	#tclsh /etc/shairport/smartie/smartie-cat.tcl -tty /dev/ttyUSB0
+    done
+    printf 1>&2 "main_loop done.\n"
+}
+
+check_commands
+## if the script is not sourced by another script but run within its
+## own shell call function `analyze_commandline_args'
+[[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || \
+    get_info "$@"
