@@ -191,13 +191,14 @@ function does_mpd_haveoutputs() {
 
 	if [[ ${#MPD_OUTPUTS[@]} -lt 1 ]]; then
 	    ## no outputs found
-	    debug "bla"
+	    debug "no outputs found"
+	    declare -p MPD_OUTPUTS 1>&2	    
 	    printf "%s" "${MSG_MPDCONF_NO_AUDIOOUTOUTS}"
 	    return 1
 	else
 	    msg="$(printf "\`%s' " "${MPD_OUTPUTS[@]}")"
 	    [[ ! -z ${DEBUG} ]] && \
-		debug "using outputs: ${msg}"
+		declare -p MPD_OUTPUTS 1>&2
 	    printf "output: %s (total: %s)\n" \
 		   "${MPD_OUTPUTS[@]}" "${#MPD_OUTPUTS[@]}" 1>&2;
 	    return 0
@@ -263,7 +264,6 @@ function get_mpd_alsa_audio_outputs() {
     ## audio_output defined in the mpd configuration.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'" 
-
     ## be sure not to match global parameter `audio_output_format'
     audio_output_started_regexp="^[[:space:]]*audio_output[[:space:]]"
     audio_output_ended_regexp="}"
@@ -274,7 +274,6 @@ function get_mpd_alsa_audio_outputs() {
     audio_output_comment_regexp="^[[:space:]]*#"
        
     while read -r line; do
-
 	if [[ ! -z "${output_started}" ]]; then 
 	    ## inside output?
 	    if [[ "${line}" =~ ${audio_output_ended_regexp} ]]; then
@@ -305,8 +304,7 @@ function get_mpd_alsa_audio_outputs() {
 		    
 	    fi
 	fi
-	
-    done < ${MPD_CONFIGURATIONFILE}
+    done<"${MPD_CONFIGURATIONFILE}"
     
     if [[ ${output_counter} -gt 0 ]]; then
 	[[ ! -z "${DEBUG}" ]] && \
@@ -337,13 +335,11 @@ function get_mpd_device() {
     ## return it.
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
     mpd_device=""
     mpd_staticoutput="${mpd_staticoutput}"
     mpd_fixed_samplerate=""
     mpd_fixed_channelcount=""
     mpd_fixed_sampleencoding=""
-
     alsa_outputs="$(get_mpd_alsa_audio_outputs)"
     if [[ ${alsa_outputs} -lt 1 ]]; then 
 	die "no alsa outputs found in the ${MSG_MPDCONF}"
@@ -725,15 +721,12 @@ function get_alsa_streamfile() {
     ## configuration file (needed for `get_alsa_props').
     [[ ! -z "${DEBUG}" ]] && \
 	debug "entering \`${FUNCNAME}' with arguments \`$*'"
-
-    
     #monitor file           =  /proc/asound/card1/stream0
     alsa_streamfile=""
     alsa_streamfile_regexp="monitor[[:space:]]file[[:space:]]*=[[:space:]]*(.*)"
-
     alsa_hwaddress_value=$(get_mpd_device)
     [[ ! -z "${DEBUG}" ]] && \
-	debug "got alsa hwaddress: \`${alsa_hwaddress_value}'"
+	declare -p alsa_hwaddress_value 1>&2
     
     alsa_hwaddress="${alsa_hwaddress_value/hw:/}"
     alsa_dev_nr="${alsa_hwaddress%%,*}"
@@ -974,8 +967,9 @@ function main() {
     if [[ -z "${MPD_CONFIGURATIONFILE}" ]]; then
 	MPD_CONFIGURATIONFILE="$(get_mpdconf_filepath)"
 	[[ $? -ne 0 ]] && die "${MPD_CONFIGURATIONFILE}"
+    else
+	declare -p MPD_CONFIGURATIONFILE 1>&2	
     fi
-
     ## check if mpd is configured globally for a static audio output
     MPDCONF_GLOBAL_STATICFORMAT="$(get_mpdconf_parameter "audio_output_format")"
 
@@ -1001,7 +995,9 @@ function main() {
     ## mpd configuration file
     alsa_streamfile="$(get_alsa_streamfile)"
     if [[ $? -ne 0 ]]; then
-     die "could not get current file from alsa"
+	die "could not get current file from alsa"
+    else
+	declare -p alsa_streamfile 1>&2
     fi
 
     ## get the path to the (parent) music directory from the mpd
