@@ -1,25 +1,33 @@
 #!/usr/bin/env bash
+## This script for bash 4.x on linux displays the way an audio file is
+## streamed from storage, through mpd, to alsa (the DAC).
+##
+##  Copyright (C) 2017 Ronald van Engelen <ronalde+github@lacocina.nl>
+##  This program is free software: you can redistribute it and/or modify
+##  it under the terms of the GNU General Public License as published by
+##  the Free Software Foundation, either version 3 of the License, or
+##  (at your option) any later version.
+##
+##  This program is distributed in the hope that it will be useful,
+##  but WITHOUT ANY WARRANTY; without even the implied warranty of
+##  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+##  GNU General Public License for more details.
+##
+##  You should have received a copy of the GNU General Public License
+##  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+##
+## Source:    https://github.com/ronalde/mpd-configure
+## See also:  https://lacocina.nl/detect-alsa-output-capabilities
 
 LANG=C
-mpd_host=sonida
-mpd_host=${mpd_host:-localhost}
-mpd_port=${mpd_port:-6600}
-ssh_host=sonida
-ssh_user=root
-ssh_userhost="${ssh_user}@${ssh_host}"
-media_base_path="/srv/media/music"
 
-unset mpc_vals
-unset mpd_vals
-unset alsa_vals
-unset exif_vals
-unset soxi_vals
+app_name_mm="mpd-monitor"
+app_version="0.1.0"
+app_info_url="https://lacocina.nl/mpd-display-status"
 
-declare -A alsa_vals
-declare -A mpc_vals
-declare -A mpd_vals
-declare -A exif_vals
-declare -A soxi_vals
+def_mpd_host="localhost"
+def_mpd_port="6600"
+def_ssh_user="root"
 
 ## output formatting
 bold="$(tput bold)"
@@ -29,63 +37,116 @@ red=$(tput setaf 1)   #  color 1
 blue=$(tput setaf 4) #  color 2
 white=$(tput setaf 7) #  color 3
 
-## input | nfs://srv/media/music/.../track11.aiff
-##       | AIFF (Little Endian) PCM in 24bit/192kHz  @ 4.503bit/s
-main_file_bitdepth=
-main_file_bitrate=
-main_file_bitrate_kvalue=
-main_file_bitrate_raw=
-main_file_bitrate_unit=
-main_file_bitrate_value=
-main_file_samplerate=
-main_file_sizebytes=
-main_mpd_bitdepth=
-main_mpd_bitrate=
-main_mpd_samplerate=
-main_output_bitdepth=
-main_output_samplechannelcount=
-main_output_sampleencoding=
-main_output_samplerate=
-main_output_samplerate_raw=
-main_playing_trackalbumartist=
-main_playing_trackalbumname=
-main_playing_trackalbumnumber=
-main_playing_trackartist=
-main_playing_trackduration=
-main_playing_trackperformers=
-main_playing_trackplayingpercentage=
-main_playing_trackplayingtime=
-main_playing_tracktitle=
-main_rt_tracknumber_album=
-main_rt_tracknumber_playlist=
-main_rt_playlistlength=
+arg_mpd_host=""
+arg_mpd_port=""
+arg_ssh_user=""
+arg_mpd_music_dir=""
 
-declare -A alsa_encoding
-declare -a mpc_fields=(
-    album
-    albumartist
-    artist
-    comment
-    composer
-    date
-    disc
-    file        	      
-    genre
-    mdate
-    mtime
-    name
-    performer
-    position
-    time
-    title
-    length
-    track
-)
+function display_usageinfo() {
 
-mpc_format_string=
-for mpc_field in ${mpc_fields[@]}; do 
-	mpc_format_string+="${mpc_field}:[%${mpc_field}%]\n"
-done
+    msg_usage="\
+Usage:
+${app_name_mm} -d|--mpd-music-dir PATH [optional arguments]
+-or-
+${app_name_mm} PATH
+
+PATH should be the path to the directory used as 'music_directory' by
+mpd running on MPDHOST.
+
+Optional arguments:
+ -m|--mpd-host MPDHOST    The IP address or hostname on which mpd
+                          runs.
+			  Defaults to 'localhost'.
+ -p|--mpd-port MPDPORT    The port on which mpd on MPDHOST
+                          listens.
+			  Defaults to '6600'.
+ -u|--ssh-user SSHUSER    The username for the ssh connection to
+                          MPDHOST used to get realtime alsa
+                          information on MPDHOST.
+			  (Only used when MPDHOST is remote, ie not
+			  'localhost' or '127.0.x.y'.)
+
+Background information:
+${app_info_url}
+"
+    printf 1>&2 "%s\n" "${msg_usage}"
+}
+
+
+function analyze_command_line() {
+    ## parse command line arguments using the `manual loop` method
+    ## described in http://mywiki.wooledge.org/BashFAQ/035.
+    while :; do
+        case "${1:-}" in
+            -m|--mpd-host)
+		if [[ "${2}x" == "x" ]]; then
+		    die "argument \`$1' requires the dns host name or ip address for the host running mpd."
+		else
+		    arg_mpd_host="$2"
+		    shift 2
+                    continue
+		fi
+		;;
+	    -u|--ssh-user)
+		if [[ "${2}x" == "x" ]]; then
+                    die "argument \`$1' requires a non-empty value."
+		else
+		    arg_ssh_user="${2}"
+		    shift 2
+                    continue
+		fi
+		;;
+            -d|--mpd-music-dir)
+		if [[ "${2}x" == "x" ]]; then
+                    die "argument \`$1' requires the path to the directory where the music for mpd is stored."
+		    break
+		else
+		    arg_mpd_music_dir="$2"
+		    mpd_music_dir="${arg_mpd_music_dir}"
+		    shift 2
+                    continue
+		fi
+		;;
+	    -h|-\?|--help)
+		display_usageinfo
+		exit
+		;;
+            --)
+		shift
+		break
+		;;
+	    -?*)
+		printf "Notice: unknown option \`%s' ignored\n\n." "$1" 1>&2
+		display_usageinfo
+		exit
+		;;
+            *)
+		break
+        esac
+    done
+
+    ## shift the options index to get the remainder of the command
+    ## line arguments containing the font descriptions
+    ## and return them as 0-separated strings.
+    #printf 1>&2 "OPTIND: \`%s'\n" "${OPTIND}"
+    shift $((OPTIND - 1))
+    if [[ "${arg_mpd_music_dir}x" == "x" ]]; then
+        arg_single="$@"
+        arg_mpd_music_dir="${arg_single}"
+        if [[ ! -d "${arg_mpd_music_dir}" ]]; then
+	    printf 1>&2 "error: invalid mpd music directory \`%s' specified.\n\n" \
+			"${arg_mpd_music_dir}"
+            display_usageinfo
+        else
+            ## single argument, use in defaults
+	    mpd_music_dir="${arg_mpd_music_dir}"
+	    mpd_host="${def_mpd_host}"
+	    mpd_port="${def_mpd_port}"
+	    ssh_host=""
+        fi
+    fi
+
+}
 
 function die() {
     printf "%s\n" "$@" 1>&2
@@ -100,6 +161,7 @@ function check_commands() {
     cmd_netcat="$(type -p nc || err+=("netcat (nc) not found"))"
     if [[ ${#err} -gt 0 ]]; then
 	printf 1>&2 "error: %s\n" "${err[@]}"
+	return 1
     fi
 }
 
@@ -199,6 +261,30 @@ function alsa_format_outputencoding() {
 
 function get_info() {
 
+    ## parse command line arguments
+    analyze_command_line "$@"
+
+    ## check presenece of needed commands
+    check_commands || return 1
+
+    if [[ ! -d "${mpd_music_dir}" ]]; then
+	die "error: can't access directory ${mpd_music_dir}."
+    fi
+    mpd_host="${arg_mpd_host:-${def_mpd_host}}"
+    mpd_port="${arg_mpd_port:-${def_mpd_port}}"
+    ssh_user="${arg_ssh_user:-${def_ssh_user}}"    
+    ssh_host="${arg_ssh_host:-}"
+    localhost_re="127.0.[0-9]+.[0-9]+|localhost"
+    if [[ "${mpd_host}" =~ ${localhost_re} ]]; then
+	## mpd runs local, no need for ssh to get alsa properties
+	ssh_userhost=""
+    else
+	ssh_host="${mpd_host}"
+	## mpd runs remote, use ssh to get alsa properties	
+	ssh_userhost="${ssh_user}@${ssh_host}"
+    fi
+    declare -p mpd_host ssh_host ssh_user mpd_music_dir 1>&2
+    
     fill_arrays || return 1
     [[ ${DEBUG} ]] && declare -p mpc_vals 1>&2
     [[ ${DEBUG} ]] && declare -p mpd_vals 1>&2    
@@ -356,7 +442,7 @@ function ret_mpc_info() {
 
 function ret_soxi_info() {
     rel_file_path="${1}"
-    file_path="${media_base_path}/${rel_file_path}"
+    file_path="${arg_mpd_music_dir}/${rel_file_path}"
     if [[ -f "${file_path}" ]]; then 
 	res="$(${cmd_soxi} "${file_path}")"
 	field_val_re='([^\:]+):[[:space:]]*(.*)'
@@ -376,7 +462,7 @@ function ret_soxi_info() {
 
 function ret_exif_info() {
     rel_file_path="${1}"
-    file_path="${media_base_path}/${rel_file_path}"
+    file_path="${arg_mpd_music_dir}/${rel_file_path}"
     if [[ -f "${file_path}" ]]; then 
 	res="$(${cmd_exiftool} -j "${file_path}")"
 	#declare -p res 1>&2
@@ -450,7 +536,76 @@ function main_loop() {
     printf 1>&2 "main_loop done.\n"
 }
 
-check_commands
+unset mpc_vals
+unset mpd_vals
+unset alsa_vals
+unset exif_vals
+unset soxi_vals
+
+declare -A alsa_vals
+declare -A mpc_vals
+declare -A mpd_vals
+declare -A exif_vals
+declare -A soxi_vals
+
+## input | nfs://srv/media/music/.../track11.aiff
+##       | AIFF (Little Endian) PCM in 24bit/192kHz  @ 4.503bit/s
+main_file_bitdepth=
+main_file_bitrate=
+main_file_bitrate_kvalue=
+main_file_bitrate_raw=
+main_file_bitrate_unit=
+main_file_bitrate_value=
+main_file_samplerate=
+main_file_sizebytes=
+main_mpd_bitdepth=
+main_mpd_bitrate=
+main_mpd_samplerate=
+main_output_bitdepth=
+main_output_samplechannelcount=
+main_output_sampleencoding=
+main_output_samplerate=
+main_output_samplerate_raw=
+main_playing_trackalbumartist=
+main_playing_trackalbumname=
+main_playing_trackalbumnumber=
+main_playing_trackartist=
+main_playing_trackduration=
+main_playing_trackperformers=
+main_playing_trackplayingpercentage=
+main_playing_trackplayingtime=
+main_playing_tracktitle=
+main_rt_tracknumber_album=
+main_rt_tracknumber_playlist=
+main_rt_playlistlength=
+
+declare -A alsa_encoding
+declare -a mpc_fields=(
+    album
+    albumartist
+    artist
+    comment
+    composer
+    date
+    disc
+    file        	      
+    genre
+    mdate
+    mtime
+    name
+    performer
+    position
+    time
+    title
+    length
+    track
+)
+
+mpc_format_string=
+for mpc_field in ${mpc_fields[@]}; do 
+	mpc_format_string+="${mpc_field}:[%${mpc_field}%]\n"
+done
+
 ## if the script is not sourced by another script but run within its
 ## own shell call function `analyze_commandline_args'
 [[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || \
