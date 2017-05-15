@@ -61,6 +61,7 @@ Optional arguments:
  -p|--mpd-port MPDPORT    The port on which mpd on MPDHOST
                           listens.
 			  Defaults to '6600'.
+ -x|--mpd-password PASSWD The password for mpd.
  -u|--ssh-user SSHUSER    The username for the ssh connection to
                           MPDHOST used to get realtime alsa
                           information on MPDHOST.
@@ -84,6 +85,15 @@ function analyze_command_line() {
 		    die "argument \`$1' requires the dns host name or ip address for the host running mpd."
 		else
 		    arg_mpd_host="$2"
+		    shift 2
+                    continue
+		fi
+		;;
+	    -x|--mpd-password)
+		if [[ "${2}x" == "x" ]]; then
+		    die "argument \`$1' requires a non-empty value."
+		else
+		    arg_mpd_password="${2}"
 		    shift 2
                     continue
 		fi
@@ -143,6 +153,7 @@ function analyze_command_line() {
 	    mpd_music_dir="${arg_mpd_music_dir}"
 	    mpd_host="${def_mpd_host}"
 	    mpd_port="${def_mpd_port}"
+	    mpd_password=""
 	    ssh_host=""
         fi
     fi
@@ -201,7 +212,7 @@ function fill_arrays() {
     ret_mpd_now
     ret_exif_info "${mpc_vals[file]}"
     ret_soxi_info "${mpc_vals[file]}"
-    ret_alsa_info "1" "0" "root@sonida"
+    ret_alsa_info "1" "0"
     #[[ "${exif_vals[*]}x" == "x" ]] || ret_exif_info "${mpc_vals[file]}"
     #[[ "${soxi_vals[*]}x" == "x" ]] || ret_soxi_info "${mpc_vals[file]}"
     #[[ "${alsa_vals[*]}x" == "x" ]] || ret_alsa_info "1" "0" "root@sonida"
@@ -278,7 +289,8 @@ function get_info() {
     fi
     mpd_host="${arg_mpd_host:-${def_mpd_host}}"
     mpd_port="${arg_mpd_port:-${def_mpd_port}}"
-    ssh_user="${arg_ssh_user:-${def_ssh_user}}"    
+    ssh_user="${arg_ssh_user:-${def_ssh_user}}"
+    mpd_password="${arg_mpd_password:-}"
     ssh_host="${arg_ssh_host:-}"
     localhost_re="127.0.[0-9]+.[0-9]+|localhost"
     if [[ "${mpd_host}" =~ ${localhost_re} ]]; then
@@ -289,11 +301,11 @@ function get_info() {
 	## mpd runs remote, use ssh to get alsa properties	
 	ssh_userhost="${ssh_user}@${ssh_host}"
     fi
-    declare -p mpd_host ssh_host ssh_user mpd_music_dir 1>&2
+    [[ ${DEBUG} ]] && declare -p mpd_host ssh_host ssh_user mpd_music_dir 1>&2
     
     fill_arrays || return 1
-    [[ ${DEBUG} ]] && declare -p mpc_vals 1>&2
-    [[ ${DEBUG} ]] && declare -p mpd_vals 1>&2    
+    [[ ${DEBUG} ]] && declare -p mpc_vals mpd_vals 1>&2
+    
     main_playing_tracktitle="${mpc_vals[title]}"
     main_playing_trackartist="${mpc_vals[artist]}"
     main_playing_trackperformers="${exif_vals[Performer]}"
@@ -367,8 +379,8 @@ function get_info() {
     msg_trackartist="${blue}${main_playing_trackartist}${std}"
     msg_tracknumber="$(printf "%-4s of %-3s" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_playlistlength}")"
     msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
-    msg_byline="$(printf "%-12s-- by %s" " " "${msg_trackartist}")"
-    msg_albumline="$(printf "%-12strack %s from %s" \
+    msg_byline="$(printf "%-11s-- by %s" " " "${msg_trackartist}")"
+    msg_albumline="$(printf "%-11strack %s from album %s" \
 " " "${bold}${main_rt_tracknumber_album}${std}" "${bold}${blue}${main_playing_trackalbumname}${std}")"
     msg_playingtime="$(printf "%-13s   playing %s from %s (%s)" \
 " " "${bold}${std}${main_playing_trackplayingtime}${std}" "${main_playing_trackduration}" "${main_playing_trackplayingpercentage}")"
@@ -385,8 +397,6 @@ ${msg_bitrate}
 
 ${msg_filesize}
 \r"
-
-    
 }
 
 function ret_mpd_now() {
@@ -423,7 +433,14 @@ function ret_mpd_now() {
 }
 
 function ret_mpc_info() {
-    mpc_args=(-h "${mpd_host}")
+    ## get information from mpd using mpc with the 'current' command
+    ## and a format string.
+    if [[ "${mpd_password}x" == "x" ]]; then
+	mpc_args=(-h "${mpd_host}")
+    else
+	mpc_args=(-h "${mpd_password}@${mpd_host}")
+    fi
+    mpc_args+=(-p "${mpd_port}")
     mpc_args+=(current)
     mpc_args+=(-f "${mpc_format_string}")
     [[ ${DEBUG} ]] && declare -p mpc_format_string 1>&2
@@ -472,28 +489,36 @@ function ret_exif_info() {
     file_path="${arg_mpd_music_dir}/${rel_file_path}"
     if [[ -f "${file_path}" ]]; then 
 	res="$(${cmd_exiftool} -j "${file_path}")"
-	#declare -p res 1>&2
 	field_val_re='"([^\:]+)":(.*)'
 	while read -r line; do
 	    if [[ "${line}" =~ ${field_val_re} ]]; then
-		#declare -p line 1>&2
 		field="${BASH_REMATCH[1]}"
 		val="${BASH_REMATCH[2]}"
 		exif_vals["${field}"]="${val}"
-		#else
-		#   printf 1>&2 "error: no match with line: '%s'\n" "${line}"
 	    fi
 	done<<<"${res}"
-	#for k in ${!exif_vals[@]}; do
-	#    printf '"exiffield";"%s";"%s";\n' "${k}" "${exif_vals[${k}]}"
-	#done
     fi
 }
 
 function ret_alsa_info() {
+    ## TODO: fix handling of mpd output(s)
     alsa_card_no="$1"
     alsa_dev_no="$2"
     alsa_ssh_userhost="${3:-${ssh_userhost}}"
+    if [[ "${mpd_password}x" == "x" ]]; then
+	mpc_args=(-h "${mpd_host}")
+    else
+	mpc_args=(-h "${mpd_password}@${mpd_host}")
+    fi
+    mpc_args+=(-p "${mpd_port}")
+    mpc_args+=(output)
+    mpc_output_re="Output[[:space:]]([0-9]+)[[:space:]]\(([^\(]+)\)"
+    while read -r line; do
+	if [[ "${line}" =~ ${mpc_output_re} ]]; then
+	    mpd_outputs+=("${BASH_REMATCH[2]}")
+	fi
+    done< <(${cmd_mpc} "${mpc_args[@]}")
+    declare -p mpd_outputs 1>&2
     hw_params_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
     cmd="cat ${hw_params_file}"
     if [[ "${alsa_ssh_userhost}x" == "x" ]]; then 
