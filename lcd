@@ -33,9 +33,10 @@ def_ssh_user="root"
 bold="$(tput bold)"
 dim="$(tput dim)"
 std="$(tput sgr0)"
-red=$(tput setaf 1)   #  color 1
-blue=$(tput setaf 4) #  color 2
-white=$(tput setaf 7) #  color 3
+red=$(tput setaf 1)
+green=$(tput setaf 2)
+blue=$(tput setaf 4)
+white=$(tput setaf 7)
 
 arg_mpd_host=""
 arg_mpd_port=""
@@ -151,6 +152,11 @@ function analyze_command_line() {
 function die() {
     printf "%s\n" "$@" 1>&2
     exit 1
+}
+
+function human_bytes() {
+    bytes="$1"
+    numfmt --to=iec-i --suffix=B --format="%.1f" "${bytes}"
 }
 
 function check_commands() {
@@ -322,59 +328,60 @@ function get_info() {
 
     main_playing_trackplayingtime="${mpc_vals[rt_time_elapsed_minutes]}:${mpc_vals[rt_time_elapsed_seconds]}"
     main_playing_trackplayingpercentage="${mpc_vals[rt_percentage_played]}%"
-
-    # declare -p main_playing_tracktitle 1>&2
-    # declare -p main_playing_trackartist 1>&2
-    # declare -p main_rt_tracknumber_album 1>&2
-    # declare -p main_rt_tracknumber_playlist 1>&2
-    # declare -p main_rt_tracknumbers_playlist 1>&2
-    # #declare -p main_playing_trackperformer 1>&2
-    # declare -p main_playing_trackalbumname 1>&2
-    # declare -p main_playing_trackduration 1>&2
-    # declare -p main_playing_trackplayingtime 1>&2
-    # declare -p main_playing_trackplayingpercentage 1>&2
-    # declare -p main_file_sizebytes 1>&2
-    # declare -p main_file_bitrate 1>&2
-    # declare -p main_file_bitdepth 1>&2
-    # declare -p main_file_samplerate 1>&2
-    # declare -p main_output_samplerate 1>&2
-    # declare -p main_output_sampleencoding 1>&2
-    # declare -p main_output_samplechannelcount 1>&2
-
+    declare -p main_playing_trackplayingpercentage 1>&2
     main_mpd_bitdepth="${mpd_vals[rt_audio_bitdepth]}"
     main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
     main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
 
-    msg_filesize="$(printf "%-13s: %-13s" \
-"File size" "${main_file_sizebytes} bytes")"
-	
-    msg_header="$(printf "%-11s %-18s  %8s > %8s > %8s" " " " " "File" "MPD" "DAC")"
-    msg_bitrate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+    main_file_sizehbytes="$(human_bytes "${main_file_sizebytes}")"
+    msg_filesize="$(printf "%-12s: %-13s (%s)" \
+"File size" "${main_file_sizebytes} bytes" "${main_file_sizehbytes}")"
+
+    color_bitdepth_file_mpd="${red}"
+    color_bitdepth_mpd_output="${red}"
+    if [[ ${main_mpd_bitdepth} -ge ${main_file_bitdepth} ]]; then
+	color_bitdepth_file_mpd="${green}"
+	if [[ ${main_output_bitdepth} -ge ${main_mpd_bitdepth} ]]; then
+	    color_bitdepth_mpd_output="${green}"
+	fi
+    fi
+    color_sample_rate_file_mpd="${red}"
+    color_sample_rate_mpd_output="${red}"
+    if [[ ${main_mpd_samplerate} -ge ${main_file_samplerate} ]]; then
+	color_samplerate_file_mpd="${green}"
+	if [[ ${main_output_samplerate} -ge ${main_mpd_samplerate} ]]; then
+	    color_samplerate_mpd_output="${green}"
+	fi
+    fi
+    
+    
+    msg_header="$(printf "%-11s %-18s  ${white}%8s${std}  > ${white}%8s${std}  > ${white}%8s${std}" " " " " "File" "MPD" "DAC")"
+    msg_bitrate="$(printf "%-11s %-18s: ${dim}${white}%8s${std}  > ${white}%8s${std}  > ${dim}${white}%8s${std}" \
 " " "Bit rate (kbit/s)" "${main_file_bitrate}" "${main_mpd_bitrate}" "(n/a)")"
-    msg_bitdepth="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+    msg_bitdepth="$(printf "%-11s %-18s: %8s  ${color_bitdepth_file_mpd}> %8s  ${color_bitdepth_mpd_output}> %8s${std}" \
 " " "Bit depth (bit)" "${main_file_bitdepth}" "${main_mpd_bitdepth}" "${main_output_bitdepth}")"
-    msg_samplerate="$(printf "%-11s %-18s: %8s > %8s > %8s" \
+    msg_samplerate="$(printf "%-11s %-18s: %8s  ${color_samplerate_file_mpd}> %8s${std}  ${color_samplerate_mpd_output}> %8s${std}" \
 " " "Sample rate (Hz)" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
 
-    msg_tracktitle="${bold}${blue}${main_playing_tracktitle}${std}"
-    msg_trackartist="${bold}${red}${main_playing_trackartist}${std}"
-    msg_tracknumber="$(printf "%-4s (of %3s)" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_playlistlength}")"
+    msg_tracktitle="${bold}${white}${main_playing_tracktitle}${std}"
+    msg_trackartist="${blue}${main_playing_trackartist}${std}"
+    msg_tracknumber="$(printf "%-4s of %-3s" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_playlistlength}")"
     msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
-    msg_byline="$(printf "%-13s-- by %s" " " "${msg_trackartist}")"
-    msg_albumline="$(printf "%-13s   track %s from %s" \
+    msg_byline="$(printf "%-12s-- by %s" " " "${msg_trackartist}")"
+    msg_albumline="$(printf "%-12strack %s from %s" \
 " " "${bold}${main_rt_tracknumber_album}${std}" "${bold}${blue}${main_playing_trackalbumname}${std}")"
     msg_playingtime="$(printf "%-13s   playing %s from %s (%s)" \
 " " "${bold}${std}${main_playing_trackplayingtime}${std}" "${main_playing_trackduration}" "${main_playing_trackplayingpercentage}")"
 
     echo -en "\
 ${msg_nowplaying}
-${msg_byline}
 ${msg_albumline}
-${msg_playingtime}
+${msg_byline}
+
 ${msg_header}
-${msg_bitrate}
 ${msg_bitdepth}
 ${msg_samplerate}
+${msg_bitrate}
 
 ${msg_filesize}
 \r"
