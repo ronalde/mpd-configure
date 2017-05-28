@@ -156,6 +156,11 @@ function analyze_command_line() {
 	    mpd_password=""
 	    ssh_host=""
         fi
+    else
+	[[ ${DEBUG} ]] && \
+	    declare -p arg_mpd_music_dir \
+		    arg_mpd_host arg_mpd_port arg_mpd_password \
+		    arg_ssh_user 1>&2
     fi
 
 }
@@ -166,8 +171,12 @@ function die() {
 }
 
 function human_bytes() {
-    bytes="$1"
-    numfmt --to=iec-i --suffix=B --format="%.1f" "${bytes}"
+    bytes="${1##*.}"
+    if [[ "${bytes}x" == "x" ]]; then
+	printf "%s" "0"
+    else
+	numfmt --to=iec-i --suffix=B --format="%.1f" "${bytes}"
+    fi
 }
 
 function check_commands() {
@@ -206,13 +215,175 @@ function filter_soxi_duration() {
     printf "%s:%s" "${minutes}" "${seconds}"
 }
 
+function run_func() {
+    func="$1"
+    shift
+    args="$@"
+    [[ ${DEBUG} ]] && declare -p 1>&2 func args
+    if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
+	[[ ${DEBUG} ]] && \
+	    printf 1>&2 "running on local host.\n"
+	"${func}"
+    else
+	[[ ${DEBUG} ]] && \
+	    printf 1>&2 "running through ssh://using %s.\n" \
+				 "${alsa_ssh_userhost}"
+	ssh ${alsa_ssh_userhost} -- \
+	    "$(declare -f ${func}); ${func} "${args}""
+    fi
+}
+
+function ret_mpdconf_contents() {
+    ## return the contents of the mpd configuration file
+    alsa_ssh_userhost="${alsa_ssh_userhost:-}"
+    mpdconf_path="$1"
+    #declare -p mpdconf_path 1>&2
+    #xargs -0 echo < "${mpd_conf}"
+    if [[ -f "${mpdconf_path}" ]]; then
+	cat "${mpdconf_path}"
+    else
+	printf 1>&2 "error: mpd configuration file %s does not exist on host %s.\n" \
+		    "${mpdconf_path}" "$(hostname)"
+	return 1
+    fi
+}
+
+
+function ret_mpdconf_commandline() {
+    ## return the command line arguments for running mpd
+    alsa_ssh_userhost="${alsa_ssh_userhost:-}"
+    mpd_pid="$(pidof mpd | awk '{print $1}')"
+    xargs -0 echo < /proc/${mpd_pid}/cmdline
+}
+
+
+function ret_mpdconf_default() {
+    ## function 
+    for conffile in $XDG_CONFIG_HOME/mpd/mpd.conf \
+			~/.mpdconf \
+			~/.mpd/mpd.conf \
+			/etc/mpd.conf; do 
+	if [[ "${conffile}x" != "x" ]]; then 
+	    if [[ -f ${conffile} ]]; then
+		[[ ${DEBUG} ]] && \
+		    printf 1>&2 "using mpd configuration file %s\n" \
+				"${conffile}"
+       		echo ${conffile}
+      		return 0
+	    fi
+	fi
+    done
+    printf 1>&2 "warning: no mpd configuration found.\n"
+    return 1
+}
+
+
+function ret_mpdconf_path() {
+    ## returns the name of the mpd.conf file in use by mpd (either
+    ## local or remote)
+    ## all possible mpd command line arguments
+    ## the command mpd itself (including a possible path) gets
+    ## stripped before
+    mpd_args=(--no-config)    
+    mpd_args+=(--no-daemon)
+    mpd_args+=(-v)
+    mpd_args+=(--verbose)
+    mpd_args+=(--stderr)
+    ## strip each command line argument from all possible arguments
+    ## the remainder is the mpd conf file
+    mpd_real_args=($(run_func ret_mpdconf_commandline))
+    mpd_rest_args=(${mpd_real_args[@]:1})
+    for arg in ${mpd_args[@]}; do
+	mpd_rest_args=(${mpd_rest_args[@]//${arg}})
+    done
+    mpd_conf_file="${mpd_rest_args[0]}"
+    if [[ "${mpd_conf_file}x" == "x" ]]; then
+	[[ ${DEBUG} ]] && \
+	    printf 1>&2 "no conffile specified on mpd command line, \
+test default locations\n"
+	run_func ret_mpdconf_default
+    else
+	printf "%s" "${mpd_conf_file}"
+    fi
+}
+
+function get_mpdconf_contents() {
+    mpdconf_path="$1"
+    run_func ret_mpdconf_contents "${mpdconf_path}"
+}
+
+
+function get_mpd_alsa_outputs() {
+    ## TODO
+    #    while read -r line; do
+    #    done< <(ssh ${alsa_ssh_userhost} -- "cat /ec/mpd.conf")
+    mpdconf_path=$(ret_mpdconf_path)
+    #mpdconf_contents="$(get_mpdconf_contents "${mpdconf_path}")"
+    #declare -p mpdconf_path mpdconf_contents 1>&2
+    start_audio_output_re="^[[:space:]]*audio_output[[:space:]]*\{"
+    end_audio_output_re="[[:space:]]*\}"
+    ## only handle alsa audio outputs
+    type_re="^[[:space:]]*type[[:space:]]*[\"'](.*)[\"']"
+    device_re="^[[:space:]]*device[[:space:]]*[\"']hw:([0-9]+),([0-9]+)[\"']"    
+    audio_outputs=0
+    inside_audio_output=
+    inside_alsa_output=
+    declare -a devices
+    while read -r line; do
+	# declare -p line inside_audio_output inside_alsa_output 1>&2 
+	if [[ "${inside_audio_output}x" == "x" ]]; then
+	    if [[ "${line}" =~ ${start_audio_output_re} ]]; then
+		## new audio_output started
+		((audio_outputs++))
+		inside_audio_output=true
+		[[ ${DEBUG} ]] && \
+		    printf 1>&2 "\n *** starting audio_output\n"
+	    elif [[ "${line}" =~ ${end_audio_output_re} ]]; then
+		## end of audio output
+		inside_audio_output=
+	    fi
+	else
+	    if [[ "${line}" =~ ${type_re} ]]; then
+		type="${BASH_REMATCH[1]}"
+		[[ ${DEBUG} ]] && \
+		    printf 1>&2 "  ** audio_output type: %s\n" "${type}"		
+		if [[ "${type}x" == "alsax" ]]; then
+		    inside_alsa_output=true
+		else
+		    inside_alsa_output=
+		fi
+	    elif [[ "${line}" =~ ${device_re} ]] && \
+		     [[ "${inside_alsa_output}x" != "x" ]]; then
+		alsa_dev="${BASH_REMATCH[1]}"
+		alsa_int="${BASH_REMATCH[2]}"
+		[[ ${DEBUG} ]] && \
+		    printf 1>&2 "  ** audio_output device: hw:%s,%s\n" \
+				"${alsa_dev}" "${alsa_int}"
+		devices+=("hw:${alsa_dev},${alsa_int}")
+		inside_audio_output=
+		inside_alsa_output=
+	    fi
+	fi
+    done< <(get_mpdconf_contents "${mpdconf_path}")
+    # declare -p audio_outputs devices 1>&2
+    ## TODO: handle multiple devices
+    for device in ${devices[0]}; do
+	#printf 1>&2 "alsa device: "
+	printf "%s" "${device}"
+	#printf 1>&2 "\n"
+    done
+}
+
 function fill_arrays() {
     ret_mpc_info || return 1
     #ret_mpc_now
     ret_mpd_now
     ret_exif_info "${mpc_vals[file]}"
     ret_soxi_info "${mpc_vals[file]}"
-    ret_alsa_info "1" "0"
+    ## TODO get right card and interface numbers
+    alsa_hw="$(get_mpd_alsa_outputs)"
+    [[ ${DEBUG} ]] && declare -p alsa_hw 1>&2
+    ret_alsa_info "${alsa_hw}"
     #[[ "${exif_vals[*]}x" == "x" ]] || ret_exif_info "${mpc_vals[file]}"
     #[[ "${soxi_vals[*]}x" == "x" ]] || ret_soxi_info "${mpc_vals[file]}"
     #[[ "${alsa_vals[*]}x" == "x" ]] || ret_alsa_info "1" "0" "root@sonida"
@@ -281,7 +452,7 @@ function get_info() {
     ## parse command line arguments
     analyze_command_line "$@"
 
-    ## check presenece of needed commands
+    ## check presence of needed commands
     check_commands || return 1
 
     if [[ ! -d "${mpd_music_dir}" ]]; then
@@ -291,19 +462,20 @@ function get_info() {
     mpd_port="${arg_mpd_port:-${def_mpd_port}}"
     ssh_user="${arg_ssh_user:-${def_ssh_user}}"
     mpd_password="${arg_mpd_password:-}"
-    ssh_host="${arg_ssh_host:-}"
+    ssh_host="${mpd_host:-}"
     localhost_re="127.0.[0-9]+.[0-9]+|localhost"
     if [[ "${mpd_host}" =~ ${localhost_re} ]]; then
 	## mpd runs local, no need for ssh to get alsa properties
-	ssh_userhost=""
+	alsa_ssh_userhost=""
     else
-	ssh_host="${mpd_host}"
+	aalsa_ssh_host="${mpd_host}"
 	## mpd runs remote, use ssh to get alsa properties	
-	ssh_userhost="${ssh_user}@${ssh_host}"
+	alsa_ssh_userhost="${ssh_user}@${ssh_host}"
     fi
     [[ ${DEBUG} ]] && declare -p mpd_host ssh_host ssh_user mpd_music_dir 1>&2
     
-    fill_arrays || return 1
+    fill_arrays
+    #|| return 1
     [[ ${DEBUG} ]] && declare -p mpc_vals mpd_vals 1>&2
     
     main_playing_tracktitle="${mpc_vals[title]}"
@@ -340,7 +512,7 @@ function get_info() {
 
     main_playing_trackplayingtime="${mpc_vals[rt_time_elapsed_minutes]}:${mpc_vals[rt_time_elapsed_seconds]}"
     main_playing_trackplayingpercentage="${mpc_vals[rt_percentage_played]}%"
-    declare -p main_playing_trackplayingpercentage 1>&2
+    #declare -p main_playing_trackplayingpercentage 1>&2
     main_mpd_bitdepth="${mpd_vals[rt_audio_bitdepth]}"
     main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
     main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
@@ -403,9 +575,11 @@ function ret_mpd_now() {
     ## echo status command to mpd host on mpd port using netcat, to
     ## fill mpc_vals array with rt_ fields
 
-    [[ "${DEBUG}" ]] && declare -p cmd_netcat mpd_host mpd_port 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p cmd_netcat mpd_host mpd_port 1>&2
     mpd_status="$(echo "status" | ${cmd_netcat} -N ${mpd_host} ${mpd_port})"
-    [[ "${DEBUG}" ]] && declare -p mpd_status 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p mpd_status 1>&2
     linecounter=1
     prefix="rt_raw"
     key_val_re="^([^\:]+):[[:space:]]+(.*)"
@@ -443,7 +617,8 @@ function ret_mpc_info() {
     mpc_args+=(-p "${mpd_port}")
     mpc_args+=(current)
     mpc_args+=(-f "${mpc_format_string}")
-    [[ ${DEBUG} ]] && declare -p mpc_format_string 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p mpc_format_string 1>&2
     res="$(${cmd_mpc} "${mpc_args[@]}" &)"
     if [[ $? -ne 0 ]]; then
 	die "${FUNCNAME[0]}: mpd on %s is not running."
@@ -500,11 +675,30 @@ function ret_exif_info() {
     fi
 }
 
-function ret_alsa_info() {
-    ## TODO: fix handling of mpd output(s)
+function get_hwparams() {
     alsa_card_no="$1"
     alsa_dev_no="$2"
-    alsa_ssh_userhost="${3:-${ssh_userhost}}"
+    hwparams_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
+    if [[ -f "${hwparams_file}" ]]; then
+	## return the contents of the file
+	xargs -0 echo < "${hwparams_file}"
+    else
+	printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
+		    "${hwparams_file}" "$(hostname)"
+	return 1
+    fi
+}
+
+function ret_alsa_info() {
+    ## TODO: fix handling of mpd output(s)
+    ## expects "hw:x,y"
+    alsa_hw="${1//hw:/}"
+    alsa_card_no="${alsa_hw##*,}"
+    alsa_dev_no="${alsa_hw%%,*}"
+    alsa_ssh_userhost="${alsa_ssh_userhost:-}"
+    [[ ${DEBUG} ]] && \
+	declare -p alsa_hw alsa_card_no alsa_dev_no alsa_ssh_userhost
+    declare -a mpc_args
     if [[ "${mpd_password}x" == "x" ]]; then
 	mpc_args=(-h "${mpd_host}")
     else
@@ -512,37 +706,46 @@ function ret_alsa_info() {
     fi
     mpc_args+=(-p "${mpd_port}")
     mpc_args+=(output)
+    [[ ${DEBUG} ]] && \
+	declare -p mpd_host mpd_port mpc_args 1>&2
     mpc_output_re="Output[[:space:]]([0-9]+)[[:space:]]\(([^\(]+)\)"
     while read -r line; do
 	if [[ "${line}" =~ ${mpc_output_re} ]]; then
 	    mpd_outputs+=("${BASH_REMATCH[2]}")
 	fi
     done< <(${cmd_mpc} "${mpc_args[@]}")
-    declare -p mpd_outputs 1>&2
-    hw_params_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
-    cmd="cat ${hw_params_file}"
-    if [[ "${alsa_ssh_userhost}x" == "x" ]]; then 
-	res="$(${cmd})"
-    else
-	res="$(ssh ${alsa_ssh_userhost} -- "${cmd}")"
-    fi
-    if [[ $? -ne 0 ]]; then
-	printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
-		    "${hw_params_file}" "${alsa_ssh_userhost}"
-	return 1
-    else
+    [[ ${DEBUG} ]] && \
+	declare -p mpd_outputs 1>&2
+    
+    #hw_params_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
+    #cmd="cat ${hw_params_file}"
+    #if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
+    ## use local alsa
+    #	xargs -0 echo < /proc/${mpd_pid}/cmdline
+    #	read res < ${hw_params_file}
+    #else
+	## use alsa on remote host	
+    #res="$(ssh ${alsa_ssh_userhost} -- "${cmd}")"
+    #fi
+#    if [[ $? -ne 0 ]]; then
+#	printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
+#		    "${hw_params_file}" "${alsa_ssh_userhost}"
+#	return 1
+ #   else
 	key_val_re="^([^\:]+):[[:space:]]+(.*)"
 	while read -r line; do
 	    if [[ "${line}" =~ ${key_val_re} ]]; then
 		field="${BASH_REMATCH[1]}"
 		val="${BASH_REMATCH[2]}"
 		alsa_vals["${field}"]="${val}"
+		[[ ${DEBUG} ]] && declare -p line field val 1>&2
 	    else
 		[[ ${DEBUG} ]] && declare -p line 1>&2
 		return 1
 	    fi
-	done<<<"${res}"
-    fi
+	    
+	done< <(run_func get_hwparams "${alsa_card_no} ${alsa_dev_no}")
+#    fi
 }
 
 function terminal_size() { # Calculate the size of the terminal
