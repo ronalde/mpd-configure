@@ -166,7 +166,7 @@ function analyze_command_line() {
 }
 
 function die() {
-    printf "%s\n" "$@" 1>&2
+    printf "error: %s\n" "$@" 1>&2
     exit 1
 }
 
@@ -180,14 +180,15 @@ function human_bytes() {
 }
 
 function check_commands() {
-    err=()
-    cmd_mpc="$(type -p mpc || err+=("mpc not found") )"
-    cmd_soxi="$(type -p soxi || err+=("soxi not found"))"
-    cmd_exiftool="$(type -p exiftool || err+=("exiftool not found"))"
-    cmd_netcat="$(type -p nc || err+=("netcat (nc) not found"))"
-    cmd_bc="$(type -p bc || err+=("bc not found"))"    
+    declare -a err
+    msg="not found in PATH"
+    cmd_mpc=$(type -p 1mpc) || err+=("mpc")
+    cmd_soxi=$(type -p 1soxi) || err+=("soxi")
+    cmd_exiftool=$(type -p 1exiftool) || err+=("exiftool")
+    cmd_netcat=$(type -p 1nc) || err+=("netcat (nc)")
+    cmd_bc=$(type -p 1bc) || err+=("bc")
     if [[ ${#err[@]} -gt 0 ]]; then
-	printf 1>&2 "error: %s\n" "${err[@]}"
+	printf 1>&2 "required command \`%s' ${msg}\n" "${err[@]}"
 	return 1
     fi
 }
@@ -450,12 +451,12 @@ function alsa_format_outputencoding() {
 
 function get_info() {
 
+    ## check presence of needed commands
+    check_commands || die "not all needed commands are installed."
+
     ## parse command line arguments
     analyze_command_line "$@"
-
-    ## check presence of needed commands
-    check_commands || return 1
-
+    
     if [[ ! -d "${mpd_music_dir}" ]]; then
 	die "error: can't access directory ${mpd_music_dir}."
     fi
@@ -578,10 +579,11 @@ function ret_mpd_now() {
 
     [[ ${DEBUG} ]] && \
 	declare -p cmd_netcat mpd_host mpd_port 1>&2
-    if ${cmd_netcat} --help 2>&1 >/dev/null; then
-	netcat_args=(--close)
+    res=$(${cmd_netcat} --help 2>&1 >/dev/null)
+    if [[ $? -ne 0 ]]; then
+	netcat_args=(-N)	
     else
-	netcat_args=(-N)
+	netcat_args=(--close)	
     fi
     mpd_status="$(echo "status" | ${cmd_netcat} ${netcat_args[@]} ${mpd_host} ${mpd_port})"
     [[ ${DEBUG} ]] && \
