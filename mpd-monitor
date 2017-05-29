@@ -171,7 +171,9 @@ function die() {
 }
 
 function human_bytes() {
-    bytes="${1##*.}"
+    ## return the human notation for the number of bytes specified in $1.
+    ## strip decimals from input
+    bytes="${1%%.*}"
     if [[ "${bytes}x" == "x" ]]; then
 	printf "%s" "0"
     else
