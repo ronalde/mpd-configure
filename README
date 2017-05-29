@@ -171,25 +171,29 @@ bash alsa-capabilities -s
 About the mpd-monitor helper script
 -----------------------------------
 
-In development is the [`mpd-monitor'](./mpd-monitor) script which is
-aimed at showing which parts of the audio chain are configured for bit
-perfect audio playback. `mpd-monitor` is currently in development and
-unstable. The actual configuration of the system may be
-inspected/monitored by the helper script `mpd-monitor`, which can be
-executed as follows:
+The [mpd-monitor](/mpd-monitor) script displays the way a digital audio 
+file is streamed from storage (eg. a file), though MPD, to the (USB)DAC.
+
+Usage:
 
 ````bash
-    bash <(wget -q -O - "https://lacocina.nl/mpd-monitor")
+bash <(wget -q -O - "https://lacocina.nl/mpd-monitor")
 ````
 
 Or, when mpd is running on a remote host to which you have (key based)
 ssh access, execute:
 
 ````bash
-    ssh ${username}@${remotehost} "bash <(wget -q -O - "https://lacocina.nl/mpd-monitor")"
+bash <(wget -q -O - "https://lacocina.nl/mpd-monitor") -m $MPD_HOST -p $MPD_PORT -u $SSH_USER -d ${MUSICDIR}
 ````
 
-- The mpd-monitor script is in a development state and unstable.
+For example:
+
+````bash
+bash <(wget -q -O - "https://lacocina.nl/mpd-monitor") -m mpd -u root -d /srv/media/music
+````
+
+- The mpd-monitor script is in a testing state.
 
 
 Background
