@@ -182,11 +182,11 @@ function human_bytes() {
 function check_commands() {
     declare -a err
     msg="not found in PATH"
-    cmd_mpc=$(type -p 1mpc) || err+=("mpc")
-    cmd_soxi=$(type -p 1soxi) || err+=("soxi")
-    cmd_exiftool=$(type -p 1exiftool) || err+=("exiftool")
-    cmd_netcat=$(type -p 1nc) || err+=("netcat (nc)")
-    cmd_bc=$(type -p 1bc) || err+=("bc")
+    cmd_mpc=$(type -p mpc) || err+=("mpc")
+    cmd_soxi=$(type -p soxi) || err+=("soxi")
+    cmd_exiftool=$(type -p exiftool) || err+=("exiftool")
+    cmd_netcat=$(type -p nc) || err+=("netcat (nc)")
+    cmd_bc=$(type -p bc) || err+=("bc")
     if [[ ${#err[@]} -gt 0 ]]; then
 	printf 1>&2 "required command \`%s' ${msg}\n" "${err[@]}"
 	return 1
