@@ -179,6 +179,23 @@ function human_bytes() {
     fi
 }
 
+
+function run_func() {
+    ## run an internal function whose name is specified in $1 with
+    ## args on the local host or remote through ssh.
+    func="$1"
+    shift
+    args="$@"
+    [[ ${DEBUG} ]] && declare -p 1>&2 func args
+    if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
+	"${func} ${args}"
+    else
+	ssh ${alsa_ssh_userhost} -- \
+	    "$(declare -f ${func}); ${func} ${args}"
+    fi
+}
+
+
 function check_commands() {
     declare -a err
     msg="not found in PATH"
@@ -217,30 +234,12 @@ function filter_soxi_duration() {
     printf "%s:%s" "${minutes}" "${seconds}"
 }
 
-function run_func() {
-    func="$1"
-    shift
-    args="$@"
-    [[ ${DEBUG} ]] && declare -p 1>&2 func args
-    if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
-	[[ ${DEBUG} ]] && \
-	    printf 1>&2 "running on local host.\n"
-	"${func}"
-    else
-	[[ ${DEBUG} ]] && \
-	    printf 1>&2 "running through ssh://using %s.\n" \
-				 "${alsa_ssh_userhost}"
-	ssh ${alsa_ssh_userhost} -- \
-	    "$(declare -f ${func}); ${func} "${args}""
-    fi
-}
 
 function ret_mpdconf_contents() {
-    ## return the contents of the mpd configuration file
-    alsa_ssh_userhost="${alsa_ssh_userhost:-}"
+    ## return the contents of the mpd configuration file specified in
+    ## $1.
     mpdconf_path="$1"
-    #declare -p mpdconf_path 1>&2
-    #xargs -0 echo < "${mpd_conf}"
+    alsa_ssh_userhost="${alsa_ssh_userhost:-}"
     if [[ -f "${mpdconf_path}" ]]; then
 	cat "${mpdconf_path}"
     else
