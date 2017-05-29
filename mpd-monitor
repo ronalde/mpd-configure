@@ -185,6 +185,7 @@ function check_commands() {
     cmd_soxi="$(type -p soxi || err+=("soxi not found"))"
     cmd_exiftool="$(type -p exiftool || err+=("exiftool not found"))"
     cmd_netcat="$(type -p nc || err+=("netcat (nc) not found"))"
+    cmd_bc="$(type -p bc || err+=("bc not found"))"    
     if [[ ${#err} -gt 0 ]]; then
 	printf 1>&2 "error: %s\n" "${err[@]}"
 	return 1
@@ -211,7 +212,7 @@ function filter_soxi_duration() {
     ## expects: hh:mm:ss.xxx where xxx are the subseconds (milliseconds?)
     duration_fields=($1)
     IFS=":" read hours minutes seconds subseconds <<<"${duration_fields[0]//./:}"
-    minutes=$(echo "${minutes} + ( ${hours} * 60 )" | bc)
+    minutes=$(echo "${minutes} + ( ${hours} * 60 )" | ${cmd_bc})
     printf "%s:%s" "${minutes}" "${seconds}"
 }
 
@@ -577,7 +578,12 @@ function ret_mpd_now() {
 
     [[ ${DEBUG} ]] && \
 	declare -p cmd_netcat mpd_host mpd_port 1>&2
-    mpd_status="$(echo "status" | ${cmd_netcat} -N ${mpd_host} ${mpd_port})"
+    if ${cmd_netcat} --help 2>&1 >/dev/null; then
+	netcat_args=(--close)
+    else
+	netcat_args=(-N)
+    fi
+    mpd_status="$(echo "status" | ${cmd_netcat} ${netcat_args[@]} ${mpd_host} ${mpd_port})"
     [[ ${DEBUG} ]] && \
 	declare -p mpd_status 1>&2
     linecounter=1
