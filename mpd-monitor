@@ -190,6 +190,8 @@ function run_func() {
     if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
 	"${func} ${args}"
     else
+	## use declare -f to first print the function in the remote
+	## bash session, and then execute it.
 	ssh ${alsa_ssh_userhost} -- \
 	    "$(declare -f ${func}); ${func} ${args}"
     fi
