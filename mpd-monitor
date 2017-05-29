@@ -186,7 +186,7 @@ function check_commands() {
     cmd_exiftool="$(type -p exiftool || err+=("exiftool not found"))"
     cmd_netcat="$(type -p nc || err+=("netcat (nc) not found"))"
     cmd_bc="$(type -p bc || err+=("bc not found"))"    
-    if [[ ${#err} -gt 0 ]]; then
+    if [[ ${#err[@]} -gt 0 ]]; then
 	printf 1>&2 "error: %s\n" "${err[@]}"
 	return 1
     fi
