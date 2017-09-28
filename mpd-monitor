@@ -180,7 +180,7 @@ function si_to_bytes() {
     fi
     if [[ "${bytes}x" == "x" ]]; then
 	## no numfmt or numfmt < 8.21
-	echo TODO 1>&2
+	echo "${FUNCNAME} TODO" 1>&2
 	si_unit="${si_size:$(( ${#si_size} -1 )):1}"
 	bsize="${si_size:0:-1}"
 	int="${bsize%%.*}"
@@ -262,7 +262,7 @@ function filter_soxi_duration() {
     ## expects: hh:mm:ss.xxx where xxx are the subseconds (milliseconds?)
     duration_fields=($1)
     IFS=":" read hours minutes seconds subseconds <<<"${duration_fields[0]//./:}"
-    minutes=$(( minutes + ( hours * 60 ) ))
+    minutes=$(echo "${minutes} + ( ${hours} * 60 )"| bc)
     printf "%s:%s" "${minutes}" "${seconds}"
 }
 
@@ -445,10 +445,12 @@ function soxi_filesize_to_bytes() {
     size="${soxi_filesize:0:-1}"
     int="${size%%.*}"
     dec="${size##*.}"
-    bsize="$( printf "%d%03d" "${int}" "${dec}")"
+    bsize="$(printf "%d%03d" "${int}" "${dec}")"
     fsize="$(printf "%1.3f" "${size}")"
+    printf 1>&2 "BEFORE\n"
     nsize="$(si_to_bytes ${soxi_filesize})"
-    declare -p nsize soxi_filesize size int dec fsize bsize 1>&2
+    printf 1>&2 "AFTER\n"
+    [[ ${DEBUG} ]] && declare -p unit nsize soxi_filesize size int dec fsize bsize 1>&2
     case "${unit}" in
 	G) value="$(( size * 1000000 ))" ;;
 	M) value="$(( size * 1000 ))" ;;
@@ -460,6 +462,8 @@ function soxi_filesize_to_bytes() {
 	   ;;
     esac
     printf "%s" "${value}"
+    printf 1>&2 "END ${FUNCNAME}\n"
+
 }
 
 function alsa_format_outputencoding() {
@@ -538,7 +542,7 @@ function get_info() {
 	dec="${main_file_bitrate_value##*.}"
 	## TODO
 	declare -p main_file_bitrate_value int dec 1>&2
-	main_file_bitrate_kvalue="$(echo ${main_file_bitrate_value} * 1000 | bc)"
+	main_file_bitrate_kvalue=$(echo "${main_file_bitrate_value} * 1000" | bc)
     else
 	main_file_bitrate_kvalue="${main_file_bitrate_value}"
     fi
