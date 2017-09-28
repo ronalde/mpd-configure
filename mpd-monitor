@@ -505,7 +505,7 @@ function get_info() {
 	## mpd runs local, no need for ssh to get alsa properties
 	alsa_ssh_userhost=""
     else
-	aalsa_ssh_host="${mpd_host}"
+	alsa_ssh_host="${mpd_host}"
 	## mpd runs remote, use ssh to get alsa properties	
 	alsa_ssh_userhost="${ssh_user}@${ssh_host}"
     fi
@@ -525,8 +525,19 @@ function get_info() {
     main_playing_trackalbumartist="${mpc_vals[albumartist]}"
     main_playing_trackduration="$(filter_soxi_duration "${soxi_vals[Duration]}")"
     [[ $? -ne 0 ]] && return 1
-    main_file_sizebytes="$(soxi_filesize_to_bytes ${soxi_vals[FileSize]})"
+    file_path="${arg_mpd_music_dir}/${mpc_vals[file]}"
+    if [[ ! -f "${file_path}" ]]; then
+	return 1
+	## TODO
+    fi
+    a_du_output=($(du --bytes --dereference "${file_path}"))
+    main_file_sizebytes="${a_du_output[0]}"
+    ## TODO: declare -p main_file_sizebytes 1>&2
+    main_file_sizehbytes="$(bytes_to_si "${main_file_sizebytes}")"
     [[ $? -ne 0 ]] && return 1
+    msg_filesize="$(printf "%-10s: %-13s (%s)" \
+"File size" "${main_file_sizebytes} bytes" "${main_file_sizehbytes}")"
+    
     main_file_bitrate_raw="${soxi_vals[BitRate]}"
     main_file_bitrate_value="${main_file_bitrate_raw:0:-1}"
     main_file_bitrate_unit="${main_file_bitrate_raw:$(( ${#main_file_bitrate_raw} - 1 )):1}"
@@ -559,10 +570,6 @@ function get_info() {
     main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
     main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
 
-    main_file_sizehbytes="$(bytes_to_si "${main_file_sizebytes}")"
-    msg_filesize="$(printf "%-12s: %-13s (%s)" \
-"File size" "${main_file_sizebytes} bytes" "${main_file_sizehbytes}")"
-
     ## determine if playback is bit perfect
     color_bitdepth_file_mpd="${red}"
     color_bitdepth_mpd_output="${red}"
@@ -572,35 +579,36 @@ function get_info() {
 	    color_bitdepth_mpd_output="${green}"
 	fi
     fi
-    color_sample_rate_file_mpd="${red}"
-    color_sample_rate_mpd_output="${red}"
+    color_samplerate_file_mpd="${red}"
+    color_samplerate_mpd_output="${red}"
     if [[ ${main_mpd_samplerate} -ge ${main_file_samplerate} ]]; then
 	color_samplerate_file_mpd="${green}"
 	if [[ ${main_output_samplerate} -ge ${main_mpd_samplerate} ]]; then
 	    color_samplerate_mpd_output="${green}"
 	fi
     fi
-    declare -p color_sample_rate_file_mpd color_samplerate_mpd_output 1>&2
-    
-    msg_header="$(printf "%-11s %-18s  ${white}%8s${std}  > ${white}%8s${std}  > ${white}%8s${std}" " " " " "File" "MPD" "DAC")"
+
+    ## prepare output 
+    msg_header="$(printf "%-11s %-18s  ${white}%8s${std}    ${white}%8s${std}    ${white}%8s${std}" " " " " "${label_input}" "${label_throughput}" "${label_output}")"
     msg_bitrate="$(printf "%-11s %-18s: ${dim}${white}%8s${std}  > ${white}%8s${std}  > ${dim}${white}%8s${std}" \
-" " "Bit rate (kbit/s)" "${main_file_bitrate}" "${main_mpd_bitrate}" "(n/a)")"
+" " "${label_bitrate}" "${main_file_bitrate}" "${main_mpd_bitrate}" "(n/a)")"
     msg_bitdepth="$(printf "%-11s %-18s: %8s  ${color_bitdepth_file_mpd}> %8s  ${color_bitdepth_mpd_output}> %8s${std}" \
-" " "Bit depth (bit)" "${main_file_bitdepth}" "${main_mpd_bitdepth}" "${main_output_bitdepth}")"
+" " "${label_bitdepth}" "${main_file_bitdepth}" "${main_mpd_bitdepth}" "${main_output_bitdepth}")"
     msg_samplerate="$(printf "%-11s %-18s: %8s  ${color_samplerate_file_mpd}> %8s${std}  ${color_samplerate_mpd_output}> %8s${std}" \
-" " "Sample rate (Hz)" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
+" " "${label_samplerate}" "${main_file_samplerate}" "${main_mpd_samplerate}" "${main_output_samplerate}")"
 
     msg_tracktitle="${bold}${white}${main_playing_tracktitle}${std}"
     msg_trackartist="${blue}${main_playing_trackartist}${std}"
     msg_tracknumber="$(printf "%-4s of %-3s" "#${bold}${blue}${main_rt_tracknumber_playlist}${std}" "${main_rt_playlistlength}")"
     msg_nowplaying="${msg_tracknumber}: ${msg_tracktitle}"
-    msg_byline="$(printf "%-11s-- by %s" " " "${msg_trackartist}")"
+    msg_byline="$(printf "%-11sby %s" " " "${msg_trackartist}")"
     msg_albumline="$(printf "%-11strack %s from album %s" \
 " " "${bold}${main_rt_tracknumber_album}${std}" "${bold}${blue}${main_playing_trackalbumname}${std}")"
     msg_playingtime="$(printf "%-13s   playing %s from %s (%s)" \
 " " "${bold}${std}${main_playing_trackplayingtime}${std}" "${main_playing_trackduration}" "${main_playing_trackplayingpercentage}")"
 
     echo -en "\
+${msg_playingtime}
 ${msg_nowplaying}
 ${msg_albumline}
 ${msg_byline}
@@ -647,12 +655,16 @@ function ret_mpd_now() {
 
     IFS=: read time_elapsed_rounded time_tracktotal <<< "${mpd_vals[${prefix}_time]}"
     mpd_vals["rt_time_tracktotal"]="${time_tracktotal}"
-    
-    # for k in "${!mpd_vals[@]}"; do
-    #  	if [[ "${k}" =~ ^rt ]]; then
-    #  	    printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
-    #  	fi
-    # done
+    #mpd_val rt_time_tracktotal: '223'
+    #mpd_val rt_raw_time: '53:223'
+    #mpd_val rt_raw_elapsed: '52.911'
+    #mpd_val rt_raw_duration: '223.168'
+
+    for k in "${!mpd_vals[@]}"; do
+     	if [[ "${k}" =~ ^rt ]]; then
+     	    printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
+     	fi
+    done
 }
 
 function ret_mpc_info() {
@@ -835,6 +847,13 @@ declare -A soxi_vals
 
 ## input | nfs://srv/media/music/.../track11.aiff
 ##       | AIFF (Little Endian) PCM in 24bit/192kHz  @ 4.503bit/s
+label_input="Storage"
+label_throughput="MPD"
+label_output="DAC"
+label_samplerate="Sample rate (Hz)"
+label_bitdepth="Bit depth (bit)"
+label_bitrate="Bit rate (kbit/s)"
+
 main_file_bitdepth=
 main_file_bitrate=
 main_file_bitrate_kvalue=
