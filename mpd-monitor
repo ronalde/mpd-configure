@@ -563,6 +563,7 @@ function get_info() {
     msg_filesize="$(printf "%-12s: %-13s (%s)" \
 "File size" "${main_file_sizebytes} bytes" "${main_file_sizehbytes}")"
 
+    ## determine if playback is bit perfect
     color_bitdepth_file_mpd="${red}"
     color_bitdepth_mpd_output="${red}"
     if [[ ${main_mpd_bitdepth} -ge ${main_file_bitdepth} ]]; then
@@ -579,7 +580,7 @@ function get_info() {
 	    color_samplerate_mpd_output="${green}"
 	fi
     fi
-    
+    declare -p color_sample_rate_file_mpd color_samplerate_mpd_output 1>&2
     
     msg_header="$(printf "%-11s %-18s  ${white}%8s${std}  > ${white}%8s${std}  > ${white}%8s${std}" " " " " "File" "MPD" "DAC")"
     msg_bitrate="$(printf "%-11s %-18s: ${dim}${white}%8s${std}  > ${white}%8s${std}  > ${dim}${white}%8s${std}" \
