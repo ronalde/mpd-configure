@@ -465,7 +465,7 @@ function soxi_filesize_to_bytes() {
 function alsa_format_outputencoding() {
 
     alsa_encoding="$1" # ${alsa_vals[format]}
-    encoding_re="([SU])([0-9]+)_([LB]E)"
+    encoding_re="([SU])([0-9]+)_([0-3][LB]E)"
     if [[ "${alsa_encoding}" =~ ${encoding_re} ]]; then 
 	signedness="${BASH_REMATCH[1]}"
 	bitdepth="${BASH_REMATCH[2]}"
@@ -476,8 +476,8 @@ function alsa_format_outputencoding() {
 	    S) alsa_encoding[signedness]="signed" ;;
 	esac
 	case "${endianness}" in
-	    LE) alsa_encoding[endianness]="little endian" ;;
-	    BE) alsa_encoding[endianness]="big endian" ;;
+	    *LE) alsa_encoding[endianness]="little endian" ;;
+	    *BE) alsa_encoding[endianness]="big endian" ;;
 	esac
     else
 	printf "ANOMALITY in %s: alsa_encoding '%s' does not match regex.\n" \
