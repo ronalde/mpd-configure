@@ -661,7 +661,7 @@ function ret_mpd_now() {
     #mpd_val rt_raw_duration: '223.168'
 
     for k in "${!mpd_vals[@]}"; do
-     	if [[ "${k}" =~ ^rt ]]; then
+     	if [[ "${k}" =~ ^rt.*time.* ]]; then
      	    printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
      	fi
     done
