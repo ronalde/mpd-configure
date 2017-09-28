@@ -446,15 +446,9 @@ function soxi_filesize_to_bytes() {
     fi
     unit="${soxi_filesize:$(( ${#soxi_filesize} -1 )):1}"
     size="${soxi_filesize:0:-1}"
-    int="${size%%.*}"
-    dec="${size##*.}"
-    bsize="$(printf "%d%03d" "${int}" "${dec}")"
-    fsize="$(LANG=C printf "%1.3f" "${size}")"
-    nsize="$(si_to_bytes ${soxi_filesize})"
-    [[ ${DEBUG} ]] && declare -p unit nsize soxi_filesize size int dec fsize bsize 1>&2
     case "${unit}" in
-	G) value="$(( size * 1000000 ))" ;;
-	M) value="$(( size * 1000 ))" ;;
+	G) value="$(echo "${size} * 1000000" | bc)" ;;
+	M) value="$(echo "${size} * 1000" | bc)" ;;
 	K) value="${size}" ;;
 	*) printf 1>&2 \
 			 "unknown unit '%s' in soxi reported file size ('%s')" \
@@ -578,7 +572,7 @@ function get_info() {
 	fi
     fi
     color_sample_rate_file_mpd="${red}"
-    color_sample_rate_mpd_output="${red}1"
+    color_sample_rate_mpd_output="${red}"
     if [[ ${main_mpd_samplerate} -ge ${main_file_samplerate} ]]; then
 	color_samplerate_file_mpd="${green}"
 	if [[ ${main_output_samplerate} -ge ${main_mpd_samplerate} ]]; then
