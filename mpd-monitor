@@ -42,6 +42,7 @@ arg_mpd_host=""
 arg_mpd_port=""
 arg_ssh_user=""
 arg_mpd_music_dir=""
+arg_mpd_password=""
 
 function display_usageinfo() {
 
@@ -170,15 +171,41 @@ function die() {
     exit 1
 }
 
-function human_bytes() {
+function si_to_bytes() {
+    ## see: http://www.pixelbeat.org/docs/numfmt.html
+    si_size="$1"
+    bytes=""
+    if [[ "${cmd_numfmt}x" != "x" ]]; then 
+	bytes="$(LC_ALL=nonexisting ${cmd_numfmt} --from=si ${si_size} 2>/dev/null)"
+    fi
+    if [[ "${bytes}x" == "x" ]]; then
+	## no numfmt or numfmt < 8.21
+	echo TODO 1>&2
+	si_unit="${si_size:$(( ${#si_size} -1 )):1}"
+	bsize="${si_size:0:-1}"
+	int="${bsize%%.*}"
+	dec="${bsize##*.}"
+#	case si_unit in
+	    
+
+    fi
+    printf "%s" "${bytes}"
+}
+
+function bytes_to_si() {
+    ## see: http://www.pixelbeat.org/docs/numfmt.html
     ## return the human notation for the number of bytes specified in $1.
     ## strip decimals from input
-    bytes="${1%%.*}"
-    if [[ "${bytes}x" == "x" ]]; then
-	printf "%s" "0"
-    else
-	numfmt --to=iec-i --suffix=B --format="%.1f" "${bytes}"
+    bytes="${1}"
+    si_size=""
+    if [[ "${cmd_numfmt}x" != "x" ]]; then 
+	#bytes="$(LC_ALL=nonexisting numfmt --from=si ${si_size})"
+	si_size="$(LC_ALL=nonexisting ${cmd_numfmt} --to=iec-i --suffix=B --format="%.1f" "${bytes}"  2>/dev/null)"
     fi
+    if [[ "${si_size}x" == "x" ]]; then
+	echo TODO 1>&2 
+    fi
+    printf "%s" "${si_size}"
 }
 
 
@@ -208,6 +235,7 @@ function check_commands() {
     cmd_exiftool=$(type -p exiftool) || err+=("exiftool")
     cmd_netcat=$(type -p nc) || err+=("netcat (nc)")
     cmd_bc=$(type -p bc) || err+=("bc")
+    cmd_numfmt=$(type -p numfmt)
     if [[ ${#err[@]} -gt 0 ]]; then
 	printf 1>&2 "required command \`%s' ${msg}\n" "${err[@]}"
 	return 1
@@ -234,7 +262,7 @@ function filter_soxi_duration() {
     ## expects: hh:mm:ss.xxx where xxx are the subseconds (milliseconds?)
     duration_fields=($1)
     IFS=":" read hours minutes seconds subseconds <<<"${duration_fields[0]//./:}"
-    minutes=$(echo "${minutes} + ( ${hours} * 60 )" | ${cmd_bc})
+    minutes=$(( minutes + ( hours * 60 ) ))
     printf "%s:%s" "${minutes}" "${seconds}"
 }
 
@@ -415,14 +443,21 @@ function soxi_filesize_to_bytes() {
     soxi_filesize="$1" # ${soxi_vals[FileSize]}
     unit="${soxi_filesize:$(( ${#soxi_filesize} -1 )):1}"
     size="${soxi_filesize:0:-1}"
+    int="${size%%.*}"
+    dec="${size##*.}"
+    bsize="$( printf "%d%03d" "${int}" "${dec}")"
+    fsize="$(printf "%1.3f" "${size}")"
+    nsize="$(si_to_bytes ${soxi_filesize})"
+    declare -p nsize soxi_filesize size int dec fsize bsize 1>&2
     case "${unit}" in
-	G) value="$(echo "scale=0; ${size} * 1000000" | bc)" ;;
-	M) value="$(echo "scale=0; ${size} * 1000" | bc)" ;;
+	G) value="$(( size * 1000000 ))" ;;
+	M) value="$(( size * 1000 ))" ;;
 	K) value="${size}" ;;
 	*) printf 1>&2 \
-			 "ANOMALITY: unknown unit '%s' in soxi reported file size ('%s')" \
+			 "unknown unit '%s' in soxi reported file size ('%s')" \
 		       "${unit}" "${soxi_filesize}"
 	   return 1
+	   ;;
     esac
     printf "%s" "${value}"
 }
@@ -498,8 +533,12 @@ function get_info() {
     main_file_bitrate_value="${main_file_bitrate_raw:0:-1}"
     main_file_bitrate_unit="${main_file_bitrate_raw:$(( ${#main_file_bitrate_raw} - 1 )):1}"
     main_file_bitrate_kvalue=
-    if [[ "${main_file_bitrate_unit}x" == "Mx" ]]; then 
-	main_file_bitrate_kvalue="$(echo "${main_file_bitrate_value} * 1000" | bc)"
+    if [[ "${main_file_bitrate_unit}x" == "Mx" ]]; then
+	int="${main_file_bitrate_value%%.*}"
+	dec="${main_file_bitrate_value##*.}"
+	## TODO
+	declare -p main_file_bitrate_value int dec 1>&2
+	main_file_bitrate_kvalue="$(echo ${main_file_bitrate_value} * 1000 | bc)"
     else
 	main_file_bitrate_kvalue="${main_file_bitrate_value}"
     fi
@@ -522,7 +561,7 @@ function get_info() {
     main_mpd_samplerate="${mpd_vals[rt_audio_samplerate]}"
     main_mpd_bitrate="${mpd_vals[rt_audio_bitrate]}"
 
-    main_file_sizehbytes="$(human_bytes "${main_file_sizebytes}")"
+    main_file_sizehbytes="$(bytes_to_si "${main_file_sizebytes}")"
     msg_filesize="$(printf "%-12s: %-13s (%s)" \
 "File size" "${main_file_sizebytes} bytes" "${main_file_sizehbytes}")"
 
@@ -689,6 +728,7 @@ function ret_exif_info() {
 function get_hwparams() {
     alsa_card_no="$1"
     alsa_dev_no="$2"
+    [[ ! -z ${DEBUG} ]] && declare -p alsa_card_no alsa_dev_no 1>&2
     hwparams_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
     if [[ -f "${hwparams_file}" ]]; then
 	## return the contents of the file
@@ -704,8 +744,8 @@ function ret_alsa_info() {
     ## TODO: fix handling of mpd output(s)
     ## expects "hw:x,y"
     alsa_hw="${1//hw:/}"
-    alsa_card_no="${alsa_hw##*,}"
-    alsa_dev_no="${alsa_hw%%,*}"
+    alsa_dev_no="${alsa_hw##*,}"
+    alsa_card_no="${alsa_hw%%,*}"
     alsa_ssh_userhost="${alsa_ssh_userhost:-}"
     [[ ${DEBUG} ]] && \
 	declare -p alsa_hw alsa_card_no alsa_dev_no alsa_ssh_userhost
