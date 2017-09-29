@@ -44,6 +44,10 @@ arg_ssh_user=""
 arg_mpd_music_dir=""
 arg_mpd_password=""
 
+#PS4='+ $(date "+%s.%N")\011 '
+#exec 3>&2 2>/tmp/bashstart.$$.log
+#set -x
+
 function display_usageinfo() {
 
     msg_usage="\
@@ -81,7 +85,7 @@ function analyze_command_line() {
     ## described in http://mywiki.wooledge.org/BashFAQ/035.
     while :; do
         case "${1:-}" in
-            -m|--mpd-host)
+            -h|--mpd-host)
 		if [[ "${2}x" == "x" ]]; then
 		    die "argument \`$1' requires the dns host name or ip address for the host running mpd."
 		else
@@ -119,7 +123,7 @@ function analyze_command_line() {
                     continue
 		fi
 		;;
-	    -h|-\?|--help)
+	    -\?|--help)
 		display_usageinfo
 		exit
 		;;
@@ -171,27 +175,6 @@ function die() {
     exit 1
 }
 
-function si_to_bytes() {
-    ## see: http://www.pixelbeat.org/docs/numfmt.html
-    si_size="$1"
-    bytes=""
-    if [[ "${cmd_numfmt}x" != "x" ]]; then 
-	bytes="$(LC_ALL=nonexisting ${cmd_numfmt} --from=si ${si_size} 2>/dev/null)"
-    fi
-    if [[ "${bytes}x" == "x" ]]; then
-	## no numfmt or numfmt < 8.21
-	echo "${FUNCNAME} TODO" 1>&2
-	si_unit="${si_size:$(( ${#si_size} -1 )):1}"
-	bsize="${si_size:0:-1}"
-	int="${bsize%%.*}"
-	dec="${bsize##*.}"
-#	case si_unit in
-	    
-
-    fi
-    printf "%s" "${bytes}"
-}
-
 function bytes_to_si() {
     ## see: http://www.pixelbeat.org/docs/numfmt.html
     ## return the human notation for the number of bytes specified in $1.
@@ -203,7 +186,8 @@ function bytes_to_si() {
 	si_size="$(LC_ALL=nonexisting ${cmd_numfmt} --to=iec-i --suffix=B --format="%.1f" "${bytes}"  2>/dev/null)"
     fi
     if [[ "${si_size}x" == "x" ]]; then
-	echo TODO 1>&2 
+	echo TODO 1>&2
+	return 1
     fi
     printf "%s" "${si_size}"
 }
@@ -262,7 +246,7 @@ function filter_soxi_duration() {
     ## expects: hh:mm:ss.xxx where xxx are the subseconds (milliseconds?)
     duration_fields=($1)
     IFS=":" read hours minutes seconds subseconds <<<"${duration_fields[0]//./:}"
-    minutes=$(echo "${minutes} + ( ${hours} * 60 )"| bc)
+    minutes=$(${cmd_bc} <<< "${minutes} + ( ${hours} * 60 )")
     printf "%s:%s" "${minutes}" "${seconds}"
 }
 
@@ -314,9 +298,9 @@ function ret_mpdconf_default() {
 function ret_mpdconf_path() {
     ## returns the name of the mpd.conf file in use by mpd (either
     ## local or remote)
-    ## all possible mpd command line arguments
     ## the command mpd itself (including a possible path) gets
     ## stripped before
+    ## all possible mpd command line arguments
     mpd_args=(--no-config)    
     mpd_args+=(--no-daemon)
     mpd_args+=(-v)
@@ -329,12 +313,13 @@ function ret_mpdconf_path() {
     for arg in ${mpd_args[@]}; do
 	mpd_rest_args=(${mpd_rest_args[@]//${arg}})
     done
+    declare -p mpd_args mpd_real_args mpd_rest_args 1>&2
     mpd_conf_file="${mpd_rest_args[0]}"
     if [[ "${mpd_conf_file}x" == "x" ]]; then
 	[[ ${DEBUG} ]] && \
 	    printf 1>&2 "no conffile specified on mpd command line, \
 test default locations\n"
-	run_func ret_mpdconf_default
+	run_func ret_mpdconf_default || return 1
     else
 	printf "%s" "${mpd_conf_file}"
     fi
@@ -342,15 +327,18 @@ test default locations\n"
 
 function get_mpdconf_contents() {
     mpdconf_path="$1"
-    run_func ret_mpdconf_contents "${mpdconf_path}"
+    run_func ret_mpdconf_contents "${mpdconf_path}"  || return 1
 }
 
 
 function get_mpd_alsa_outputs() {
-    ## TODO
+    ## query the (local or remote) mpd configuration file for alsa audio outputs.
+    ## returns newline separated list of alsa output devices
+    ## TODO; handle multiple outputs
     #    while read -r line; do
     #    done< <(ssh ${alsa_ssh_userhost} -- "cat /ec/mpd.conf")
     mpdconf_path=$(ret_mpdconf_path)
+    [[ ${DEBUG} ]] && printf 1>&2 "%s: mpdconf_path=\`%s'\n" "${FUNCNAME}" "${mpdconf_path}"
     #mpdconf_contents="$(get_mpdconf_contents "${mpdconf_path}")"
     #declare -p mpdconf_path mpdconf_contents 1>&2
     start_audio_output_re="^[[:space:]]*audio_output[[:space:]]*\{"
@@ -398,66 +386,33 @@ function get_mpd_alsa_outputs() {
 	    fi
 	fi
     done< <(get_mpdconf_contents "${mpdconf_path}")
-    # declare -p audio_outputs devices 1>&2
+    declare -p audio_outputs devices 1>&2
     ## TODO: handle multiple devices
-    for device in ${devices[0]}; do
-	#printf 1>&2 "alsa device: "
-	printf "%s" "${device}"
-	#printf 1>&2 "\n"
+    for device in ${devices[@]}; do
+	printf "%s\n" "${device}"
     done
 }
 
 function fill_arrays() {
     ret_mpc_info || return 1
     #ret_mpc_now
-    ret_mpd_now
+    ret_mpd_now || return 1
     ret_exif_info "${mpc_vals[file]}"
     ret_soxi_info "${mpc_vals[file]}"
     ## TODO get right card and interface numbers
-    alsa_hw="$(get_mpd_alsa_outputs)"
-    [[ ${DEBUG} ]] && declare -p alsa_hw 1>&2
-    ret_alsa_info "${alsa_hw}"
+    alsa_outputs=("$(get_mpd_alsa_outputs)")
+    [[ ${DEBUG} ]] && declare -p alsa_outputs 1>&2
+    #for output in ${alsa_outputs[0]}; do
+#	ret_alsa_info "${output}"
+ #   done
+    for output in ${alsa_outputs[@]}; do
+    	ret_alsa_info "${output}"
+    done
     #[[ "${exif_vals[*]}x" == "x" ]] || ret_exif_info "${mpc_vals[file]}"
     #[[ "${soxi_vals[*]}x" == "x" ]] || ret_soxi_info "${mpc_vals[file]}"
     #[[ "${alsa_vals[*]}x" == "x" ]] || ret_alsa_info "1" "0" "root@sonida"
 }
     
-function info_to_csv() {
-    fill_arrays
-    
-    for f in "${!mpc_vals[@]}"; do
-	printf '"%s";"%s";"%s";\n' "mpc" "${f}" "${mpc_vals[${f}]}"
-    done
-    for f in "${!soxi_vals[@]}"; do
-	printf '"%s";"%s";"%s";\n' "soxi" "${f}" "${soxi_vals[${f}]}"
-    done
-    for f in "${!exif_vals[@]}"; do
-	printf '"%s";"%s";"%s";\n' "exif" "${f}" "${exif_vals[${f}]}"
-    done
-    for f in "${!alsa_vals[@]}"; do
-	printf '"%s";"%s";"%s";\n' "alsa" "${f}" "${alsa_vals[${f}]}"
-    done
-    
-}
-function soxi_filesize_to_bytes() {
-    soxi_filesize="$1" # ${soxi_vals[FileSize]}
-    if [[ ${#soxi_filesize} -lt 2 ]]; then
-	return 1
-    fi
-    unit="${soxi_filesize:$(( ${#soxi_filesize} -1 )):1}"
-    size="${soxi_filesize:0:-1}"
-    case "${unit}" in
-	G) value="$(echo "${size} * 1000000" | bc)" ;;
-	M) value="$(echo "${size} * 1000" | bc)" ;;
-	K) value="${size}" ;;
-	*) printf 1>&2 \
-			 "unknown unit '%s' in soxi reported file size ('%s')" \
-		       "${unit}" "${soxi_filesize}"
-	   return 1
-	   ;;
-    esac
-    printf "%s" "${value}"
-}
 
 function alsa_format_outputencoding() {
     ## extract alsa output encoding format and store in appropriate array.
@@ -547,7 +502,7 @@ function get_info() {
 	dec="${main_file_bitrate_value##*.}"
 	## TODO
 	[[ ${DEBUG} ]] && declare -p main_file_bitrate_value int dec 1>&2
-	main_file_bitrate_kvalue=$(echo "${main_file_bitrate_value} * 1000" | bc)
+	main_file_bitrate_kvalue=$(bc <<< "${main_file_bitrate_value} * 1000")
     else
 	main_file_bitrate_kvalue="${main_file_bitrate_value}"
     fi
@@ -647,7 +602,7 @@ function ret_mpd_now() {
 	netcat_args=(--close)	
     fi
     ## get realtime mpd status using netcat
-    mpd_status="$(echo "status" | ${cmd_netcat} ${netcat_args[@]} ${mpd_host} ${mpd_port})"
+    mpd_status="$(${cmd_netcat} ${netcat_args[@]} ${mpd_host} ${mpd_port} <<<  "status")"
     [[ ${DEBUG} ]] && \
 	declare -p mpd_status 1>&2
     linecounter=1
@@ -783,6 +738,8 @@ function ret_alsa_info() {
     alsa_dev_no="${alsa_hw##*,}"
     alsa_card_no="${alsa_hw%%,*}"
     alsa_ssh_userhost="${alsa_ssh_userhost:-}"
+    unset mpd_outputs
+    declare -a mpd_outputs
     [[ ${DEBUG} ]] && \
 	declare -p alsa_hw alsa_card_no alsa_dev_no alsa_ssh_userhost
     declare -a mpc_args
@@ -842,6 +799,7 @@ function terminal_size() { # Calculate the size of the terminal
 
 
 function main_loop() {
+    ## unused
     mpc_args=(-h "${mpd_host}")
     counter=0
     while : ; do
@@ -939,3 +897,6 @@ done
 ## own shell call function `analyze_commandline_args'
 [[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || \
     get_info "$@"
+
+#set +x
+#exec 2>&3 3>&-
