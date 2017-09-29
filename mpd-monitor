@@ -460,9 +460,9 @@ function soxi_filesize_to_bytes() {
 }
 
 function alsa_format_outputencoding() {
-
+    ## extract alsa output encoding format and store in appropriate array.
     alsa_encoding="$1" # ${alsa_vals[format]}
-    encoding_re="([SU])([0-9]+)_([0-3][LB]E)"
+    encoding_re="([SU])([0-9]+)_([0-3]*[LB]E)"
     if [[ "${alsa_encoding}" =~ ${encoding_re} ]]; then 
 	signedness="${BASH_REMATCH[1]}"
 	bitdepth="${BASH_REMATCH[2]}"
@@ -558,6 +558,7 @@ function get_info() {
     #declare -p alsa_vals 1>&2
     main_output_samplerate_raw=(${alsa_vals[rate]})
     main_output_samplerate="${main_output_samplerate_raw[0]}"
+    ## get and store alsa output encoding
     alsa_format_outputencoding "${alsa_vals[format]}"
     main_output_bitdepth="${alsa_encoding[bitdepth]}"
     main_output_sampleencoding="${alsa_encoding[bitdepth]} bit (${alsa_encoding[signedness]} ${alsa_encoding[endianness]})"
@@ -622,6 +623,17 @@ ${msg_filesize}
 \r"
 }
 
+function ret_formatted_time() {
+    ## returns formatted time (hh:mm:ss) from number of seconds ($1)
+    ## https://stackoverflow.com/questions/12199631/convert-seconds-to-hours-minutes-seconds
+    nr_seconds="${1}"
+    hours=$(bc <<< "${nr_seconds}/3600")
+    minutes=$(bc <<< "(${nr_seconds}%3600)/60")
+    seconds=$(bc <<< "${nr_seconds}%60")
+    printf "%02d:%02d:%02d" \
+	   "${hours}" "${minutes}" "${seconds}"
+}
+
 function ret_mpd_now() {
     ## echo status command to mpd host on mpd port using netcat, to
     ## fill mpc_vals array with rt_ fields
@@ -634,12 +646,15 @@ function ret_mpd_now() {
     else
 	netcat_args=(--close)	
     fi
+    ## get realtime mpd status using netcat
     mpd_status="$(echo "status" | ${cmd_netcat} ${netcat_args[@]} ${mpd_host} ${mpd_port})"
     [[ ${DEBUG} ]] && \
 	declare -p mpd_status 1>&2
     linecounter=1
     prefix="rt_raw"
     key_val_re="^([^\:]+):[[:space:]]+(.*)"
+    ## store each line in an associative array, by splitting the mpc
+    ## output lines (paramater:value)
     while read -r line; do
 	if [[ "${line}" =~ ${key_val_re} ]]; then
 	    field="${BASH_REMATCH[1]}"
@@ -647,21 +662,31 @@ function ret_mpd_now() {
 	    mpd_vals["${prefix}_${field}"]="${value}"
 	fi
     done<<<"${mpd_status}"
+    ## store the double colon separated values
+    ## (samplerate:bitdepth:channelcount, eg. 48000:24:2) of the
+    ## audiofield in separate variables and an array
     IFS=: read audio_samplerate audio_bitdepth audio_channelcount <<< "${mpd_vals[${prefix}_audio]}"
     mpd_vals["rt_audio_samplerate"]="${audio_samplerate}"
     mpd_vals["rt_audio_bitdepth"]="${audio_bitdepth}"
     mpd_vals["rt_audio_channelcount"]="${audio_channelcount}"
     mpd_vals["rt_audio_bitrate"]="${mpd_vals[${prefix}_bitrate]}"
 
-    IFS=: read time_elapsed_rounded time_tracktotal <<< "${mpd_vals[${prefix}_time]}"
-    mpd_vals["rt_time_tracktotal"]="${time_tracktotal}"
+    ## store the (elapsed) playing time value (seconds:frames,
+    ## eg. 20:123) in separate variables and an array
+    IFS=: read time_elapsed_seconds time_duration_seconds <<< "${mpd_vals[${prefix}_time]}"
+    mpd_vals["rt_time_elapsed_seconds"]="${time_elapsed_seconds}"
+    mpd_vals["rt_time_duration_seconds"]="${time_duration_seconds}"
+    mpd_vals["rt_time_elapsed_formatted"]="$(ret_formatted_time "${time_elapsed_seconds}")"
+    mpd_vals["rt_time_duration_formatted"]="$(ret_formatted_time "${time_duration_seconds}")"
+    #mpd_vals["rt_time_tracktotal"]="${mpd_vals[${prefix}_tracktotal]}"
+    ## old
     #mpd_val rt_time_tracktotal: '223'
     #mpd_val rt_raw_time: '53:223'
     #mpd_val rt_raw_elapsed: '52.911'
     #mpd_val rt_raw_duration: '223.168'
 
     for k in "${!mpd_vals[@]}"; do
-     	if [[ "${k}" =~ ^rt.*time.* ]]; then
+     	if [[ "${k}" =~ ^rt ]]; then
      	    printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
      	fi
     done
