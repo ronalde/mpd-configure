@@ -179,6 +179,85 @@ Usage:
 bash alsa-capabilities -s
 ```
 
+### alsa-capabilities: Usage with web services using json
+
+By using the `-j` (or `--json`) argument, the output of the script is
+valid json for easy parsing by web services.
+
+* Example *without* the `-s` (`--samplerates`) argument:
+
+```json
+{
+      "alsa_outputdevices": [ 
+         {
+      "id": 1,
+      "hwaddr": "hw:0,0",
+      "description": "Analog alsa audio output interface",
+      "cardnumber": 0,
+      "interfacenumber": 0,
+      "cardname": "HDA Intel PCH",
+      "interfacename": "ALC887-VD Analog",
+      "chardev": "/dev/snd/pcmC0D0p",
+      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
+      "streamfile": "(n/a)",
+      "usbaudioclass": "(n/a)",
+      "encoding_formats": [
+		"bycommand`/usr/bin/pulseaudio--daemonize=no'withPID5075."
+	] 
+     },
+
+  ]
+}
+```
+
+* Example json output *with* the `-s` (`--samplerates`) argument:
+
+```json
+{
+      "alsa_outputdevices": [ 
+         {
+      "id": 1,
+      "hwaddr": "hw:0,0",
+      "description": "Analog alsa audio output interface",
+      "cardnumber": 0,
+      "interfacenumber": 0,
+      "cardname": "HDA Intel PCH",
+      "interfacename": "ALC887-VD Analog",
+      "chardev": "/dev/snd/pcmC0D0p",
+      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
+      "streamfile": "(n/a)",
+      "usbaudioclass": "(n/a)",
+      "encoding_formats": [
+		{
+"format":"S16_LE",
+"samplerates":[
+		"44.1",
+		"48",
+		"88.2",
+		"96",
+		"176.4",
+		"192"
+]
+},
+		{
+"format":"S32_LE",
+"samplerates":[
+		"44.1",
+		"48",
+		"88.2",
+		"96",
+		"176.4",
+		"192"
+]
+}
+	] 
+     },
+
+  ]
+}
+```
+
+
 About the mpd-monitor helper script
 -----------------------------------
 
@@ -278,86 +357,6 @@ the service file systemd makes sure mpd-configure is run before mpd is
 started, and tries to start mpd.
 
 - See: [./examples/systemd_mpd-configure.service](./examples/systemd_mpd-configure.service)
-
-### Usage with web services using json
-
-By using the `-j` (or `--json`) argument, the output of the script is
-valid json for easy parsing by web services.
-
-* Example *without* the `-s` (`--samplerates`) argument:
-
-```json
-{
-      "alsa_outputdevices": [ 
-         {
-      "id": 1,
-      "hwaddr": "hw:0,0",
-      "description": "Analog alsa audio output interface",
-      "cardnumber": 0,
-      "interfacenumber": 0,
-      "cardname": "HDA Intel PCH",
-      "interfacename": "ALC887-VD Analog",
-      "chardev": "/dev/snd/pcmC0D0p",
-      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
-      "streamfile": "(n/a)",
-      "usbaudioclass": "(n/a)",
-      "encoding_formats": [
-		"bycommand`/usr/bin/pulseaudio--daemonize=no'withPID5075."
-	] 
-     },
-
-  ]
-}
-```
-
-* Example json output *with* the `-s` (`--samplerates`) argument:
-
-```json
-{
-      "alsa_outputdevices": [ 
-         {
-      "id": 1,
-      "hwaddr": "hw:0,0",
-      "description": "Analog alsa audio output interface",
-      "cardnumber": 0,
-      "interfacenumber": 0,
-      "cardname": "HDA Intel PCH",
-      "interfacename": "ALC887-VD Analog",
-      "chardev": "/dev/snd/pcmC0D0p",
-      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
-      "streamfile": "(n/a)",
-      "usbaudioclass": "(n/a)",
-      "encoding_formats": [
-		{
-"format":"S16_LE",
-"samplerates":[
-		"44.1",
-		"48",
-		"88.2",
-		"96",
-		"176.4",
-		"192"
-]
-},
-		{
-"format":"S32_LE",
-"samplerates":[
-		"44.1",
-		"48",
-		"88.2",
-		"96",
-		"176.4",
-		"192"
-]
-}
-	] 
-     },
-
-  ]
-}
-```
-
-
 
 
 ### Usage from within another bash or sh script
