@@ -231,8 +231,8 @@ valid json for easy parsing by web services.
 
 ```json
 {
-      "alsa_outputdevices": [ 
-         {
+  "alsa_outputdevices": [
+    {
       "id": 1,
       "hwaddr": "hw:0,0",
       "description": "Analog alsa audio output interface",
@@ -245,31 +245,30 @@ valid json for easy parsing by web services.
       "streamfile": "(n/a)",
       "usbaudioclass": "(n/a)",
       "encoding_formats": [
-		{
-"format":"S16_LE",
-"samplerates":[
-		"44.1",
-		"48",
-		"88.2",
-		"96",
-		"176.4",
-		"192"
-]
-},
-		{
-"format":"S32_LE",
-"samplerates":[
-		"44.1",
-		"48",
-		"88.2",
-		"96",
-		"176.4",
-		"192"
-]
-}
-	] 
-     },
-
+        {
+          "format": "S16_LE",
+          "samplerates": [
+            "44.1",
+            "48",
+            "88.2",
+            "96",
+            "176.4",
+            "192"
+          ]
+        },
+        {
+          "format": "S32_LE",
+          "samplerates": [
+            "44.1",
+            "48",
+            "88.2",
+            "96",
+            "176.4",
+            "192"
+          ]
+        }
+      ]
+    }
   ]
 }
 ```
