@@ -187,28 +187,44 @@ valid json for easy parsing by web services.
 * Example *without* the `-s` (`--samplerates`) argument:
 
 ```json
-{
-      "alsa_outputdevices": [ 
-         {
-      "id": 1,
-      "hwaddr": "hw:0,0",
-      "description": "Analog alsa audio output interface",
-      "cardnumber": 0,
-      "interfacenumber": 0,
-      "cardname": "HDA Intel PCH",
-      "interfacename": "ALC887-VD Analog",
-      "chardev": "/dev/snd/pcmC0D0p",
-      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
-      "streamfile": "(n/a)",
-      "usbaudioclass": "(n/a)",
-      "encoding_formats": [
-		"S16_LE",
-		"S32_LE"
-	] 
-     },
-
-  ]
-}
+[
+  {
+    "id": 1,
+    "hwaddr": "hw:0,3",
+    "description": "Digital alsa audio output interface",
+    "cardnumber": 0,
+    "interfacenumber": 3,
+    "cardname": "HDA Intel PCH",
+    "interfacename": "HDMI 0",
+    "chardev": "/dev/snd/pcmC0D3p",
+    "monitorfile": "/proc/asound/card0/pcm3p/sub0/hw_params",
+    "streamfile": "(n/a)",
+    "usbaudioclass": "(n/a)",
+    "encoding_formats": [
+      "S16_LE",
+      "S32_LE",
+      "IEC958_SUBFRAME_LE"
+    ]
+  },
+  {
+    "id": 2,
+    "hwaddr": "hw:0,7",
+    "description": "Digital alsa audio output interface",
+    "cardnumber": 0,
+    "interfacenumber": 7,
+    "cardname": "HDA Intel PCH",
+    "interfacename": "HDMI 1",
+    "chardev": "/dev/snd/pcmC0D7p",
+    "monitorfile": "/proc/asound/card0/pcm7p/sub0/hw_params",
+    "streamfile": "(n/a)",
+    "usbaudioclass": "(n/a)",
+    "encoding_formats": [
+      "S16_LE",
+      "S32_LE",
+      "IEC958_SUBFRAME_LE"
+    ]
+  }
+]
 ```
 
 * Example json output *with* the `-s` (`--samplerates`) argument:
