@@ -474,7 +474,6 @@ function fetch_alsa_outputinterfaces() {
 		die "${mg_err}"
 		break
 	    fi
-
 	    if [[ ${DEBUG} ]] && [[ "${#errors[@]}" -ne 0 ]]; then
 		debug "(${LINENO}): $(printf "errors: %s\n" "${errors[@]}")"
 	    fi
@@ -621,10 +620,11 @@ ${MSG_ERROR_UNEXPECTED}"
 		alsa_dev_label="${alsa_dev_label//##\*/\]}"
 	    fi
 	    ## construct the display title
-	    alsa_if_display_title=$(printf " %s) %s \`%s'" \
-					   "${#ALSA_AIF_HWADDRESSES[@]}" \
-					   "${alsa_if_title_label}" \
-					   "${alsa_if_hwaddress}")
+	    printf -v alsa_if_display_title \
+		   " %s) %s \`%s'" \
+		   "${#ALSA_AIF_HWADDRESSES[@]}" \
+		   "${alsa_if_title_label}" \
+		   "${alsa_if_hwaddress}"
 	    ## store the details of the current interface in global arrays
 	    ALSA_AIF_HWADDRESSES+=("${alsa_if_hwaddress}")
 	    ALSA_AIF_MONITORFILES+=("${alsa_if_monitorfile}")
@@ -773,6 +773,7 @@ function ret_supported_alsa_samplerates() {
     ## returns a space separated list of valid rates.
     alsa_if_hwaddress="$1"
     encoding_format="$2"
+    declare -a rates
     [[ ${DEBUG} ]] && \
 	debug "(${LINENO}): getting sample rates for device \`${alsa_if_hwaddress}' \
 using encoding_format \`${encoding_format}'."    
@@ -780,20 +781,23 @@ using encoding_format \`${encoding_format}'."
     ## supported while adding all the lower frequencies
     highest_audiorate="$(ret_highest_alsa_samplerate \
 "${alsa_if_hwaddress}" "${encoding_format}" "audio")"
+    highest_videorate="$(ret_highest_alsa_samplerate \
+"${alsa_if_hwaddress}" "${encoding_format}" "video")"
     for rate in "${SAMPLERATES_AUDIO[@]}"; do
 	if [[ ${rate} -le ${highest_audiorate} ]]; then
 	    ## supported; assume all lower rates are supported too
-	    printf "%s\n" "${rate}"
+	    rates+=("${rate}")
 	fi		    
     done
-    highest_videorate="$(ret_highest_alsa_samplerate \
-"${alsa_if_hwaddress}" "${encoding_format}" "video")"
     for rate in "${SAMPLERATES_VIDEO[@]}"; do
 	if [[ ${rate} -le ${highest_videorate} ]]; then
 	    ## supported; assume all lower rates are supported too
-	    printf "%s\n" "${rate}"
+	    rates+=("${rate}")
 	fi		    
     done
+    declare -p rates 1>&2
+    ## sort and retrun trhe newline separated sample rates
+    sort -u -n <(printf "%s\n" "${rates[@]}")
 }
 
 function check_samplerate() {
@@ -941,12 +945,11 @@ rate=${uac_formats[${format_found}]} "
 		fi
 	    fi
 	done<"${alsa_if_streamfile}"
-
 	## return the formatted line(s)
 	if [[ "${OPT_SAMPLERATES}x" == "x" ]]; then
 	    ## print comma separated list of formats
 	    # shellcheck disable=SC2068
-	    str_formats="$(printf "%s, " ${!uac_formats[@]})"
+	    printf -v str_formats "%s, " "${!uac_formats[@]}"
 	    printf "%-20s" "${str_formats%*, }"
 	else	    
 	    ## for each format, print "FORMAT: rate1Hz rate2Hz ..."
@@ -955,7 +958,6 @@ rate=${uac_formats[${format_found}]} "
 	 	printf "%-20s %s\n" "${key}:" "${uac_formats[${key}]// /Hz }"
 	    done
 	fi
-
     else
 	## non-uac type: if interface is not locked, use aplay to
 	## determine formats
@@ -987,51 +989,30 @@ device is in use by command ${locking_cmd} with process id ${locking_pid}."
 		    rawformats+=(${BASH_REMATCH[1]})
 		fi
 	    done <<< "${aplay_out}"
-
 	    ## formats (and minimum/maximum sample rates) gathered, check if
 	    ## all sample rates should be checked
-	    if [[ ! -z ${OPT_SAMPLERATES} ]]; then
-		## warning: slowness ahead
-		declare -a sorted_rates
-		rates_supported=($(ret_supported_alsa_samplerates \
-				       "${alsa_if_hwaddress}" "${rawformats[0]}"))
-		res="$?"
-		[[ ${DEBUG} ]] && \
-		    debug "(${LINENO}): ret_supported_alsa_samplerates returned \`${rates_supported[*]}'"
-		# shellcheck disable=SC2181
-		if [[ ${res} -ne 0 ]]; then
-		    return 1
-		fi
-		## sort the items
-		rates=($(printf "%s\n" "${rates_supported[@]}" |sort -u -n))
-		sorted_rates=($(printf "%s " "${rates[@]}"))
-		str_msg="#### sorted_rates returned: "
-		str_msg+="$(printf "%s " "${sorted_rates[@]}")"
-		[[ ${DEBUG} ]] && \
-		    debug "(${LINENO}): ${str_msg}"
-		for rawformat in "${rawformats[@]}"; do
-		    str_rates=
-		    printf "%-20s" "${rawformat}: "
-		    for rate in "${sorted_rates[@]}"; do
-			## pseudo divide by thousand: 44100: int (44) is part
-			## before decimal point, dec (100) is the rest
-			int="${rate:0:$(( ${#rate} -3 ))}"
-			dec="${rate:$(( ${#rate} - 3 )):3}"
-			dec="${dec//00/}"
-			sr="$(printf "%s.%s" "${int}" "${dec}")"
-			str_rates+="${sr//.0} "
-		    done
-		    printf "%s\n" "${str_rates}"
-		done
-	    else
-		## just print the comma separated format
-		str_formats="$(printf "%s, " "${rawformats[@]}")"
+	    if [[ "${OPT_SAMPLERATES}x" == "x" ]]; then
+		## just return the comma separated format(s)
+		printf -v str_formats "%s, " "${rawformats[@]}"
 		printf "%-20s" "${str_formats%*, }"
+	    else		
+		## warning: slowness ahead because of an aplay call
+		## for each sample rate and each format
+		declare -a sorted_rates
+		sorted_rates=(
+		    $(ret_supported_alsa_samplerates \
+			  "${alsa_if_hwaddress}" "${rawformats[0]}")
+		) || return 1
+		## return each format newline separated with a space
+		## separated list of supported sample rates
+		for rawformat in "${rawformats[@]}"; do
+		    printf -v str_format "%-20s" "${rawformat}: "
+		    printf -v str_rates "%s " "${sorted_rates[@]}"
+		    printf "%s: %s\n" "${str_format}" "${str_rates}"
+		done
 	    fi
-
 	fi
     fi
-
 }
 
 
