@@ -136,9 +136,6 @@ audio formats it supports, as well as other properties, like it's
 character device (in `/dev/snd`) and the file to watch or monitor (in
 `/proc/asound`).
 
-With the `-j` (or `--json`) argument the script will produce output in
-json format for easy parsing by machines.
-
 The interfaces returned by the script may be reduced by setting
 prefab or custom filters. These options can be displayed by running
 the script with the `-h` help option, eg:
@@ -179,7 +176,7 @@ Usage:
 bash alsa-capabilities -s
 ```
 
-### Producing json output usinmg alsa-capabilities
+### Producing json output using alsa-capabilities
 
 By using the `-j` (or `--json`) argument, the script supresses normal
 output but prints valid json data insteads for easy parsing by web
