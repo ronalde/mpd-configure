@@ -202,7 +202,8 @@ valid json for easy parsing by web services.
       "streamfile": "(n/a)",
       "usbaudioclass": "(n/a)",
       "encoding_formats": [
-		"bycommand`/usr/bin/pulseaudio--daemonize=no'withPID5075."
+		"S16_LE",
+		"S32_LE"
 	] 
      },
 
