@@ -295,11 +295,11 @@ function print_json_output() {
     ## called by fetch_alsa_outputinterfaces.
     json_cards="$1"
     json='{
-      "alsa_outputdevices": [ 
+    "alsa_outputdevices": [ 
     %s
   ]
 }'
-    printf "${json}\n" "${json_cards}"
+    printf "${json}\n" "${json_cards%,*}"
 }
 
 
@@ -647,10 +647,6 @@ ${MSG_ERROR_UNEXPECTED}"
 		printf -v json_output "%s%s\n" \
 		       "${json_output}" \
 		       "$(ret_json_card "${formats_res[@]}" "")"
-	    else
-		printf -v json_output "%s%s\n" \
-		       "${json_output}" \
-		       "$(ret_json_card "${formats_res[@]}" "last")"
 	    fi
 	fi
     done
