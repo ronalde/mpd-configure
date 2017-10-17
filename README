@@ -181,10 +181,17 @@ bash alsa-capabilities -s
 
 ### alsa-capabilities: Usage with web services using json
 
-By using the `-j` (or `--json`) argument, the output of the script is
-valid json for easy parsing by web services.
+By using the `-j` (or `--json`) argument, the script supresses normal
+output but prints valid json data insteads for easy parsing by web
+services.
 
-* Example *without* the `-s` (`--samplerates`) argument:
+Example output of 
+
+```bash
+alsa-capabilities -j
+```
+
+* *Without* the `-s` (`--samplerates`) argument) `"encoding_formats"` is a simple array:
 
 ```json
 [
@@ -227,7 +234,8 @@ valid json for easy parsing by web services.
 ]
 ```
 
-* Example json output *with* the `-s` (`--samplerates`) argument:
+* *With* the `-s` (`--samplerates`) argument) `"encoding_formats"` is
+  an array which contains another array with the sample rates:
 
 ```json
 {
