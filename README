@@ -179,11 +179,11 @@ Usage:
 bash alsa-capabilities -s
 ```
 
-### alsa-capabilities: Usage with web services using json
+### Producing json output usinmg alsa-capabilities
 
 By using the `-j` (or `--json`) argument, the script supresses normal
 output but prints valid json data insteads for easy parsing by web
-services.
+services like REST-api's.
 
 Example output of 
 
