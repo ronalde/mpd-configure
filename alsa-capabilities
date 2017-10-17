@@ -160,6 +160,49 @@ function handle_doublebrackets() {
 
 }
 
+function print_human_output() {
+    ## print default output to std_err.
+    ## called by fetch_alsa_outputinterfaces.
+    printf "%s\n" "${alsa_if_display_title}" 1>&2;
+    printf " - %-17s = %-60s\n" \
+	   "${MSG_ALSA_DEVNAME}" "${alsa_dev_label}" 1>&2;
+    printf " - %-17s = %-60s\n" \
+	   "${MSG_ALSA_IFNAME}" "${alsa_if_label}" 1>&2;
+    printf " - %-17s = %-60s\n" \
+	   "${MSG_ALSA_UACCLASS}" "${alsa_if_uacclass}" 1>&2;
+    printf " - %-17s = %-60s\n" \
+	   "${MSG_ALSA_CHARDEV}" "${alsa_if_chardev}" 1>&2;
+    if [[ ! -z ${formats_res_err} ]]; then
+	## device is locked by an unspecified process
+	printf " - %-17s = %-60s\n" \
+	       "${MSG_ALSA_ENCODINGFORMATS}" \
+	       "${MSG_ERROR_GETTINGFORMATS}"  1>&2;
+	printf "   %-17s   %-60s\n" \
+	       " " \
+	       "${formats_res[@]}"  1>&2;
+    else
+	formatcounter=0
+	if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
+	    MSG_ALSA_ENCODINGFORMATS="samplerates (kHz)"
+	fi
+	printf " - %-17s = " \
+	       "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
+	# shellcheck disable=SC2141
+	while IFS="\n" read -r line; do
+	    (( formatcounter++ ))
+	    if [[ ${formatcounter} -gt 1 ]]; then
+		printf "%-23s" " " 1>&2;
+	    fi
+	    printf "%-60s\n" "${line}" 1>&2;
+	done<<<"${alsa_if_formats[@]}"
+    fi
+    printf " - %-17s = %-60s\n" \
+	   "${MSG_ALSA_MONITORFILE}" "${alsa_if_monitorfile}" 1>&2;
+    printf " - %-17s = %-60s\n" \
+	   "${MSG_ALSA_STREAMFILE}" "${alsa_if_streamfile}" 1>&2;
+    printf "\n"
+}
+
 function fetch_alsa_outputinterfaces() {
     ## parses each output interface returned by `get_aplay_output'
     ## after filtering (when the appropriate commandline options are
@@ -492,44 +535,7 @@ ${MSG_ERROR_UNEXPECTED}"
 
 	if [[ -z "${OPT_QUIET}" ]]; then
 	    ## print the list to std_err
-	    printf "%s\n" "${alsa_if_display_title}" 1>&2;
-	    printf " - %-17s = %-60s\n" \
-		   "${MSG_ALSA_DEVNAME}" "${alsa_dev_label}" 1>&2;
-	    printf " - %-17s = %-60s\n" \
-		   "${MSG_ALSA_IFNAME}" "${alsa_if_label}" 1>&2;
-	    printf " - %-17s = %-60s\n" \
-		   "${MSG_ALSA_UACCLASS}" "${alsa_if_uacclass}" 1>&2;
-	    printf " - %-17s = %-60s\n" \
-		   "${MSG_ALSA_CHARDEV}" "${alsa_if_chardev}" 1>&2;
-	    if [[ ! -z ${formats_res_err} ]]; then
-		## device is locked by an unspecified process
-		printf " - %-17s = %-60s\n" \
-		       "${MSG_ALSA_ENCODINGFORMATS}" \
-		       "${MSG_ERROR_GETTINGFORMATS}"  1>&2;
-		printf "   %-17s   %-60s\n" \
-		       " " \
-		       "${formats_res[@]}"  1>&2;
-	    else
-		formatcounter=0
-		if [[ ! -z ${OPT_SAMPLERATES} ]]; then 
-		    MSG_ALSA_ENCODINGFORMATS="samplerates (kHz)"
-		fi
-		printf " - %-17s = " \
-		       "${MSG_ALSA_ENCODINGFORMATS}" 1>&2;
-		# shellcheck disable=SC2141
-		while IFS="\n" read -r line; do
-		    (( formatcounter++ ))
-		    if [[ ${formatcounter} -gt 1 ]]; then
-			printf "%-23s" " " 1>&2;
-		    fi
-		    printf "%-60s\n" "${line}" 1>&2;
-		done<<<"${alsa_if_formats[@]}"
-	    fi
-	    printf " - %-17s = %-60s\n" \
-		   "${MSG_ALSA_MONITORFILE}" "${alsa_if_monitorfile}" 1>&2;
-	    printf " - %-17s = %-60s\n" \
-		   "${MSG_ALSA_STREAMFILE}" "${alsa_if_streamfile}" 1>&2;
-	    printf "\n"
+	    print_output
 	fi
     done
 }
