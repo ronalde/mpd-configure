@@ -231,7 +231,7 @@ alsa-capabilities -j
 ```
 
 * Example output *without* the `-s` (`--samplerates`) argument;
-  `"encoding_formats"` is an array where each members contains another
+  `"encoding_formats"` is an array where each member contains another
   array holding the sample rate values:
   
 ```bash
