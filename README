@@ -182,13 +182,12 @@ By using the `-j` (or `--json`) argument, the script supresses normal
 output but prints valid json data insteads for easy parsing by web
 services like REST-api's.
 
-Example output of 
+* Example output *without* the `-s` (`--samplerates`) argument; 
+  `"encoding_formats"` is a simple array:
 
 ```bash
 alsa-capabilities -j
 ```
-
-* *Without* the `-s` (`--samplerates`) argument) `"encoding_formats"` is a simple array:
 
 ```json
 [
@@ -231,8 +230,13 @@ alsa-capabilities -j
 ]
 ```
 
-* *With* the `-s` (`--samplerates`) argument) `"encoding_formats"` is
-  an array which contains another array with the sample rates:
+* Example output *without* the `-s` (`--samplerates`) argument;
+  `"encoding_formats"` is an array where each members contains another
+  array holding the sample rate values:
+  
+```bash
+alsa-capabilities --samplerates --json
+```
 
 ```json
 {
