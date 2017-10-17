@@ -199,7 +199,8 @@ function run_func() {
     func="$1"
     shift
     args="$@"
-    [[ ${DEBUG} ]] && declare -p 1>&2 func args
+    [[ ${DEBUG} ]] && \
+	declare -p 1>&2 func args
     if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
 	"${func} ${args}"
     else
@@ -313,7 +314,8 @@ function ret_mpdconf_path() {
     for arg in ${mpd_args[@]}; do
 	mpd_rest_args=(${mpd_rest_args[@]//${arg}})
     done
-    declare -p mpd_args mpd_real_args mpd_rest_args 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p mpd_args mpd_real_args mpd_rest_args 1>&2
     mpd_conf_file="${mpd_rest_args[0]}"
     if [[ "${mpd_conf_file}x" == "x" ]]; then
 	[[ ${DEBUG} ]] && \
@@ -386,7 +388,8 @@ function get_mpd_alsa_outputs() {
 	    fi
 	fi
     done< <(get_mpdconf_contents "${mpdconf_path}")
-    declare -p audio_outputs devices 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p audio_outputs devices 1>&2
     ## TODO: handle multiple devices
     for device in ${devices[@]}; do
 	printf "%s\n" "${device}"
@@ -464,10 +467,12 @@ function get_info() {
 	## mpd runs remote, use ssh to get alsa properties	
 	alsa_ssh_userhost="${ssh_user}@${ssh_host}"
     fi
-    [[ ${DEBUG} ]] && declare -p mpd_host ssh_host ssh_user mpd_music_dir 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p mpd_host ssh_host ssh_user mpd_music_dir 1>&2
     
     fill_arrays
-    [[ ${DEBUG} ]] && declare -p mpc_vals mpd_vals 1>&2
+    [[ ${DEBUG} ]] && \
+	declare -p mpc_vals mpd_vals 1>&2
     
     main_playing_tracktitle="${mpc_vals[title]}"
     main_playing_trackartist="${mpc_vals[artist]}"
@@ -501,7 +506,8 @@ function get_info() {
 	int="${main_file_bitrate_value%%.*}"
 	dec="${main_file_bitrate_value##*.}"
 	## TODO
-	[[ ${DEBUG} ]] && declare -p main_file_bitrate_value int dec 1>&2
+	[[ ${DEBUG} ]] && \
+	    declare -p main_file_bitrate_value int dec 1>&2
 	main_file_bitrate_kvalue=$(bc <<< "${main_file_bitrate_value} * 1000")
     else
 	main_file_bitrate_kvalue="${main_file_bitrate_value}"
@@ -640,11 +646,13 @@ function ret_mpd_now() {
     #mpd_val rt_raw_elapsed: '52.911'
     #mpd_val rt_raw_duration: '223.168'
 
-    for k in "${!mpd_vals[@]}"; do
-     	if [[ "${k}" =~ ^rt ]]; then
-     	    printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
-     	fi
-    done
+    if [[ ${DEBUG} ]]; then 
+	for k in "${!mpd_vals[@]}"; do
+     	    if [[ "${k}" =~ ^rt ]]; then
+     		printf 1>&2 "mpd_val %s: '%s'\n" "${k}" "${mpd_vals[${k}]}"
+     	    fi
+	done
+    fi
 }
 
 function ret_mpc_info() {
@@ -717,16 +725,23 @@ function ret_exif_info() {
 }
 
 function get_hwparams() {
+    ## tries to get the contents of
+    ## /proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params
+    ## using alsa_card $1 and alsa_dev $2.
+    ## (called by run_func so could be remote).
+    ## returns newline separated file contents or an error.
     alsa_card_no="$1"
     alsa_dev_no="$2"
-    [[ ! -z ${DEBUG} ]] && declare -p alsa_card_no alsa_dev_no 1>&2
+    [[ ! -z ${DEBUG} ]] && \
+	declare -p alsa_card_no alsa_dev_no 1>&2
     hwparams_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
     if [[ -f "${hwparams_file}" ]]; then
 	## return the contents of the file
 	xargs -0 echo < "${hwparams_file}"
     else
-	printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
-		    "${hwparams_file}" "$(hostname)"
+	[[ ${DEBUG} ]] && \
+	    printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
+			"${hwparams_file}" "$(hostname)"
 	return 1
     fi
 }
@@ -760,36 +775,20 @@ function ret_alsa_info() {
     done< <(${cmd_mpc} "${mpc_args[@]}")
     [[ ${DEBUG} ]] && \
 	declare -p mpd_outputs 1>&2
-    
-    #hw_params_file="/proc/asound/card${alsa_card_no}/pcm${alsa_dev_no}p/sub0/hw_params"
-    #cmd="cat ${hw_params_file}"
-    #if [[ "${alsa_ssh_userhost}x" == "x" ]]; then
-    ## use local alsa
-    #	xargs -0 echo < /proc/${mpd_pid}/cmdline
-    #	read res < ${hw_params_file}
-    #else
-	## use alsa on remote host	
-    #res="$(ssh ${alsa_ssh_userhost} -- "${cmd}")"
-    #fi
-#    if [[ $? -ne 0 ]]; then
-#	printf 1>&2 "error accessing file: '%s' on host '%s'\n" \
-#		    "${hw_params_file}" "${alsa_ssh_userhost}"
-#	return 1
- #   else
-	key_val_re="^([^\:]+):[[:space:]]+(.*)"
-	while read -r line; do
-	    if [[ "${line}" =~ ${key_val_re} ]]; then
-		field="${BASH_REMATCH[1]}"
-		val="${BASH_REMATCH[2]}"
-		alsa_vals["${field}"]="${val}"
-		[[ ${DEBUG} ]] && declare -p line field val 1>&2
-	    else
-		[[ ${DEBUG} ]] && declare -p line 1>&2
-		return 1
-	    fi
-	    
-	done< <(run_func get_hwparams "${alsa_card_no} ${alsa_dev_no}")
-#    fi
+    key_val_re="^([^\:]+):[[:space:]]+(.*)"
+    while read -r line; do
+	if [[ "${line}" =~ ${key_val_re} ]]; then
+	    field="${BASH_REMATCH[1]}"
+	    val="${BASH_REMATCH[2]}"
+	    alsa_vals["${field}"]="${val}"
+	    [[ ${DEBUG} ]] && \
+		declare -p line field val 1>&2
+	else
+	    [[ ${DEBUG} ]] && \
+		declare -p line 1>&2
+	    return 1
+	fi
+    done< <(run_func get_hwparams "${alsa_card_no} ${alsa_dev_no}")
 }
 
 function terminal_size() { # Calculate the size of the terminal
