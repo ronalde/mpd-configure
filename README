@@ -23,29 +23,31 @@ More information is available at the following pages:
 - [detect-alsa-output-capabilities]
 
 
-
 Basic usage
 -----------
 
 ### Getting the script
 
 The latest stable version of the script may be cloned from github using `git`:
-````bash
+```bash
 git clone https://github.com/ronalde/mpd-configure.git
-````
+```
+
 Using git has the added benefit that updating the script to the latest
 version is as easy as:
-````bash
+
+```bash
 ## cd /path/to/git-clone
 git pull
-````
+```
 
 Alternatively, [the tarball of the current stable
 master](https://lacocina.nl/mpd-configure) can be downloaded and
 unpacked in the current directory using `wget` and `tar`:
-````bash
+
+```bash
 wget https://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
-````
+```
 
 
 ### Running the script
@@ -53,28 +55,30 @@ wget https://lacocina.nl/mpd-configure -O - | tar --strip-components=1 -zxf -
 Run the script with default settings to display the contents of the
 resulting mpd configuration file:
 
-````bash
+```bash
 bash mpd-configure
-````
+```
 
 ### Storing the output of the script in a file
 
 The output of the scripts can simply be redirected to a file (in this
 example `mympd.conf`):
-````bash
+
+```bash
 bash mpd-configure > mympd.conf
-````
+```
 
 Although the same may be achieved by using the `-o` or `--output`
 command line parameters or setting `CONF_MPD_CONFFILE` on the command
 line. This has the benefit that the script detects if the target file
 exists, in which case the user is prompted to overwrite it, while
 making an automated *backup* of the original file:
-````bash
+
+```bash
 bash mpd-configure -o "mympd.conf"
 # or:
 CONF_MPD_CONFFILE="mympd.conf" ./mpd-configure
-````
+```
 
 ### More advanced usage example
 
@@ -86,9 +90,10 @@ configuration snippet files in the
 For example to specify `CONF_MPD_MUSICDIR` which sets the
 `music_directory` and saving the resulting mpd configuration file in
 `mympd.conf`, use:
-````bash
+
+```bash
 CONF_MPD_MUSICDIR="/srv/media/music" ./mpd-configure -o "/etc/mpd.conf"
-````
+```
 
 By default `mpd-configure` prompts the user to overwrite the specified
 file if it exists, and makes a backup of it.
@@ -99,15 +104,15 @@ A fully automated example which does not prompt the user (`-n`), uses the
 first available USB Audio Class interface (`-l u`) and sets some paths, while
 creating a backup of the original `/etc/mpd.conf` in case it exists:
 
-````bash
+```bash
 CONF_MPD_MUSICDIR="/srv/media/music" CONF_MPD_HOMEDIR="/var/lib/mpd" \
 bash mpd-configure -l u -n -o "/etc/mpd.conf"
-````
+```
 
 To see all available command line options run the script with `-h` or `--help`:
-````bash
+```bash
 bash mpd-configure -h
-````
+```
 
 Also see
 - [Detailed usage instructions](#detailed-usage-instructions) for
@@ -121,39 +126,45 @@ About the alsa-capabilities helper script
 [`mpd-configure`](./mpd-configure) relies on the accompanying bash
 script [`alsa-capabilities`](./alsa-capabilities) for getting
 information about the available audio output interfaces from
-alsa. However, `alsa-capabilities` may be run from the commandline independently from `mpd-configure`. It will then
-display each alsa audio output interface with its capabilities, like
-the type (ie. Analog, Digital or USB Audio Class) and the native
-(digital) audio formats it supports, as well as other properties, like
-it's character device (in `/dev/snd`) and the file to watch or monitor
-(in `/proc/asound`).
+alsa. 
+
+However, `alsa-capabilities` may be run from the commandline
+independently from `mpd-configure`. It will then display each alsa
+audio output interface with its capabilities, like the type
+(ie. Analog, Digital or USB Audio Class) and the native (digital)
+audio formats it supports, as well as other properties, like it's
+character device (in `/dev/snd`) and the file to watch or monitor (in
+`/proc/asound`).
+
+With the `-j` (or `--json`) argument the script will produce output in
+json format for easy parsing by machines.
 
 The interfaces returned by the script may be reduced by setting
 prefab or custom filters. These options can be displayed by running
 the script with the `-h` help option, eg:
 
-````bash
+```bash
     bash alsa-capabilities -h
-````    
+```    
 
 The script can also run 'directly' from github using:
 
-````bash
+```bash
     bash <(wget -q -O - "https://lacocina.nl/alsa-capabilities")
-````
+```
 
 To specify an option (like `-l usb`) use the following syntax:
 
-````bash
+```bash
     bash <(wget -q -O - "https://lacocina.nl/alsa-capabilities") -l usb    
-````
+```
 
 To display the alsa playback interfaces on a remote host to which you
 have ssh access, use:
 
-````bash
+```bash
     ssh ${username}@${remotehost} "bash <(wget -q -O - "https://lacocina.nl/alsa-capabilities")"
-````
+```
 
 Proper detection of the sample rates each format supports on an
 interface currently is very slow for non-USB Audio cards. It therefore
@@ -164,9 +175,9 @@ is a non-default option, `-s` or `--samplerates`.
 
 Usage:
 
-````bash
-bash alsa-capabilities -s   
-````
+```bash
+bash alsa-capabilities -s
+```
 
 About the mpd-monitor helper script
 -----------------------------------
@@ -176,24 +187,24 @@ file is streamed from storage (eg. a file), though MPD, to the (USB)DAC.
 
 Usage:
 
-````bash
+```bash
 bash <(wget -q -O - "https://lacocina.nl/mpd-monitor")
-````
+```
 
 Or, when mpd is running on a remote host to which you have (key based)
 ssh access, execute:
 
-````bash
+```bash
 bash <(wget -q -O - "https://lacocina.nl/mpd-monitor") -m $MPD_HOST -p $MPD_PORT -u $SSH_USER -d ${MUSICDIR}
-````
+```
 
 For example:
 
-````bash
+```bash
 bash <(wget -q -O - "https://lacocina.nl/mpd-monitor") -m mpd -u root -d /srv/media/music
-````
+```
 
-- The mpd-monitor script is in a testing state.
+- NOTE: *The mpd-monitor script is in a testing state.*
 
 
 Background
@@ -263,10 +274,91 @@ or systemd service file.
 
 The script is fast and stable enough to function as a systemd
 service. By setting `Before=mpd.service` and `Wants=mpd.service` in
-the service file systemd makes sure mpd-configure is run before mpd is started, and
-tries to start mpd.
+the service file systemd makes sure mpd-configure is run before mpd is
+started, and tries to start mpd.
 
 - See: [./examples/systemd_mpd-configure.service](./examples/systemd_mpd-configure.service)
+
+### Usage with web services using json
+
+By using the `-j` (or `--json`) argument, the output of the script is
+valid json for easy parsing by web services.
+
+* Example *without* the `-s` (`--samplerates`) argument:
+
+```json
+{
+      "alsa_outputdevices": [ 
+         {
+      "id": 1,
+      "hwaddr": "hw:0,0",
+      "description": "Analog alsa audio output interface",
+      "cardnumber": 0,
+      "interfacenumber": 0,
+      "cardname": "HDA Intel PCH",
+      "interfacename": "ALC887-VD Analog",
+      "chardev": "/dev/snd/pcmC0D0p",
+      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
+      "streamfile": "(n/a)",
+      "usbaudioclass": "(n/a)",
+      "encoding_formats": [
+		"bycommand`/usr/bin/pulseaudio--daemonize=no'withPID5075."
+	] 
+     },
+
+  ]
+}
+```
+
+* Example json output *with* the `-s` (`--samplerates`) argument:
+
+```json
+{
+      "alsa_outputdevices": [ 
+         {
+      "id": 1,
+      "hwaddr": "hw:0,0",
+      "description": "Analog alsa audio output interface",
+      "cardnumber": 0,
+      "interfacenumber": 0,
+      "cardname": "HDA Intel PCH",
+      "interfacename": "ALC887-VD Analog",
+      "chardev": "/dev/snd/pcmC0D0p",
+      "monitorfile": "/proc/asound/card0/pcm0p/sub0/hw_params",
+      "streamfile": "(n/a)",
+      "usbaudioclass": "(n/a)",
+      "encoding_formats": [
+		{
+"format":"S16_LE",
+"samplerates":[
+		"44.1",
+		"48",
+		"88.2",
+		"96",
+		"176.4",
+		"192"
+]
+},
+		{
+"format":"S32_LE",
+"samplerates":[
+		"44.1",
+		"48",
+		"88.2",
+		"96",
+		"176.4",
+		"192"
+]
+}
+	] 
+     },
+
+  ]
+}
+```
+
+
+
 
 ### Usage from within another bash or sh script
 
