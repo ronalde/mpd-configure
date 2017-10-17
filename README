@@ -176,7 +176,7 @@ Usage:
 bash alsa-capabilities -s
 ```
 
-### Using alsa-capabilities to generate machine-parseble json data 
+### Using alsa-capabilities to generate machine-parsible json data 
 
 By using the `-j` (or `--json`) argument, the script supresses normal
 output but prints valid json data insteads for easy parsing by web
