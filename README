@@ -142,7 +142,7 @@ the script with the `-h` help option, eg:
 
 ```bash
     bash alsa-capabilities -h
-```    
+```
 
 The script can also run 'directly' from github using:
 
@@ -176,7 +176,7 @@ Usage:
 bash alsa-capabilities -s
 ```
 
-### Producing json output using alsa-capabilities
+### Using alsa-capabilities to generate machine-parseble json data 
 
 By using the `-j` (or `--json`) argument, the script supresses normal
 output but prints valid json data insteads for easy parsing by web
