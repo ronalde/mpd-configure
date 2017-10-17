@@ -311,18 +311,16 @@ function fetch_alsa_outputinterfaces() {
     ## after filtering (when the appropriate commandline options are
     ## given), stores its capabilities in the appropriate global
     ## indexed arrays and displays them.
-
     json_output=
     msg=()
     aplay_lines=()
     integer_regexp='^[0-9]+$'
     aplay_card_regexp="^card[[:space:]][0-9]+:"
     ## exit on error
-    aplay_output="$(get_aplay_output "${aplay_card_regexp}")" || die "${aplay_output}"
-
+    aplay_output="$(get_aplay_output "${aplay_card_regexp}")" ||  \
+	die "${aplay_output}"
     ## reset the counter for interfaces without filtering
     NR_AIFS_BEFOREFILTERING=0
-
     ## modify the filter for aplay -l when OPT_HWFILTER is set
     if [[ ! -z "${OPT_HWFILTER}" ]]; then
 	# the portion without `hw:', eg 0,1
@@ -807,12 +805,12 @@ function check_samplerate() {
     format="$2"
     samplerate="$3"
 
-    declare -a aplay_opts_pre
-    aplay_opts_pre+=(--device="${alsa_if_hwaddress}")
-    aplay_opts_pre+=(--format="${format}")
-    aplay_opts_pre+=(--channels="2")
-    aplay_opts_pre+=(--nonblock)
-    declare -a aplay_opts_post
+    declare -a aplay_args_early
+    aplay_args_early+=(--device="${alsa_if_hwaddress}")
+    aplay_args_early+=(--format="${format}")
+    aplay_args_early+=(--channels="2")
+    aplay_args_early+=(--nonblock)
+    declare -a aplay_args_late
     ## set up regular expressions to match aplay's output errors
     ## unused
     # shellcheck disable=SC2034
@@ -828,13 +826,12 @@ function check_samplerate() {
 
     [[ ${DEBUG} ]] && \
 	debug "(${LINENO}): testing rate ${samplerate}"
-    unset aplay_opts_post
+    unset aplay_args_late
     ## set fixed sample rate
-    aplay_opts_post+=(--rate="${samplerate}")
+    aplay_args_late+=(--rate="${samplerate}")
     ## pipe random noise to aplay
-    aplay_out=$(echo "${PSEUDO_RANDOM_NOISE}" | \
-		    LANG=C ${CMD_APLAY} "${aplay_opts_pre[@]}" "${aplay_opts_post[@]}" 2>&1)
-    # shellcheck disable=SC2181
+    aplay_args=("${aplay_args_early[@]}" "${aplay_args_late[@]}")
+    aplay_out=$(return_aplay_error "${aplay_args[@]}")
     ret="$?"
     if [[ ${ret} -ne 0 ]]; then
 	[[ ${DEBUG} ]] && \
@@ -855,21 +852,25 @@ format ${format} @ rate ${samplerate}: \`${aplay_out}'"
     fi
 }
 
+function return_aplay_error() {
+    ## pipe PSEUDO_AUDIO to aplay to determine supported formats 
+    aplay_args="$1"
+    LANG=C ${CMD_APLAY} \
+	"${aplay_args[@]}" 2>&1 \
+				  <<< "${PSEUDO_SILENT_AUDIO}" || \
+	return 1
+}
 
 function return_aplay_formats() {
     ## use aplay to determine supported formats of non-uac interface (hw:$1,$2)
     alsa_dev_nr="$1"
     alsa_if_nr="$2"
-    aplay_opts=(--device=hw:${alsa_dev_nr},${alsa_if_nr})
-    aplay_opts+=(--channels=2)
-    aplay_opts+=(--format=MPEG)
-    aplay_opts+=(--nonblock)
-    aplay_out="$(echo "${PSEUDO_RANDOM_NOISE}" | \
-LANG=C ${CMD_APLAY} "${aplay_opts[@]}" 2>&1 >/dev/null)"
-
-    ## return aplay_out
-    printf "%s" "${aplay_out}"
-
+    aplay_args=(--device=hw:${alsa_dev_nr},${alsa_if_nr})
+    aplay_args+=(--channels=2)
+    aplay_args+=(--format=MPEG)
+    aplay_args+=(--nonblock)
+    return_aplay_error "${aplay_args[@]}" || \
+	return 1
 }
 
 function return_alsa_formats() {
@@ -1285,7 +1286,8 @@ function return_alsa_interface() {
 	set -x
     fi
     ## check if needed commands are available
-    CMD_APLAY="$(type -p aplay)" || command_not_found "aplay" "alsa-utils"
+    CMD_APLAY="$(type -p aplay)" || \
+	command_not_found "aplay" "alsa-utils"
     # shellcheck disable=SC2181
     if [[ $? -ne 0 ]]; then
 	die "The script cannot continue without aplay."
@@ -1382,8 +1384,8 @@ while [[ ${n} -ge 1 ]]; do
     n=$(( n / 2 ))
 done
 
-## pseudo random data to generate noise
-PSEUDO_RANDOM_NOISE="30985218341569576428057261168568123489906994"
+## pseudo audio data to generate (silent) noise
+PSEUDO_SILENT_AUDIO="00000000000000000000000000000000000000000000"
 declare -a DO_INTERFACE_FILTER=($(printf -- '%s' "${DO_FILTER_LIST// /" "}"))
 
 ## construction for displayed output
@@ -1455,5 +1457,6 @@ OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
 
 ## if the script is not sourced by another script but run within its
 ## own shell call function `return_alsa_interface'
-[[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || return_alsa_interface "$@"
+[[ "${BASH_SOURCE[0]:-}" != "${0}" ]] || \
+    return_alsa_interface "$@"
 
