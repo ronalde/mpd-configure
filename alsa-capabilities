@@ -203,6 +203,102 @@ function print_human_output() {
     printf "\n"
 }
 
+function key_val_to_json() {
+    key="$1"
+    val="$2"
+    if printf -v numval "%d" "${val}" 2>/dev/null; then
+	printf '"%s": %d' \
+	       "${key}" "${numval}"
+    else
+	printf '"%s": "%s"' \
+	       "${key}" "${val}"
+    fi
+    printf "\n"
+}
+
+function ret_json_format() {
+    formats_raw="$1"
+    indent="	      "
+    declare -a json_formats
+    if [[ "${formats_raw}" =~ ':' ]]; then
+	## sample rates included
+	while read line; do
+	    split_re="(.*):(.*)"
+	    if [[ "${line}" =~ ${split_re} ]]; then
+		format=${BASH_REMATCH[1]}
+		IFS=" " samplerates=(${BASH_REMATCH[2]})
+		printf -v sr_out "\t\t\"%s\",\n" "${samplerates[@]}"
+		sr_out="${sr_out%,*}"
+		format_json=""
+		label_samplerates='"samplerates"'
+		output_line="\
+          {
+           $(key_val_to_json format "${format}"),
+           ${label_samplerates}: [
+${sr_out}
+           ]
+          }," 
+		output_lines+=("${output_line}")
+	    fi
+	done<<<"${formats_raw}"
+	printf -v json_formats "\t\t%s\n" "${output_lines[@]}"
+	json_formats="${json_formats%,*}"
+    else
+	## no sample rates included
+	IFS="," formats_res=(${formats_raw})
+	printf -v json_formats '\t\t"%s",\n' \
+	       "${formats_res[@]}"
+	json_formats="${json_formats%,*}"
+    fi
+    printf "%s" "${json_formats// /}"
+}
+
+function ret_json_card() {
+    ## print json formatted output to std_out.
+    ## called by fetch_alsa_outputinterfaces.
+    #cur_aif_no="$1"
+    formats_res="$1"
+    last_aif="$2"
+    printf -v encoding_formats_val "[\n%s\n\t]" \
+	   "$(ret_json_format "${formats_res}")"
+    aif_json="\
+     {
+      $(key_val_to_json id ${cur_aif_no}),
+      $(key_val_to_json hwaddr ${alsa_if_hwaddress}),
+      $(key_val_to_json description "${alsa_if_title_label}"),
+      $(key_val_to_json cardnumber ${alsa_dev_nr}),
+      $(key_val_to_json interfacenumber ${alsa_if_nr}),
+      $(key_val_to_json cardname "${alsa_dev_label}"),
+      $(key_val_to_json interfacename "${alsa_if_label}"),
+      $(key_val_to_json chardev ${alsa_if_chardev}),
+      $(key_val_to_json monitorfile ${alsa_if_monitorfile}),
+      $(key_val_to_json streamfile ${alsa_if_streamfile}),
+      $(key_val_to_json usbaudioclass "${alsa_if_uacclass}"),
+      \"encoding_formats\": "${encoding_formats_val}" 
+     }"
+    printf "%s" "${aif_json}"
+    if [[ "${last_aif}x" == "x" ]]; then
+	printf ","
+    fi
+    printf "\n"
+}
+
+function print_json_output() {
+    ## print json formatted output to std_out.
+    ## called by fetch_alsa_outputinterfaces.
+    json_cards="$1"
+    json='{
+      "alsa_outputdevices": [ 
+    %s
+  ]
+}'
+    printf "${json}\n" "${json_cards}"
+}
+
+
+
+
+
 function fetch_alsa_outputinterfaces() {
     ## parses each output interface returned by `get_aplay_output'
     ## after filtering (when the appropriate commandline options are
@@ -211,7 +307,7 @@ function fetch_alsa_outputinterfaces() {
 
     [[ ! -z ${DEBUG} ]] && \
 	debug_function_ac "${FUNCNAME[0]}" "-"
-
+    json_output=
     msg=()
     aplay_lines=()
     integer_regexp='^[0-9]+$'
@@ -276,7 +372,9 @@ function fetch_alsa_outputinterfaces() {
     fi
 
     ## loop through each item in the array
+    cur_aif_no=0
     for line in "${aplay_lines[@]}"; do
+	((cur_aif_no++))
 	## set if type to default (ie analog)
 	alsa_if_type="ao"
 	## construct bash regexp for sound device
@@ -533,11 +631,25 @@ ${MSG_ERROR_UNEXPECTED}"
 	    ALSA_AIF_CHARDEVS+=("${alsa_if_chardev}")
 	fi
 
-	if [[ -z "${OPT_QUIET}" ]]; then
+	if [[ -z "${OPT_QUIET}" ]] && [[ "${OPT_JSON}x" == "x" ]]; then
 	    ## print the list to std_err
-	    print_output
+	    print_human_output	    
+	fi
+	if [[ "${OPT_JSON}x" != "x" ]]; then
+	    if [[ ${cur_aif_no} -lt ${#aplay_lines[@]} ]]; then 
+		printf -v json_output "%s%s\n" \
+		       "${json_output}" \
+		       "$(ret_json_card "${formats_res[@]}" "")"
+	    else
+		printf -v json_output "%s%s\n" \
+		       "${json_output}" \
+		       "$(ret_json_card "${formats_res[@]}" "last")"
+	    fi
 	fi
     done
+    if [[ "${OPT_JSON}x" != "x" ]]; then
+	print_json_output "${json_output}"
+    fi
 }
 
 function get_locking_process() {
@@ -1155,6 +1267,11 @@ as an argument (eg \`hw:x,y')\n" "$1" 1>&2
 		shift
                 continue
 		;;
+	    -j|--json)
+		OPT_JSON=true
+		shift
+                continue
+		;;
 	    -h|-\?|--help)
 		display_usageinfo
 		exit
@@ -1249,6 +1366,7 @@ set -u
 
 ## counter for unfiltered interfaces
 NR_AIFS_BEFOREFILTERING=0
+NR_AIFS_AFTERFILTERING=0
 
 ## static filter for digital interfaces
 DO_FILTER_LIST="$(cat <<EOF
@@ -1359,6 +1477,7 @@ OPT_LIMIT_AO=${OPT_LIMIT_AO:-}
 OPT_LIMIT_DO=${OPT_LIMIT_DO:-}
 OPT_LIMIT_UO=${OPT_LIMIT_UO:-}
 OPT_QUIET=${OPT_QUIET:-}
+OPT_JSON=${OPT_JSON:-}
 OPT_CUSTOMFILTER=${OPT_CUSTOMFILTER:-}
 OPT_HWFILTER=${OPT_HWFILTER:-}
 OPT_SAMPLERATES=${OPT_SAMPLERATES:-}
