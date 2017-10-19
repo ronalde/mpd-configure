@@ -158,7 +158,7 @@ function handle_doublebrackets() {
     done
 }
 
-function return_human_output() {
+function return_output_human() {
     ## print default output to std_err.
     ## called by fetch_alsa_outputinterfaces.
     printf "%s\n" "${alsa_if_display_title}" 1>&2;
@@ -264,22 +264,30 @@ function ret_json_card() {
     #cur_aif_no="$1"
     formats_res="$1"
     last_aif="$2"
-    printf -v encoding_formats_val "[\n%s\n\t]" \
+    printf -v encoding_formats_val "[\n %s\n\t]" \
 	   "$(ret_json_format "${formats_res}")"
+    declare -A a_json_keyvals
+    a_json_keyvals[id]=${cur_aif_no}
+    a_json_keyvals[hwaddr]=${alsa_if_hwaddress}
+    a_json_keyvals[description]="${alsa_if_title_label}"
+    a_json_keyvals[cardnumber]=${alsa_dev_nr}
+    a_json_keyvals[interfacenumber]=${alsa_if_nr}
+    a_json_keyvals[cardname]="${alsa_dev_label}"
+    a_json_keyvals[interfacename]="${alsa_if_label}"
+    a_json_keyvals[chardev]=${alsa_if_chardev}
+    a_json_keyvals[monitorfile]=${alsa_if_monitorfile}
+    a_json_keyvals[streamfile]=${alsa_if_streamfile}
+    a_json_keyvals[usbaudioclass]="${alsa_if_uacclass}"
+    aif_json=
+    declare -a json_keyvals
+    for key in "${!a_json_keyvals[@]}"; do
+	json_keyvals+=("$(key_val_to_json "${key}" "${a_json_keyvals[${key}]}")") 
+    done
+    printf -v str_json_keyvals "\t%s,\n" "${json_keyvals[@]}"
     aif_json="\
      {
-      $(key_val_to_json id ${cur_aif_no}),
-      $(key_val_to_json hwaddr ${alsa_if_hwaddress}),
-      $(key_val_to_json description "${alsa_if_title_label}"),
-      $(key_val_to_json cardnumber ${alsa_dev_nr}),
-      $(key_val_to_json interfacenumber ${alsa_if_nr}),
-      $(key_val_to_json cardname "${alsa_dev_label}"),
-      $(key_val_to_json interfacename "${alsa_if_label}"),
-      $(key_val_to_json chardev ${alsa_if_chardev}),
-      $(key_val_to_json monitorfile ${alsa_if_monitorfile}),
-      $(key_val_to_json streamfile ${alsa_if_streamfile}),
-      $(key_val_to_json usbaudioclass "${alsa_if_uacclass}"),
-      \"encoding_formats\": "${encoding_formats_val}" 
+${str_json_keyvals%,*}
+        \"encodingformats\": "${encoding_formats_val}" 
      }"
     printf "%s" "${aif_json}"
     if [[ "${last_aif}x" == "x" ]]; then
@@ -288,12 +296,12 @@ function ret_json_card() {
     printf "\n"
 }
 
-function print_json_output() {
+function return_output_json() {
     ## print json formatted output to std_out.
     ## called by fetch_alsa_outputinterfaces.
     json_cards="$1"
     json='{
-    "alsa_outputdevices": [ 
+ "alsa_outputdevices": [ 
     %s
   ]
 }'
@@ -539,6 +547,8 @@ ${MSG_ERROR_NOFILE}"
 		    alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
 		    # shellcheck disable=SC2181
 		    if [[ $? -ne 0 ]]; then
+			[[ ${DEBUG} ]] && \
+			    debug "(${LINENO}): could not determine alsa_if_uac_ep."
 			alsa_if_uacclass_nr="?"
 		    else
 			[[ ${DEBUG} ]] && \
@@ -560,11 +570,12 @@ ${MSG_ERROR_UNEXPECTED}"
 		fi
 	    fi
 	fi
-
-	## for non-uac interfaces: check whether it is some other digital interface
+	## for non-uac interfaces: check whether it is some other
+	## digital interface
 	if [[ ! "${alsa_if_type}" = "uo" ]]; then
 	    for filter in "${DO_INTERFACE_FILTER[@]}"; do
-		## `,,' downcases the string, while `*var*' does a wildcard match
+		## `,,' downcases the string, while `*var*' does a
+		## wildcard match
 		if [[ "${alsa_if_name,,}" == *"${filter}"* ]]; then
 		    [[ ${DEBUG} ]] && \
 			debug "(${LINENO}): match = ${alsa_if_name,,}: ${filter}"
@@ -635,8 +646,8 @@ ${MSG_ERROR_UNEXPECTED}"
 	fi
 	if [[ -z "${OPT_QUIET}" ]] && [[ "${OPT_JSON}x" == "x" ]]; then
 	    ## print the list to std_err
-	    res="$(return_human_output)" || exit 1
-	    printf 1>&2 "%s\n" "${res}"
+	    res_human="$(return_output_human)" || exit 1
+	    printf 1>&2 "%s\n" "${res_human}"
 	fi
 	if [[ "${OPT_JSON}x" != "x" ]]; then
 	    if [[ ${cur_aif_no} -lt ${#aplay_lines[@]} ]]; then 
@@ -647,7 +658,8 @@ ${MSG_ERROR_UNEXPECTED}"
 	fi
     done
     if [[ "${OPT_JSON}x" != "x" ]]; then
-	print_json_output "${json_output}"
+	res_json="$(return_output_json "${json_output}")" || exit 1
+	printf "%s\n" "${res_json}"
     fi
 }
 
@@ -655,8 +667,9 @@ function get_locking_process() {
     ## return a string describing the command and id of the
     ## process locking the audio interface with card nr $1 and dev nr
     ## $2 based on its status file in /proc/asound.
-    ## returns a string containing the locking cmd and pid, or an
-    ## error when the interface is not locked.
+    ## returns a comma separated string containing the locking cmd and
+    ## pid, or an error when the interface is not locked (ie
+    ## 'closed').
     alsa_card_nr="$1"
     alsa_if_nr="$2"
     proc_statusfile="/proc/asound/card${alsa_card_nr}/pcm${alsa_if_nr}p/sub0/status"
@@ -667,7 +680,6 @@ function get_locking_process() {
     parent_cmd=
     locking_cmd=
     locking_pid=
-
     ## specific for mpd: each alsa output plugin results in a locking
     ## process indicated by `owner_pid` in
     ## /proc/asound/cardX/pcmYp/sub0/status: `owner_pid   : 28022'
@@ -677,12 +689,18 @@ function get_locking_process() {
     ##               |-{output:Peachtre}(28022) <<< owner_pid / child
     ##               `-{player}(28020)
     owner_pid_re="owner_pid[[:space:]]+:[[:space:]]+([0-9]+)"
+    [[ ${DEBUG} ]] && \
+	debug "examining status file ${proc_statusfile}." 
     while read -r line; do
 	if [[ "${line}" =~ ${owner_pid_re} ]]; then
 	    owner_pid="${BASH_REMATCH[1]}"
 	    break
+	elif [[ "${line}" == "closed" ]]; then
+	    return 1
 	fi
     done<"${proc_statusfile}"
+    [[ ${DEBUG} ]] && \
+	debug "done examining status file ${proc_statusfile}." 
     if [[ -z ${owner_pid} ]]; then
 	## device is unused
 	[[ ${DEBUG} ]] && \
@@ -692,7 +710,6 @@ function get_locking_process() {
 	[[ ${DEBUG} ]] && \
 	    debug "(${LINENO}): found owner pid in status file \`${proc_statusfile}': \`${owner_pid}'."
     fi
-    
     ## check if owner_pid is a child
     ## construct regexp for getting the ppid from /proc
     ## eg: /proc/837/stat:
@@ -736,7 +753,6 @@ has parent cmd \`${parent_cmd}' with id \`${parent_pid}'."
 	## should not happen; TODO: handle
 	parent_pid=
     fi 
-
 }
 
 function ret_highest_alsa_samplerate() {
@@ -801,11 +817,9 @@ function check_samplerate() {
     ## use aplay to check if the specified alsa interface ($1)
     ## supports encoding format $2 and sample rate $3
     ## returns a string with the supported sample rate or nothing
-
     alsa_if_hwaddress="$1"
     format="$2"
     samplerate="$3"
-
     declare -a aplay_args_early
     aplay_args_early+=(--device="${alsa_if_hwaddress}")
     aplay_args_early+=(--format="${format}")
@@ -824,45 +838,37 @@ function check_samplerate() {
     wrongformat_re=".*wrong[[:space:]]extended[[:space:]]format.*"
     ## used
     default_re=".*Playing[[:space:]]raw[[:space:]]data.*"
-
     [[ ${DEBUG} ]] && \
 	debug "(${LINENO}): testing rate ${samplerate}"
     unset aplay_args_late
     ## set fixed sample rate
     aplay_args_late+=(--rate="${samplerate}")
-    ## pipe random noise to aplay
-    aplay_args=("${aplay_args_early[@]}" "${aplay_args_late[@]}")
-    aplay_out=$(return_aplay_error "${aplay_args[@]}")
-    ret="$?"
-    if [[ ${ret} -ne 0 ]]; then
+    ## generate aplay error using random noise to check whether sample
+    ## rate is supported for this interface and format
+    printf -v aplay_args "%s " "${aplay_args_early[@]} ${aplay_args_late[@]}"
+    read -r firstline<<<"$(return_reversed_aplay_error "${aplay_args}")" || return 1
+    if [[ "${firstline}" =~ ${default_re} ]]; then
 	[[ ${DEBUG} ]] && \
-	    debug "(${LINENO}): aplay returned an error using \
-format ${format} @ rate ${samplerate}: \`${aplay_out}'"
-	return 1
+	    debug "(${LINENO}): success"
+	printf "%s" "${samplerate}"
     else
-	read -r firstline<<<"${aplay_out}"
-	if [[ "${firstline}" =~ ${default_re} ]]; then
-	    [[ ${DEBUG} ]] && \
-		debug "(${LINENO}): success"
-	    printf "%s" "${samplerate}"
-	else
-	    [[ ${DEBUG} ]] && \
-		debug "(${LINENO}): failure"
-	    return 1
-	fi
+	return 1
     fi
 }
 
-function return_aplay_error() {
-    ## pipe PSEUDO_AUDIO to aplay to determine supported formats 
+function return_reversed_aplay_error() {
+    ## force aplay to output error message containing supported
+    ## encoding formats, by playing PSEUDO_AUDIO in a non-existing
+    ## format.
+    ## returns the output of aplay while reversing its return code
     aplay_args="$1"
-    LANG=C ${CMD_APLAY} \
-	"${aplay_args[@]}" 2>&1 \
-				  <<< "${PSEUDO_SILENT_AUDIO}" || \
-	return 1
+    cmd_aplay="${CMD_APLAY} ${aplay_args}"
+    LANG=C ${cmd_aplay} 2>&1 <<< "${PSEUDO_SILENT_AUDIO}" || \
+	return 0 && \
+	    return 1
 }
 
-function return_aplay_formats() {
+function return_nonuac_formats() {
     ## use aplay to determine supported formats of non-uac interface (hw:$1,$2)
     alsa_dev_nr="$1"
     alsa_if_nr="$2"
@@ -870,8 +876,72 @@ function return_aplay_formats() {
     aplay_args+=(--channels=2)
     aplay_args+=(--format=MPEG)
     aplay_args+=(--nonblock)
-    return_aplay_error "${aplay_args[@]}" || \
+    printf -v str_args "%s " "${aplay_args[@]}"
+    return_reversed_aplay_error "${str_args}" || \
 	return 1
+}
+
+function return_uac_formats_rates() {
+    ## get encodings formats with samplerates for uac type interface
+    ## using its streamfile $1 (which saves calls to applay).
+    ## returns newline separated list (FORMAT:RATE,RATE,...).
+    alsa_if_streamfile="$1"
+    interface_re="^[[:space:]]*Interface[[:space:]]([0-9])"
+    format_re="^[[:space:]]*Format:[[:space:]](.*)"
+    rates_re="^[[:space:]]*Rates:[[:space:]](.*)"
+    capture_re="^Capture:"
+    inside_interface=
+    format_found=
+    declare -A uac_formats_rates
+    ## iterate lines in the streamfile
+    while read -r line; do
+	if [[ "${line}" =~ ${capture_re} ]]; then
+	    ## end of playback interfaces
+	    break
+	else
+	    ## we're not dealing with a capture interface
+	    if [[ "${line}" =~ ${interface_re} ]]; then
+		## new interface found
+		inside_interface=true
+		## reset (previous) format_found
+		format_found=
+		## continue with next line
+	    else
+		## continuation of interface 
+		if [[ "${inside_interface}x" != "x" ]]; then
+		    ## parse lines below `Interface:`
+		    if [[ "${format_found}x" == "x" ]]; then
+			## check for new `Format:`
+			if [[ "${line}" =~ ${format_re} ]]; then
+			    ## new format found
+			    format_found="${BASH_REMATCH[1]}"
+			    uac_formats_rates[${format_found}]=""
+			    [[ ${DEBUG} ]] && \
+				debug "(${LINENO}): format found: \`${format_found}'"
+			    ## next: sample rates or new interface
+			fi
+		    else
+			## parse lines below `Format:`
+			if [[ "${line}" =~ ${rates_re} ]]; then
+			    ## sample rates for interface/format found;
+			    ## return and reset both
+			    uac_formats_rates[${format_found}]="${BASH_REMATCH[1]}"
+			    [[ ${DEBUG} ]] && \
+				debug "(format=${format_found}) \
+rates=${BASH_REMATCH[1]}"
+			    format_found=
+			    inside_interface=
+			    continue
+			fi
+		    fi
+		fi
+	    fi
+	fi
+    done<"${alsa_if_streamfile}"
+    for format in "${!uac_formats_rates[@]}"; do
+	printf "%s:%s\n" \
+	       "${format}" "${uac_formats_rates[${format}]// /}"
+    done
 }
 
 function return_alsa_formats() {
@@ -889,59 +959,15 @@ function return_alsa_formats() {
     formats=()
     parent_pid=
     parent_cmd=
-
+    declare -A uac_formats
     if [[ "${alsa_if_type}" = "uo" ]]; then
-	declare -A uac_formats
-	interface_re="^[[:space:]]*Interface[[:space:]]([0-9])"
-	format_re="^[[:space:]]*Format:[[:space:]](.*)"
-	rates_re="^[[:space:]]*Rates:[[:space:]](.*)"
-	capture_re="^Capture:"
-	inside_interface=
-	format_found=
-	while read -r line; do
-	    ## iterate the streamfile
-	    if [[ "${line}" =~ ${capture_re} ]]; then
-		## end of playback interfaces
-		break
-	    else
-		if [[ "${line}" =~ ${interface_re} ]]; then
-		    ## new interface found
-		    inside_interface=true
-		    ## reset (previous) format_found
-		    format_found=
-		else
-		    if [[ ! -z ${inside_interface} ]]; then
-			## parse lines below `Interface:`
-			if [[ ! -z "${format_found}" ]]; then
-			    ## parse lines below `Format:`
-			    if [[ "${line}" =~ ${rates_re} ]]; then
-				## sample rates for interface/format found;
-				## add to array and reset both
-				uac_formats[${format_found}]+="${BASH_REMATCH[1]//,/} "
-				[[ ${DEBUG} ]] && \
-				    debug "array: key=${format_found}, \
-rate=${uac_formats[${format_found}]} "
-				format_found=
-				inside_interface=
-				continue
-
-			    fi
-			else
-			    ## check for new `Format:`
-			    if [[ "${line}" =~ ${format_re} ]]; then
-				## new format found
-				format_found="${BASH_REMATCH[1]}"
-				formats+=(${format_found})
-				[[ ${DEBUG} ]] && \
-				    debug "(${LINENO}): format found: \`${format_found}'"
-				## next: sample rates or new interface
-			    fi
-
-			fi
-		    fi
-		fi
-	    fi
-	done<"${alsa_if_streamfile}"
+	## uac type; use streamfile to get encoding formats and/or
+	## samplerates (in the form of 'FORMAT: RATE RATE ...').
+	while read line; do
+	    key="${line%:*}"
+	    value="${line//${key}:/}"
+	    uac_formats["${key}"]="${value}"
+	done< <(return_uac_formats_rates "${alsa_if_streamfile}")
 	## return the formatted line(s)
 	if [[ "${OPT_SAMPLERATES}x" == "x" ]]; then
 	    ## print comma separated list of formats
@@ -949,22 +975,55 @@ rate=${uac_formats[${format_found}]} "
 	    printf -v str_formats "%s, " "${!uac_formats[@]}"
 	    printf "%-20s" "${str_formats%*, }"
 	else	    
-	    ## for each format, print "FORMAT: rate1Hz rate2Hz ..."
+	    ## for each format, print "FORMAT1:rate1,rate2,..."
 	    # shellcheck disable=SC2068
 	    for key in ${!uac_formats[@]}; do
-	 	printf "%-20s %s\n" "${key}:" "${uac_formats[${key}]// /Hz }"
+	 	printf "%s:%s\n" "${key}" "${uac_formats[${key}]}"
 	    done
 	fi
     else
 	## non-uac type: if interface is not locked, use aplay to
 	## determine formats
-	declare -a rawformats
 	## because of invalid file format, aplay is forced to return
 	## supported formats (=200 times faster than --dump-hw-params)
+	declare -a rawformats
 	format_re="^-[[:space:]]+([[:alnum:]_]*)$"
 	res="$(get_locking_process "${alsa_dev_nr}" "${alsa_if_nr}")"
 	# shellcheck disable=SC2181
-	if [[ $? -eq 0 ]]; then
+	if [[ $? -ne 0 ]]; then
+	    ## device is not locked, iterate aplay output
+	    [[ ${DEBUG} ]] && \
+		debug "(${LINENO}): device is not locked; will iterate aplay_out"
+	    while read -r line; do
+		if [[ "${line}" =~ ${format_re} ]]; then
+		    rawformats+=(${BASH_REMATCH[1]})
+		fi
+	    done< <(return_nonuac_formats "${alsa_dev_nr}" "${alsa_if_nr}") || return 1
+	    ## formats (and minimum/maximum sample rates) gathered, check if
+	    ## all sample rates should be checked
+	    [[ ${DEBUG} ]] && debug "$(declare -p rawformats)"
+	    if [[ "${OPT_SAMPLERATES}x" == "x" ]]; then
+		## just return the comma separated format(s)
+		printf -v str_formats "%s, " "${rawformats[@]}"
+		printf "%-20s" "${str_formats%*, }"
+	    else
+		## check all sample rates for each format.  warning:
+		## slowness ahead for non-uac interfaces, because of
+		## an aplay call for each unsupported sample rate + 1
+		## and each format
+		for rawformat in "${rawformats[@]}"; do
+		    sorted_rates=""
+		    while read line; do
+			sorted_rates+="${line},"
+			#printf -v str_rates "%s " "${line}"
+		    done< <(ret_supported_alsa_samplerates \
+				"${alsa_if_hwaddress}" "${rawformat}")
+		    ## return each format newline separated with a space
+		    ## separated list of supported sample rates
+		    printf "%s:%s\n" "${rawformat}" "${sorted_rates%*,}"
+		done
+	    fi
+	else
 	    ## in use by another process
 	    ## res contains pid,cmd of locking process
 	    locking_pid="${res%,*}"
@@ -976,45 +1035,12 @@ device is in use by command ${locking_cmd} with process id ${locking_pid}."
 	    printf "by command \`%s' with PID %s." \
 		   "${locking_cmd}" "${locking_pid}"
 	    return 1  
-	else
-	    ## device is not locked, iterate aplay output
-	    [[ ${DEBUG} ]] && \
-		debug "(${LINENO}): device is not locked; will iterate aplay_out"
-	    aplay_out="$(return_aplay_formats "${alsa_dev_nr}" "${alsa_if_nr}")"
-	    while read -r line; do
-		if [[ "${line}" =~ ${format_re} ]]; then
-		    rawformats+=(${BASH_REMATCH[1]})
-		fi
-	    done <<< "${aplay_out}"
-	    ## formats (and minimum/maximum sample rates) gathered, check if
-	    ## all sample rates should be checked
-	    if [[ "${OPT_SAMPLERATES}x" == "x" ]]; then
-		## just return the comma separated format(s)
-		printf -v str_formats "%s, " "${rawformats[@]}"
-		printf "%-20s" "${str_formats%*, }"
-	    else		
-		## warning: slowness ahead because of an aplay call
-		## for each sample rate and each format
-		declare -a sorted_rates
-		sorted_rates=(
-		    $(ret_supported_alsa_samplerates \
-			  "${alsa_if_hwaddress}" "${rawformats[0]}")
-		) || return 1
-		## return each format newline separated with a space
-		## separated list of supported sample rates
-		for rawformat in "${rawformats[@]}"; do
-		    printf -v str_format "%-20s" "${rawformat}: "
-		    printf -v str_rates "%s " "${sorted_rates[@]}"
-		    printf "%s: %s\n" "${str_format}" "${str_rates}"
-		done
-	    fi
 	fi
     fi
 }
 
-
 function return_alsa_uac_ep() {
-    ## returns/echoes the usb audio class endpoint as a fixed number.
+    ## returns the usb audio class endpoint as a fixed number.
     ## needs path to stream file as single argument ($1)
     ## based on ./sound/usb/proc.c:
     ##  printf "    Endpoint: %d %s (%s)\n",
@@ -1022,7 +1048,6 @@ function return_alsa_uac_ep() {
     ## TODO: unsure which range this is; have seen 1, 3 and 5
     ##   2: USB_DIR_IN: "IN|OUT",
     ##   3: USB_ENDPOINT_SYNCTYPE: "NONE|ASYNC|ADAPTIVE|SYNC"
-
     alsa_if_streamfile_path="$1"
     ep_mode=""
     ep_label_filter="Endpoint:"
@@ -1034,7 +1059,6 @@ function return_alsa_uac_ep() {
     ep_synctype_filter="(${UO_EP_NONE_FILTER}|${UO_EP_ADAPT_FILTER}|${UO_EP_ASYNC_FILTER}|${UO_EP_SYNC_FILTER})"                                   #2
     ep_synctype_regexp="[[:space:]]\(${ep_synctype_filter}\)$"
     ep_regexp="${ep_label_regexp}${ep_num_regexp}${ep_direction_regexp}${ep_synctype_regexp}"
-
     ## iterate the contents of the streamfile
     while read -r line; do
 	if [[ "${line}" =~ ${ep_regexp} ]]; then
@@ -1044,17 +1068,14 @@ function return_alsa_uac_ep() {
 	    break
 	fi
     done<"${alsa_if_streamfile_path}"
-
-    if [[ -z "${ep_mode}" ]]; then
+    if [[ "${ep_mode}x" == "x" ]]; then
 	[[ ${DEBUG} ]] && \
 	    debug "(${LINENO}): no matching endpoints found. ${MSG_ERROR_UNEXPECTED}"
-	printf ""
 	return 1
     else
 	## return the filtered endpoint type
 	printf "%s" "${ep_mode}"
     fi
-
 }
 
 
