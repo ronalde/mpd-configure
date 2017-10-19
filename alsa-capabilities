@@ -266,22 +266,45 @@ function ret_json_card() {
     last_aif="$2"
     printf -v encoding_formats_val "[\n %s\n\t]" \
 	   "$(ret_json_format "${formats_res}")"
-    declare -A a_json_keyvals
-    a_json_keyvals[id]=${cur_aif_no}
-    a_json_keyvals[hwaddr]=${alsa_if_hwaddress}
-    a_json_keyvals[description]="${alsa_if_title_label}"
-    a_json_keyvals[cardnumber]=${alsa_dev_nr}
-    a_json_keyvals[interfacenumber]=${alsa_if_nr}
-    a_json_keyvals[cardname]="${alsa_dev_label}"
-    a_json_keyvals[interfacename]="${alsa_if_label}"
-    a_json_keyvals[chardev]=${alsa_if_chardev}
-    a_json_keyvals[monitorfile]=${alsa_if_monitorfile}
-    a_json_keyvals[streamfile]=${alsa_if_streamfile}
-    a_json_keyvals[usbaudioclass]="${alsa_if_uacclass}"
-    aif_json=
+    ## using to indexed arrays in order to preserve order of fields
     declare -a json_keyvals
-    for key in "${!a_json_keyvals[@]}"; do
-	json_keyvals+=("$(key_val_to_json "${key}" "${a_json_keyvals[${key}]}")") 
+    json_fields=(
+	id
+	hwaddr
+	description
+	cardnumber
+	interfacenumber
+	cardname
+	interfacename
+	chardev
+	monitorfile
+	streamfile
+	usbaudioclass
+    )
+    json_values=(${cur_aif_no})
+    json_values+=(${alsa_if_hwaddress})
+    #a_json_keyvals[description]=
+    json_values+=("${alsa_if_title_label}")
+    #a_json_keyvals[cardnumber]=
+    json_values+=(${alsa_dev_nr})
+    #a_json_keyvals[interfacenumber]=
+    json_values+=(${alsa_if_nr})
+    #a_json_keyvals[cardname]=
+    json_values+=("${alsa_dev_label}")
+    #a_json_keyvals[interfacename]=
+    json_values+=("${alsa_if_label}")
+    #a_json_keyvals[chardev]=
+    json_values+=(${alsa_if_chardev})
+    #a_json_keyvals[monitorfile]=
+    json_values+=(${alsa_if_monitorfile})
+    #a_json_keyvals[streamfile]=
+    json_values+=(${alsa_if_streamfile})
+    #a_json_keyvals[usbaudioclass]=
+    json_values+=("${alsa_if_uacclass}")
+
+    for json_fieldno in "${!json_fields[@]}"; do
+	json_keyvals+=("$(key_val_to_json \
+"${json_fields[${json_fieldno}]}" "${json_values[${json_fieldno}]}")")
     done
     printf -v str_json_keyvals "\t%s,\n" "${json_keyvals[@]}"
     aif_json="\
