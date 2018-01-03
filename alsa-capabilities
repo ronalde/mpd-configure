@@ -29,7 +29,7 @@
 LANG=C
 
 APP_NAME_AC="alsa-capabilities"
-APP_VERSION="0.9.4"
+APP_VERSION="0.9.5"
 APP_INFO_URL="https://lacocina.nl/detect-alsa-output-capabilities"
 
 ## set DEBUG to a non empty value to display internal program flow to
@@ -424,13 +424,10 @@ function fetch_alsa_outputinterfaces() {
 	alsa_dev_if_regexp="^${alsa_dev_regexp},[[:space:]]${alsa_if_regexp}$"
 	## unset / empty out all variables
 	alsa_dev_nr=""
-	alsa_dev_name=""
 	alsa_dev_label=""
 	alsa_if_nr=""
 	alsa_if_name=""
 	alsa_if_label=""
-	name=""
-	alsacard=""
 	before_bracket_re="^([^[]+)\["
 	if [[ "${line}" =~ ${alsa_dev_if_regexp} ]]; then
 	    alsa_dev_nr="${BASH_REMATCH[1]}"
@@ -522,8 +519,9 @@ function fetch_alsa_outputinterfaces() {
 	    fi
 	    ## check if the chardev exists
 	    if [[ ! -c "${alsa_if_chardev}" ]]; then
+		msg_err="alsa_if_chardev \`${alsa_if_chardev}': ${MSG_ERROR_NOT_CHARDEV} "
 		[[ ${DEBUG} ]] && \
-		    debug "${LINENO}" "alsa_if_chardev \`${alsa_if_chardev}' is not a chardev."
+		    debug "${LINENO}" "${msg_err}"
 		alsa_if_chardev="${alsa_if_chardev} (${MSG_ERROR_NOT_CHARDEV})"
 	    else
 		[[ ${DEBUG} ]] && \
@@ -534,15 +532,14 @@ function fetch_alsa_outputinterfaces() {
 		msg_err="${alsa_if_monitorfile} ${MSG_ERROR_NOFILE} (${MSG_ERROR_UNEXPECTED})"
 		alsa_if_monitorfile="${msg_err}"
 		[[ ${DEBUG} ]] && \
-		    debug "${LINENO}" "${MSG_ERROR_UNEXPECTED}: alsa_if_monitorfile \
-\`${a		    lsa_if_monitorfile}' ${MSG_ERROR_NOFILE}"
+		    debug "${LINENO}" "${msg_err}"
 	    fi
 	    ## check whether the streamfile exists; it only should
 	    ## exist in the case of a uac interface
 	    if [[ ! -f "${alsa_if_streamfile}" ]]; then
+		msg_err="${alsa_if_streamfile} ${MSG_ERROR_NOFILE} (${MSG_ERROR_UNEXPECTED})"
 		[[ ${DEBUG} ]] && \
-		    debug "${LINENO}" "alsa_if_streamfile \`${alsa_if_streamfile}' \
-${MSG_ERROR_NOFILE}"
+		    debug "${LINENO}" "${msg_err}"
 		## no uac interface
 		alsa_if_streamfile="${MSG_PROP_NOTAPPLICABLE}"
 	    else
