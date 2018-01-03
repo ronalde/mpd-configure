@@ -1,4 +1,371 @@
-commit b261abd212f3f0a281f6623ca83f80763dd8cd2a (HEAD -> master, origin/master, origin/database-proxy, origin/HEAD, unittesting, database-proxy)
+commit f02579ce40d2ec0329c889e4725b227c13176890 (HEAD -> master, tag: v0.9.5, tag: v0.9.4, origin/master, origin/HEAD, hifiberry)
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 3 16:27:57 2018 +0100
+
+    issue #34: shellchecked, version raised
+
+commit f4af055ad28c28e8fc162e6233a9905ac2438a8e (origin/hifiberry)
+Author: Ronald van Engelen <ronalde@lacocina.nl>
+Date:   Wed Jan 3 10:14:26 2018 +0100
+
+    issue #34: handle cases where snd_{pcm,ctl}_card_info_get_name(info) returns an mepty string between square brackets, like with the hifiberry DAC bug
+
+commit 2f8db8d41430eecfd1a9fecbb31e9786d038cdbf
+Merge: 237505a 3c93481
+Author: Ronald van Engelen <ronalde@users.noreply.github.com>
+Date:   Fri Oct 20 09:04:28 2017 +0200
+
+    Merge pull request #33 from ronalde/jsonoutput
+    
+    Jsonoutput
+
+commit 3c93481f9e89d9151c2a88e29df18b6b02dca2da
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Oct 20 08:53:46 2017 +0200
+
+    shellchecked
+
+commit f91e5c346990e8d3c1ea2f9374c02501d307a3c2
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Oct 19 14:12:34 2017 +0200
+
+    associative array turned in two indexed arrays to preserve order of output fields
+
+commit b7597793bfab244bb78c28331251ccdf8cd69115
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Oct 19 13:13:32 2017 +0200
+
+    handling of enconding formats and sample rates fixed
+
+commit c425a4ef368ef2c48321e88cc65b5dc9bba73a2d
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Wed Oct 18 08:54:09 2017 +0200
+
+    fixed json indentation; start numbering cards in normal output at 1 insteads of 0; fix samplerate unit to Hz instead of Khz in normal output
+
+commit 652b1ea97ef2a120ed47f95f8898bd25471af906
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 23:40:05 2017 +0200
+
+    saving some sub processes
+
+commit a2fe92e2d2eef3a8fc046350725e3c6d9f011f84
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 23:15:44 2017 +0200
+
+    some restyling
+
+commit 89e028c3df2037e2f522c661a2b47331066428f9
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:33:02 2017 +0200
+
+    clarified json examples
+
+commit 0afbb5a4ece5571291b6dfaabc49679bf747dd21
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:32:18 2017 +0200
+
+    clarified json examples
+
+commit 6ad9406a7c258517476e58780025991459417ec3
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:29:20 2017 +0200
+
+    cleaning up
+
+commit d93334a994301adf1603e404462783b601921590
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:28:44 2017 +0200
+
+    cleaning up
+
+commit abacbdf5c3fb7ade8e05d32ce8eb2c9bac771cc5
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:27:49 2017 +0200
+
+    cleaning up
+
+commit cf08be4b04c7e4bce5b5524c73a949329c0132ba
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:26:42 2017 +0200
+
+    clarified json examples
+
+commit 3770919a10a5368cb8af84b53ebec840de81e2ce
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:25:46 2017 +0200
+
+    clarified json examples
+
+commit beb98c5ab3e862ba428cbd73006517215ce4b3ad
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 22:21:59 2017 +0200
+
+    sample output prettified using json-server
+
+commit 7e75b1b5c4f8f70c2b97197796ca3acd20db0391
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 20:04:59 2017 +0200
+
+    fixed last sound card in json output
+
+commit ab59f6f18546f504b7cda9abae6c215e10ffeb43
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 20:04:43 2017 +0200
+
+    sample output prettified using json-server
+
+commit 85ff6f3a09b5bbb31ef0d476fbeecb347576423b
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 19:57:27 2017 +0200
+
+    output fixed by using pasuspender
+
+commit 02410bdbd002432ed1147bb66807fd0c2fc81a53
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 19:56:04 2017 +0200
+
+    README updated with json feature for alsa-capabilities
+
+commit 110fe3c3c6b7c854ef470cc31cac801f9fa8c269
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 19:53:36 2017 +0200
+
+    cleaned up debugging a bit
+
+commit 59d6ccacbc22be23d8a9f56f4bca2852765e6483
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 19:53:14 2017 +0200
+
+    README updated with json feature
+
+commit 2cef47f5b62cfbb0eea3ddba6d90ce82509c3708
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 17:36:12 2017 +0200
+
+    added -j/--json argument to print json formatted output to stdout (indentation needs work)
+
+commit 7bd98292c483e2da71c392272b16e2b90b900590
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 13:11:16 2017 +0200
+
+    print output to separate function
+
+commit 237505a83d9ccebcb7b2edb7dcd4f70a545b69d8
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Tue Oct 17 13:03:06 2017 +0200
+
+    some cleanup
+
+commit 8ef2c5de05cfff8fba09c4f6fefe08fb69e8a5b2
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Sep 29 10:51:27 2017 +0200
+
+    preparing for multiple mpd alsa output devices
+
+commit 4091c4de5c08c70a182dd87ac4ae2fad0d93ba2d
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Fri Sep 29 08:57:48 2017 +0200
+
+    fixed regex to match alternate physical bit widths (like S24_3LE)
+
+commit 06054f8a25e4977cee3b5201aef3d055485e80c1
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 10:50:46 2017 +0200
+
+    some formatting
+
+commit 3f7c2d27238b5f669797bcc698de22526dda18f8
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 10:50:08 2017 +0200
+
+    some formatting
+
+commit d42244fa759db329b17f19ee75e14d2bb3779743
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 10:06:18 2017 +0200
+
+    fixed(?) unit conversion
+
+commit 3fba9b70e9fc543dbf75be671b3a50936e2f0a21
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 10:03:35 2017 +0200
+
+    fixed(?) unit conversion
+
+commit 22dabe24371b0092ee8be744685968358774b367
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 09:57:18 2017 +0200
+
+    fixed problem with using bc
+
+commit 98c642974d81e9e4927391c3c48f29065d9f1e6b
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 09:41:30 2017 +0200
+
+    fixed problem with using bc
+
+commit 284254bc54b97b4db6bca5dbaa38667f9172c420
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 09:27:55 2017 +0200
+
+    fixed regex to match alternate physical bit widths (like S24_3LE)
+
+commit f20d13b31bbc8a09f92fae732807d0b6e77f7b14
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Thu Sep 28 09:22:02 2017 +0200
+
+    fixed reversed alsa card and dev numbers
+
+commit 1e3b2c38d206b4b6fe30c30201f21613e5c58c71
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 08:29:04 2017 +0200
+
+    human_bytes fixed
+
+commit d328af88e99f848c91fdb190e4dd28c59877073f
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 08:27:31 2017 +0200
+
+    run_func fixed
+
+commit d1ae429d69be1dd19e409f598dbc4c3f22182215
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 08:25:41 2017 +0200
+
+    run_func fixed
+
+commit 8fa81650b2e40bca0f348f17ac71c01cf84aea25
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 02:55:53 2017 +0200
+
+    really fail
+
+commit 681b0c294ea662f583fcb9b95a2a187a1b90e656
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 02:54:43 2017 +0200
+
+    really fail
+
+commit b5c5c18f2f10073b0314265e9a7e1ff34152e1e7
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 02:37:55 2017 +0200
+
+    fail on missing commands
+
+commit 56ff01b078a1c89c8fbde74dfd58c2f070b13c5e
+Merge: 52939ea 3a3837a
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 02:35:44 2017 +0200
+
+    Merge branch 'master' of github.com:ronalde/mpd-configure
+
+commit 52939ea84ccd13d4b7e30fcab5bafb65de268100
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 02:35:34 2017 +0200
+
+    check whether netcat is gnu or bsd, check for bc
+
+commit 3a3837a1a80f629253c7d5b4ec16ce10d94e5805
+Author: Ronald van Engelen <ronalde@users.noreply.github.com>
+Date:   Mon May 29 01:52:47 2017 +0200
+
+    added mpd-monitor arguments
+
+commit b9901d87c7e57d76d9f7e47930a1f6648e952edf
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 01:45:21 2017 +0200
+
+    moved lcd in place of mpd-monitor
+
+commit eee887da87f3cd2ace0bf96961dc298cbf7b3db3
+Merge: 1a4820a 7b2cf4c
+Author: Ronald van Engelen <ronalde@users.noreply.github.com>
+Date:   Mon May 29 01:43:32 2017 +0200
+
+    Merge pull request #32 from ronalde/lcd
+    
+    Lcd
+
+commit 7b2cf4c051208afefca8b20d7e4c67f47665a3b0 (origin/lcd)
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 29 01:42:09 2017 +0200
+
+    with flex remote alsa host
+
+commit 97fae4cb80bef188a3b522b70c167fde24ceda28
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 15 12:12:51 2017 +0200
+
+    started with mpd ouput handling
+
+commit 1780751a07225be188c2cfaf3942acf3d2b6c097
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 15 11:28:07 2017 +0200
+
+    some bitperfect cloring in output
+
+commit 7546cae06dd9aabb6adeccd281ce61973aed6b19
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Mon May 15 10:50:26 2017 +0200
+
+    command line arguments added
+
+commit 1a4820a0ba4d9317ca807ac8232cd26e9299926e
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 15:57:15 2017 +0200
+
+    fixed non commented comment
+
+commit 73ccdd326feced39d4cb99b9e282c0b7f917af0b
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 15:52:53 2017 +0200
+
+    #31 a bit more explanation
+
+commit a6400dc6757373c1f7a8f7a0dff4311ad5ea572e
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 15:39:14 2017 +0200
+
+    #31 set default auto_update_depth to the maximum the file system supports
+
+commit e46f372ccbd016e09dc2fa428945d43e78bda29a
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 15:20:51 2017 +0200
+
+    no idea
+
+commit bbb91c18cfb4b405b5afea43cf0fa5f548362620
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 15:20:37 2017 +0200
+
+    playlistlength fixed (and cleaned up some stale code)
+
+commit 0cdd8513215d0ab45f49b421bd18381635e95cc5
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 12:41:06 2017 +0200
+
+    made executable
+
+commit 8b0ec61c6f8b8b3815481757752f868323495619
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 12:40:27 2017 +0200
+
+    basically working
+
+commit a512b4789d29fd4430ca809a16ebb154f93f930d
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sun May 14 12:00:53 2017 +0200
+
+    remote usage message simplified
+
+commit 9407952bd2220a592f8cb37a26b209491737a601
+Author: Ronald van Engelen <ronalde+github@lacocina.nl>
+Date:   Sat Jan 7 15:49:07 2017 +0100
+
+    updated changelog and urls in README; renamed fifo
+
+commit b261abd212f3f0a281f6623ca83f80763dd8cd2a (origin/database-proxy)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Fri Dec 9 15:49:19 2016 +0100
 
@@ -28,7 +395,7 @@ Date:   Thu Dec 1 09:06:39 2016 +0100
 
     v0.9.2
 
-commit 29842654d40082f5a926e6651e3b1635d040f1a4 (tag: v0.9.2, origin/shellcheck, shellcheck)
+commit 29842654d40082f5a926e6651e3b1635d040f1a4 (tag: v0.9.2, origin/shellcheck)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Nov 30 16:58:53 2016 +0100
 
@@ -94,7 +461,7 @@ Date:   Sat Jan 23 13:21:45 2016 +0100
 
     moved test script out of the way
 
-commit 6c0bc3ab7428f7d8e082867d2e8ddf9adac91ed4 (mpd-monitor)
+commit 6c0bc3ab7428f7d8e082867d2e8ddf9adac91ed4
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Wed Jan 20 01:10:38 2016 +0100
 
@@ -575,7 +942,7 @@ Date:   Tue Dec 22 12:08:09 2015 +0100
 
     (sloppy) pulseaudio functions moved to own script
 
-commit 60759370916bd97154dab876ce504c8d9de116c8 (tag: v0.4, origin/towards1.0, towards1.0)
+commit 60759370916bd97154dab876ce504c8d9de116c8 (tag: v0.4, origin/towards1.0)
 Author: Ronald van Engelen <ronalde+github@lacocina.nl>
 Date:   Mon Dec 21 23:21:36 2015 +0100
 
