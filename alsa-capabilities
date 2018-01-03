@@ -413,10 +413,15 @@ function fetch_alsa_outputinterfaces() {
 	## 6 snd_pcm_info_get_name(pcminfo));
 	##
 	## portion (ie before `,')
-	alsa_dev_regexp="card[[:space:]]([0-9]+):[[:space:]](.*)[[:space:]]\[(.*)\]"
+	## caution: snd_{pcm,ctl}_card_info_get_name(info) could
+	## return an empty string between square brackets, while
+	## string returned by snd_{pcm,ctl}_card_info_get_id may
+	## contain square brackets
+	alsa_regexp_common="[[:space:]]([0-9]+):[[:space:]](.*)\]"
+	alsa_dev_regexp="card${alsa_regexp_common}"
+	alsa_if_regexp="device${alsa_regexp_common}"
 	## same for interface portion
-	alsa_if_regexp=",[[:space:]]device[[:space:]]([0-9]+):[[:space:]](.*)[[:space:]]\[(.*)\]"
-	alsa_dev_if_regexp="^${alsa_dev_regexp}${alsa_if_regexp}$"
+	alsa_dev_if_regexp="^${alsa_dev_regexp},[[:space:]]${alsa_if_regexp}$"
 	## unset / empty out all variables
 	alsa_dev_nr=""
 	alsa_dev_name=""
@@ -424,153 +429,154 @@ function fetch_alsa_outputinterfaces() {
 	alsa_if_nr=""
 	alsa_if_name=""
 	alsa_if_label=""
-	## start matching and collect errors in array
-	errors=()
-	## see if the name contains square brackets, ie it ends with `]]'
 	name=""
 	alsacard=""
-	separator_start="*##"
-	separator_end="##*"
-	name_re="card[[:space:]][0-9]+:[[:space:]](.*)\[.*\[.*\]\].*"
-	brackets_re="card[[:space:]]([0-9]+):(.*\])\],[[:space:]](device[[:space:]][0-9]+:.*\])"
-	if [[ "${line}" =~ ${brackets_re} ]]; then
-	    [[ ${DEBUG} ]] && \
-		debug "${LINENO}" "#####: line with brackets \`${line}'"
-	    if [[ "${line}" =~ ${name_re} ]]; then
-		name="${BASH_REMATCH[1]}"
-		[[ ${DEBUG} ]] && \
-		    debug "${LINENO}" "#####: name \`${name}'"
-	    fi
-	fi
-	if [[ ! -z "${name}" ]]; then
-	    if [[ "${line}" =~ ${brackets_re} ]]; then
-		## construct string without brackets
-		alsacard="$(handle_doublebrackets "${BASH_REMATCH[2]}")"
-		[[ ${DEBUG} ]] && \
-		    debug "${LINENO}" "#####: alsacard: \`${alsacard}'"
-		## replace `name [something]' with `name *##something##*'
-		alsacard="${alsacard//\[/${separator_start}}"
-		alsacard="${alsacard//\]/${separator_end}}"
-		line="card ${BASH_REMATCH[1]}: ${name}[${alsacard}], ${BASH_REMATCH[3]}"
-		[[ ${DEBUG} ]] && \
-		    debug "${LINENO}" "#####: replace line with \`${line}'"
-	    fi
-	fi
-	## match the current line with the regexp
+	before_bracket_re="^([^[]+)\["
 	if [[ "${line}" =~ ${alsa_dev_if_regexp} ]]; then
-	    [[ ! -z "${BASH_REMATCH[1]}" ]] && \
-		alsa_dev_nr="${BASH_REMATCH[1]}" || \
-		    errors+=("could not fetch device number")
-	    if [[ ! -z "${BASH_REMATCH[2]}" ]]; then
-		alsa_dev_name="${BASH_REMATCH[2]}"
-		## reconstruct original name if it contained square brackets
-		alsa_dev_name="${alsa_dev_name//${separator_start}/\[}"
-		alsa_dev_name="${alsa_dev_name//${separator_end}/\]}"
+	    alsa_dev_nr="${BASH_REMATCH[1]}"
+	    alsa_dev_name_raw="${BASH_REMATCH[2]}"
+	    alsa_if_nr="${BASH_REMATCH[3]}"
+	    alsa_if_name_raw="${BASH_REMATCH[4]}"
+	    if [[ "${alsa_dev_name_raw}" =~ ${before_bracket_re} ]]; then
+		alsa_dev_name_beforebracket="${BASH_REMATCH[1]}"
+		alsa_dev_name_betweenbrackets="${alsa_dev_name_raw//${alsa_dev_name_beforebracket}}"
+
+		if [[ ${DEBUG} ]]; then
+		    debug "${LINENO}" "#####: alsa_dev_name_beforebracket \`${alsa_dev_name_beforebracket}'"
+		    debug "${LINENO}" "#####: alsa_dev_name_betweenbrackets \`${alsa_dev_name_betweenbrackets}'"
+		fi
 	    else
-		errors+=("could not fetch device name")
-	    fi
-	    [[ ! -z "${BASH_REMATCH[3]}" ]] && \
-		alsa_dev_label="${BASH_REMATCH[3]}" || \
-		    errors+=("could not fetch device label")
-	    [[ ! -z "${BASH_REMATCH[4]}" ]] && \
-		alsa_if_nr="${BASH_REMATCH[4]}" || \
-		    errors+=("could not fetch interface number")
-	    [[ ! -z "${BASH_REMATCH[5]}" ]] && \
-		alsa_if_name="${BASH_REMATCH[5]}" || \
-		    errors+=("could not fetch interface name")
-	    [[ ! -z "${BASH_REMATCH[6]}" ]] && \
-		alsa_if_label="${BASH_REMATCH[6]}" || \
-		    errors+=("could not fetch interface label")
-	    ## empty numbers and names of devices and interfaces are fatal
-	    if (( ${#errors[@]} > 0 )); then
-		printf -v msg_err "%s\n" "${errors[@]}"
+		printf -v msg_err "%s: alsa_dev_name_raw \`%s' did not match regexp before_bracket_re (\`%s')\n" \
+		       "${LINENO}" "${alsa_dev_name_raw}" "${before_bracket_re}"
 		die "${msg_err}"
 		break
 	    fi
-	    declare -a alsa_if_formats=()
-	    alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
-	    ## construct the path to the character device for the
-	    ## interface (ie `/dev/snd/xxx')
-	    alsa_if_chardev="/dev/snd/pcmC${alsa_dev_nr}D${alsa_if_nr}p"
-	    ## construct the path to the hwparams file
-	    alsa_if_hwparamsfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/hw_params"
-	    ## before determining whether this is a usb device, assume
-	    ## the monitor file is the hwparams file
-	    alsa_if_monitorfile="${alsa_if_hwparamsfile}"
-	    ## assume stream file for the interface (ie
-	    ## `/proc/asound/cardX/streamY') to determine whether
-	    ## the interface is a uac device, and if so, which class it is
-	    alsa_if_streamfile="/proc/asound/card${alsa_dev_nr}/stream${alsa_if_nr}"
-	    ## assume no uac device
-	    alsa_if_uacclass="${MSG_PROP_NOTAPPLICABLE}"
-
-	    if [[ ! -z ${TESTFILE} ]]; then
-		## device is not real
-		alsa_if_formats+=("(${MSG_ERROR_CHARDEV_NOFORMATS})")
-		alsa_if_uacclass_nr="?"
+	    if [[ "${alsa_if_name_raw}" =~ ${before_bracket_re} ]]; then
+		alsa_if_name_beforebracket="${BASH_REMATCH[1]}"
+		alsa_if_name_betweenbrackets="${alsa_if_name_raw//${alsa_if_name_beforebracket}}"
+		if [[ ${DEBUG} ]]; then
+		    debug "${LINENO}" "#####: alsa_if_name_beforebracket \`${alsa_if_name_beforebracket}'"
+		    debug "${LINENO}" "#####: alsa_if_name_betweenbrackets \`${alsa_if_name_betweenbrackets}'"
+		fi
 	    else
-		## check if the hwparams file exists
-		if [[ ! -f "${alsa_if_hwparamsfile}" ]]; then
-		    alsa_if_hwparamsfile="${alsa_if_hwparamsfile} (error: not accessible)"
-		fi
-		## check if the chardev exists
-		if [[ ! -c "${alsa_if_chardev}" ]]; then
-		    [[ ${DEBUG} ]] && \
-			debug "${LINENO}" "alsa_if_chardev \`${alsa_if_chardev}' is not a chardev."
-		    alsa_if_chardev="${alsa_if_chardev} (${MSG_ERROR_NOT_CHARDEV})"
-		else
-		    [[ ${DEBUG} ]] && \
-			debug "${LINENO}" "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
-		fi
-		## check whether the monitor file exists; it always should
-		if [[ ! -f ${alsa_if_monitorfile} ]]; then
-		    msg_err="${alsa_if_monitorfile} ${MSG_ERROR_NOFILE} (${MSG_ERROR_UNEXPECTED})"
-		    alsa_if_monitorfile="${msg_err}"
-		    [[ ${DEBUG} ]] && \
-			debug "${LINENO}" "${MSG_ERROR_UNEXPECTED}: alsa_if_monitorfile \
-\`${alsa_if_monitorfile}' ${MSG_ERROR_NOFILE}"
-		fi
-		## check whether the streamfile exists; it only should
-		## exist in the case of a uac interface
-		if [[ ! -f "${alsa_if_streamfile}" ]]; then
-		    [[ ${DEBUG} ]] && \
-			debug "${LINENO}" "alsa_if_streamfile \`${alsa_if_streamfile}' \
-${MSG_ERROR_NOFILE}"
-		    ## no uac interface
-		    alsa_if_streamfile="${MSG_PROP_NOTAPPLICABLE}"
-		else
-		    [[ ${DEBUG} ]] && \
-			debug "${LINENO}" "using alsa_if_streamfile \`${alsa_if_streamfile}'."
-		    ## set interface to usb out
-		    alsa_if_type="uo"
-		    ## uac devices will use the stream file instead of
-		    ## hwparams file to monitor
-		    ## alsa_if_monitorfile="${alsa_if_streamfile}"
-		    ## get the type of uac endpoint
-		    alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
-		    # shellcheck disable=SC2181
-		    if [[ $? -ne 0 ]]; then
-			[[ ${DEBUG} ]] && \
-			    debug "${LINENO}" "could not determine alsa_if_uac_ep."
-			alsa_if_uacclass_nr="?"
-		    else
-			[[ ${DEBUG} ]] && \
-			    debug "${LINENO}" "alsa_if_uac_ep set to \`${alsa_if_uac_ep}'."
-			## lookup the uac class in the array for this type of endpoint (EP)
-			## (for readability)
-			alsa_if_uacclass="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
-			## the uac class number (0, 1, 2 or 3) according to ./sound/usb/card.h
-			alsa_if_uacclass_nr="${alsa_if_uacclass% - *}"
-			classnr_regexp='^[0-3]+$'
-			if [[ ! ${alsa_if_uacclass_nr} =~ ${classnr_regexp} ]]; then
-			    [[ ${DEBUG} ]] && \
-				debug "${LINENO}" "invalid uac class number \`${alsa_if_uacclass_nr}'. \
-${MSG_ERROR_UNEXPECTED}"
-			    alsa_if_uacclass_nr="?"
-			fi
-		    fi
+		printf -v msg_err "%s: alsa_if_name_raw \`%s' did not match regexp before_bracket_re (\`%s')\n" \
+		       "${LINENO}" "${alsa_if_name_raw}" "${before_bracket_re}"
+		die "${msg_err}"
+		break
+	    fi
+	else
+	    printf -v msg_err "%s: aplay line did not match alsa_dev_if_regexp (\`%s'):\n%s\n" \
+		   "${LINENO}" "${alsa_dev_if_regexp}" "${line}"
+	    die "${msg_err}"
+	    break
+	fi
+	## format the names
+	## alsa_{dev,if}_name_beforebracket includes trailing space
+	## alsa_{dev,if}_name_betweenbrackets includes leading square bracket
+	## strip both
+	## courtesy: https://unix.stackexchange.com/a/360648
+	shopt -s extglob
+	alsa_dev_name_beforebracket="${alsa_dev_name_beforebracket%%+([[:space:]])}"
+	alsa_dev_name_betweenbrackets="${alsa_dev_name_beforebracket##+([)}"
+	alsa_if_name_beforebracket="${alsa_if_name_beforebracket%%+([[:space:]])}"
+	alsa_if_name_betweenbrackets="${alsa_if_name_beforebracket##+([)}"
+	shopt -u extglob
+	## do not include identical or empty name between square brackets
+	if [[ "${alsa_dev_name_beforebracket}x" == "${alsa_dev_name_betweenbrackets}x" ]] || \
+	       [[ "${alsa_dev_name_betweenbrackets}x" == "x" ]]; then
+	    alsa_dev_label="${alsa_dev_name_beforebracket}"
+	else
+	    alsa_dev_label="${alsa_dev_name_beforebracket} [${alsa_dev_name_betweenbrackets}]"
+	fi
+	if [[ "${alsa_if_name_beforebracket}x" == "${alsa_if_name_betweenbrackets}x" ]] || \
+	       [[ "${alsa_if_name_betweenbrackets}x" == "x" ]]; then
+	    alsa_if_label="${alsa_if_name_beforebracket}"
+	else
+	    alsa_if_label="${alsa_if_name_beforebracket} [${alsa_if_name_betweenbrackets}]"
+	fi
+	declare -a alsa_if_formats=()
+	alsa_if_hwaddress="hw:${alsa_dev_nr},${alsa_if_nr}"
+	## construct the path to the character device for the
+	## interface (ie `/dev/snd/xxx')
+	alsa_if_chardev="/dev/snd/pcmC${alsa_dev_nr}D${alsa_if_nr}p"
+	## construct the path to the hwparams file
+	alsa_if_hwparamsfile="/proc/asound/card${alsa_dev_nr}/pcm${alsa_if_nr}p/sub0/hw_params"
+	## before determining whether this is a usb device, assume
+	## the monitor file is the hwparams file
+	alsa_if_monitorfile="${alsa_if_hwparamsfile}"
+	## assume stream file for the interface (ie
+	## `/proc/asound/cardX/streamY') to determine whether
+	## the interface is a uac device, and if so, which class it is
+	alsa_if_streamfile="/proc/asound/card${alsa_dev_nr}/stream${alsa_if_nr}"
+	## assume no uac device
+	alsa_if_uacclass="${MSG_PROP_NOTAPPLICABLE}"
 
+	if [[ ! -z ${TESTFILE} ]]; then
+	    ## device is not real
+	    alsa_if_formats+=("(${MSG_ERROR_CHARDEV_NOFORMATS})")
+	    alsa_if_uacclass_nr="?"
+	else
+	    ## check if the hwparams file exists
+	    if [[ ! -f "${alsa_if_hwparamsfile}" ]]; then
+		alsa_if_hwparamsfile="${alsa_if_hwparamsfile} (error: not accessible)"
+	    fi
+	    ## check if the chardev exists
+	    if [[ ! -c "${alsa_if_chardev}" ]]; then
+		[[ ${DEBUG} ]] && \
+		    debug "${LINENO}" "alsa_if_chardev \`${alsa_if_chardev}' is not a chardev."
+		alsa_if_chardev="${alsa_if_chardev} (${MSG_ERROR_NOT_CHARDEV})"
+	    else
+		[[ ${DEBUG} ]] && \
+		    debug "${LINENO}" "alsa_if_chardev \`${alsa_if_chardev}' is a valid chardev."
+	    fi
+	    ## check whether the monitor file exists; it always should
+	    if [[ ! -f ${alsa_if_monitorfile} ]]; then
+		msg_err="${alsa_if_monitorfile} ${MSG_ERROR_NOFILE} (${MSG_ERROR_UNEXPECTED})"
+		alsa_if_monitorfile="${msg_err}"
+		[[ ${DEBUG} ]] && \
+		    debug "${LINENO}" "${MSG_ERROR_UNEXPECTED}: alsa_if_monitorfile \
+\`${a		    lsa_if_monitorfile}' ${MSG_ERROR_NOFILE}"
+	    fi
+	    ## check whether the streamfile exists; it only should
+	    ## exist in the case of a uac interface
+	    if [[ ! -f "${alsa_if_streamfile}" ]]; then
+		[[ ${DEBUG} ]] && \
+		    debug "${LINENO}" "alsa_if_streamfile \`${alsa_if_streamfile}' \
+${MSG_ERROR_NOFILE}"
+		## no uac interface
+		alsa_if_streamfile="${MSG_PROP_NOTAPPLICABLE}"
+	    else
+		[[ ${DEBUG} ]] && \
+		    debug "${LINENO}" "using alsa_if_streamfile \`${alsa_if_streamfile}'."
+		## set interface to usb out
+		alsa_if_type="uo"
+		## uac devices will use the stream file instead of
+		## hwparams file to monitor
+		## alsa_if_monitorfile="${alsa_if_streamfile}"
+		## get the type of uac endpoint
+		alsa_if_uac_ep="$(return_alsa_uac_ep "${alsa_if_streamfile}")"
+		# shellcheck disable=SC2181
+		if [[ $? -ne 0 ]]; then
+		    [[ ${DEBUG} ]] && \
+			debug "${LINENO}" "could not determine alsa_if_uac_ep."
+		    alsa_if_uacclass_nr="?"
+		else
+		    [[ ${DEBUG} ]] && \
+			debug "${LINENO}" "alsa_if_uac_ep set to \`${alsa_if_uac_ep}'."
+		    ## lookup the uac class in the array for this type of endpoint (EP)
+		    ## (for readability)
+		    alsa_if_uacclass="${UO_EP_LABELS[${alsa_if_uac_ep}]}"
+		    ## the uac class number (0, 1, 2 or 3) according to ./sound/usb/card.h
+		    alsa_if_uacclass_nr="${alsa_if_uacclass% - *}"
+		    classnr_regexp='^[0-3]+$'
+		    if [[ ! ${alsa_if_uacclass_nr} =~ ${classnr_regexp} ]]; then
+			[[ ${DEBUG} ]] && \
+			    debug "${LINENO}" "invalid uac class number \`${alsa_if_uacclass_nr}'. \
+${MSG_ERROR_UNEXPECTED}"
+			alsa_if_uacclass_nr="?"
+		    fi
 		fi
+		
 	    fi
 	fi
 	## for non-uac interfaces: check whether it is some other
@@ -627,10 +633,6 @@ ${MSG_ERROR_UNEXPECTED}"
 	    alsa_if_formats+=("${str_formats_res}")
 	    alsa_if_title_label="${ALSA_IF_LABELS[${alsa_if_type}]}"
 	    ## reconstruct the label if it contained square brackets
-	    if [[ "${alsa_dev_label}" =~ .*${separator_start}.* ]]; then
-		alsa_dev_label="${alsa_dev_label//\*##/\[}"
-		alsa_dev_label="${alsa_dev_label//##\*/\]}"
-	    fi
 	    ## construct the display title
 	    printf -v alsa_if_display_title \
 		   " %s) %s \`%s'" \
