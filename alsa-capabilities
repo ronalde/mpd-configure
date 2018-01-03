@@ -29,7 +29,7 @@
 LANG=C
 
 APP_NAME_AC="alsa-capabilities"
-APP_VERSION="0.9.5"
+APP_VERSION="0.9.6"
 APP_INFO_URL="https://lacocina.nl/detect-alsa-output-capabilities"
 
 ## set DEBUG to a non empty value to display internal program flow to
