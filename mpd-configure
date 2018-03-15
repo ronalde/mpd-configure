@@ -580,9 +580,9 @@ function source_enabled_confs() {
     for conf_file in ${CONFS_ENABLED}; do
 	[[ ! -z "${DEBUG}" ]] && debug_configure "${LINENO}: $(declare -p conf_file).\n"
 	## check if the symlink points to a valid file
-	isvalid="$(readlink -e "${conf_file}")"
-	## process the next one if the symlink is broken 
-	if [[ -z "${isvalid}" ]]; then
+	conffile_path="$(readlink -f "${conf_file}")"
+	if [[ ! -f "${conffile_path}" ]]; then
+	    ## process the next one if the symlink is broken 
 	    [[ ! -z "${DEBUG}" ]] && debug_configure "not a valid symlink \`${conf_file}'"
 	    continue
 	fi
