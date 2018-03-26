@@ -25,7 +25,7 @@
 LANG=C
 APP_NAME_MPDCONFIGURE="mpd-configure"
 APP_URL="https://github.com/ronalde/${APP_NAME_MPDCONFIGURE}/"
-APP_VERSION_MPDCONFIGURE="0.9.6"
+APP_VERSION_MPDCONFIGURE="0.9.7"
 
 ### defaults
 ## default network address to listen to
