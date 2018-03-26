@@ -25,8 +25,7 @@
 LANG=C
 APP_NAME_MPDCONFIGURE="mpd-configure"
 APP_URL="https://github.com/ronalde/${APP_NAME_MPDCONFIGURE}/"
-# version gets filled by sourcing alsa-capabilities
-APP_VERSION="${APP_VERSION:-0.9}"
+APP_VERSION_MPDCONFIGURE="0.9.6"
 
 ### defaults
 ## default network address to listen to
@@ -38,7 +37,7 @@ MAX_PLAYLIST_LENGTH_DEFAULT="16384"
 
 function die_configure() {
     printf "\nError in %s (v%s):\n%s\n" \
-	   "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "$@" 1>&2;
+	   "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION_MPDCONFIGURE}" "$@" 1>&2;
     exit 1
 }
 
@@ -877,7 +876,7 @@ function conf_header() {
 
     printf "\n%s\n%s begin of %s\n%s created by \`%s' (version %s) on %s.\n%s see: %s\n%s" \
 	"${MSG_CONF_LINESEP}" "${MSG_CONF_SEP}" "${MSG_CONF_TITLE}" \
-	"${MSG_CONF_SEP}" "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION}" "${formatted_date}" \
+	"${MSG_CONF_SEP}" "${APP_NAME_MPDCONFIGURE}" "${APP_VERSION_MPDCONFIGURE}" "${formatted_date}" \
 	"${MSG_CONF_SEP}" "${APP_URL}" "${MSG_CONF_LINESEP}"
 
 }
